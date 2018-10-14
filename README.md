@@ -14,9 +14,9 @@ Most users will run the graphical user interface which is in the
 pyjoulescope_ui package.  Developers may import this package to automate
 and script Joulescope operation. 
 The majority of code is written in Python 3.6+, but a small amount is in 
-Cython/Pyrex for better performance. 
+Cython for better performance. 
 The code currently runs under Windows 10. 
-Linux and Mac OS/X drivers will be before 2019.
+Linux and Mac OS/X drivers will be available before 2019.
 
 
 ## License

@@ -56,7 +56,7 @@ class TestStreamBuffer(unittest.TestCase):
         b = StreamBuffer(2 * SAMPLES_PER, [])
         b.insert(frame)
         b.process()
-        self.assertEqual([SAMPLES_PER * 2, SAMPLES_PER * 4], b.sample_id_range)
+        self.assertEqual((SAMPLES_PER * 2, SAMPLES_PER * 4), b.sample_id_range)
         data = b.raw_get(SAMPLES_PER * 2, SAMPLES_PER * 4)
         data = np.right_shift(data, 2)
         expect = np.arange(SAMPLES_PER * 4, SAMPLES_PER * 8, dtype=np.uint16).reshape((SAMPLES_PER * 2, 2))

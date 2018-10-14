@@ -363,7 +363,7 @@ class Device:
         if contiguous_duration is not None:
             c = int(contiguous_duration * self.sampling_frequency)
             c += self._reductions[0]
-            self.stream_buffer._contiguous_max = c
+            self.stream_buffer.contiguous_max = c
             log.info('contiguous_samples=%s', c)
         self._streaming = True
         self._stream_settings_send()
@@ -425,7 +425,7 @@ class Device:
                 start_id = 0
             log.info('%s, %s', start_id, end_id)
         if out_format == 'raw':
-            return self.stream_buffer.raw(start_id, end_id).reshape((-1, 2))
+            return self.stream_buffer.raw_get(start_id, end_id).reshape((-1, 2))
         else:
             r = self.stream_buffer.get(start_id, end_id, increment=1)
             i = r[:, 0, 0].reshape((-1, 1))

@@ -247,6 +247,14 @@ cdef void cal_init(js_stream_buffer_calibration_s * self):
 
 
 cdef class StreamBuffer:
+    """Efficient real-time Joulescope data buffering.
+
+    :param length: The total length of the buffering in samples.
+    :param reductions: The list of reduction integers.  Each integer represents
+        the reduction amount for each resuting sample in units of samples
+        of the previous reduction.  Reduction 0 is in raw sample units.
+    """
+
     cdef uint32_t reduction_step
     cdef uint32_t length # in samples
     cdef uint64_t packet_index
@@ -346,11 +354,15 @@ cdef class StreamBuffer:
 
     @property
     def sample_id_range(self):
+        """Get the range of sample ids currently available in the buffer.
+
+        :return: Tuple of sample_id start, sample_id end.
+        """
         s_end = int(self.processed_sample_id)
         s_start = s_end - self.length
         if s_start < 0:
             s_start = 0
-        return [s_start, s_end]
+        return s_start, s_end
 
     @property
     def data_buffer(self):
@@ -659,6 +671,7 @@ cdef class StreamBuffer:
         cdef uint32_t samples_per_step_next
         cdef uint32_t length
         cdef uint32_t idx_start
+        cdef int n
 
         start = (start / increment) * increment
         stop = (stop / increment) * increment
@@ -732,7 +745,18 @@ cdef class StreamBuffer:
         return buffer_samples_orig - buffer_samples
 
     def data_get(self, start, stop, increment=None, out=None):
-        """Get the samples with statistics"""
+        """Get the samples with statistics.
+
+        :param start: The starting sample id (inclusive).
+        :param stop: The ending sample id (exclusive).
+        :param increment: The number of raw samples.
+        :param out: The optional output np.ndarray(N, 3, 4) to populate with
+            the result.  None (default) will construct and return a new array.
+        :return: The np.ndarray((N, 3, 4), dtype=np.float32) data of
+            (length, fields, values) with
+            fields (current, voltage, power) and
+            values (mean, variance, min, max).
+        """
         increment = 1 if increment is None else int(increment)
         if start >= stop:
             log.info('data_get: start >= stop')
@@ -751,6 +775,15 @@ cdef class StreamBuffer:
         return out[:length, :, :]
 
     def raw_get(self, start, stop):
+        """Get the raw data from Joulescope.
+
+        :param start: The starting sample id (inclusive).
+        :param stop: The ending sample id (exclusive).
+        :return: The np.ndarray((2 * N), dtype=np.uint16) data of
+            interleaved current, voltage left-shifted 14-bit samples.
+            The least significant 2 bits contain current range select
+            information.
+        """
         if stop <= start:
             log.warning('raw %d <= %d', start, stop)
             return np.empty((0, 2), dtype=np.uint16)
