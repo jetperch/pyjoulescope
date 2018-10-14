@@ -1,0 +1,46 @@
+Debug
+Release
+cmake-build-debug
+build
+dist
+joulescope.egg-info
+
+**/__pycache__
+*.pyo
+*.pyc
+*.pyd
+
+# Ignore Python compiled modules
+joulescope/stream_buffer.c
+joulescope/stream_buffer.html
+joulescope/libjoulescope.dll
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.elf
+*.objdump
+*.flash
+*.map
+
+# Compiled Static libraries
+*.lai
+*.la
+*.lib
+
+# Editor swap/backup file garbage
+.*.swp
+.*.swo
+~*.docx
+~*.xlsx
+*.tmp
+
+# IDE files
+.idea
+.settings
+
