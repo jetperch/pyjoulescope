@@ -18,7 +18,7 @@ Test the data recorder
 
 import unittest
 from joulescope.data_recorder import DataRecorder, DataReader, DataRecorderConfiguration, datafile
-from joulescope.native import StreamBuffer, usb_packet_factory
+from joulescope.stream_buffer import StreamBuffer, usb_packet_factory
 import io
 import tempfile
 import numpy as np
