@@ -101,7 +101,7 @@ setuptools.setup(
 
     entry_points={
         'console_scripts': [
-            'joulescope=joulescope.command.runner:run',
+            'joulescope_cmd=joulescope.command.runner:run',
         ],
     },
     
