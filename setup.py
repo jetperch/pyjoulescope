@@ -30,7 +30,7 @@ MYPATH = os.path.abspath(os.path.dirname(__file__))
 try:
     from Cython.Build import cythonize
     USE_CYTHON = os.path.isfile(os.path.join(MYPATH, 'joulescope', 'stream_buffer.pyx'))
-except ImportErorr:
+except ImportError:
     USE_CYTHON = False
 
 
@@ -44,7 +44,7 @@ extensions = [
 
 if USE_CYTHON:
     from Cython.Build import cythonize
-    extensions = cythonize(extensions, annotate=True)
+    extensions = cythonize(extensions)  # , annotate=True)
 
 
 # Get the long description from the README file
@@ -101,7 +101,7 @@ setuptools.setup(
 
     entry_points={
         'console_scripts': [
-            'joulescope=joulescope:run',
+            'joulescope=joulescope.command.runner:run',
         ],
     },
     
