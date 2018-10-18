@@ -27,7 +27,7 @@ class TestPattern(unittest.TestCase):
 
     def setUp(self):
         self.device = None
-        self.devices = scan()
+        self.devices = scan(name='joulescope')
         if not len(self.devices):
             raise unittest.SkipTest("no devices found")
         if len(self.devices) > 1:

@@ -154,6 +154,9 @@ assert(len(MAGIC) == 16)
 HEADER_SIZE = 32
 VERSION = 1
 
+FLAG_COMPRESS = 0x80
+FLAG_ENCRYPT = 0x40
+
 TAG_HEADER = b'HDR'  # JSON-formatted header
 TAG_END = b'END'
 TAG_USB = b'USB'
@@ -167,6 +170,7 @@ TAG_DATA_JSON = b'AJS'  # JSON formatted file data
 TAG_CALIBRATION_JSON = b'CJS'  # deprecated, use TAG_DATA_JSON
 TAG_SIGNATURE_START = b'SGS'
 TAG_SIGNATURE_END = b'SGE'
+TAG_ENCRYPTION = b'ENC'
 
 
 SIGNATURE_FLAG_KEY_INCLUDE = 1
@@ -251,6 +255,18 @@ def subfile_split(value):
     return name, data
 
 
+def _maybe_compress(data):
+    length = len(data)
+    flags = 0
+    if length:
+        dataz = zlib.compress(data, level=1)
+        lengthz = len(dataz)
+        if lengthz < length:
+            data = dataz
+            flags = FLAG_COMPRESS
+    return flags, data
+
+
 class DataFileWriter:
 
     def __init__(self, filehandle):
@@ -275,31 +291,25 @@ class DataFileWriter:
         if length:
             self._fh.seek(length)
 
-    def append(self, tag, data=None, compress=None):
+    def _append(self, tag, flags, data):
         """Append a new tag-length-value field to the file.
 
-        :param tag: The 4-byte tag as either an integer or bytes.
+        :param tag: The 3-byte tag as either an integer or bytes.
+        :param flags: The flag bytes value
         :param data: The associated data for the tag (optional).
-        :param compress: When False or None, do not attempt to
-            compress the data.  When True, attempt to compress
-            the data.
         :return: The starting position for the tag.
         """
         position = self._fh.tell()
-        data = b'' if data is None else data
+        flags = int(flags)
+        if flags < 0 or flags > 255:
+            raise ValueError('Invalid flags')
         if isinstance(tag, bytes):
             if len(tag) != 3:
                 raise ValueError('Invalid tag length %d' % len(tag))
             tag, = struct.unpack('<I', tag + b'\x00')
         tag &= 0xFFFFFF
+        tag |= flags << 24
         length = len(data)
-        if bool(compress) and len(data):
-            dataz = zlib.compress(data, level=1)
-            lengthz = len(dataz)
-            if lengthz < length:
-                length = lengthz
-                data = dataz
-                tag |= 0x80000000
         value = bytearray(8 + length + _length_to_pad(length) + 4)
         value[:8] = struct.pack('<II', tag, length)
         value[8:8 + length] = data
@@ -312,6 +322,35 @@ class DataFileWriter:
             else:
                 self._signature['data'] += value
         return position
+
+    def append(self, tag, data=None, compress=None):
+        """Append a new tag-length-value field to the file.
+
+        :param tag: The 3-byte tag as either an integer or bytes.
+        :param data: The associated data for the tag (optional).
+        :param compress: When False or None, do not attempt to
+            compress the data.  When True, attempt to compress
+            the data.
+        :return: The starting position for the tag.
+        """
+        data = b'' if data is None else data
+        flags = 0
+        if bool(compress):
+            flags, data = _maybe_compress(data)
+        return self._append(tag, flags, data)
+
+    def append_encrypted(self, tag, data, signing_key, encryption_key, nonce, associated_data=None, compress=None):
+        flags = 0
+        if bool(compress):
+            flags, data = _maybe_compress(data)
+        flags |= FLAG_ENCRYPT
+        signature = monocypher.signature_sign(signing_key, data)
+        mac, data = monocypher.lock(encryption_key, nonce, data, associated_data)
+        log.info('signature = %r', binascii.hexlify(signature))
+        log.info('mac       = %r', binascii.hexlify(mac))
+        pos = self._append(tag, flags, data)
+        self._append(TAG_ENCRYPTION, 0, mac + signature)
+        return pos
 
     def append_subfile(self, name: str, data, compress=None):
         """Append a subfile.
@@ -405,6 +444,14 @@ def _parse_tag_start(data):
     return tag, flags, length
 
 
+def _maybe_decompress(value, flags):
+    if flags & FLAG_COMPRESS:
+        if flags & FLAG_ENCRYPT:
+            raise ValueError('Connect decompress encrypted data')
+        value = zlib.decompress(value)
+    return value
+
+
 class DataFileReader:
 
     def __init__(self, filehandle):
@@ -446,7 +493,7 @@ class DataFileReader:
             return None, None, None
         tag_length = self._fh.read(8)
         tag, flags, length = _parse_tag_start(tag_length)
-        log.warning('tag read %s length=%d at %d of %d', tag, length, self._fh.tell(), self.length)
+        log.debug('tag read %s length=%d at %d of %d', tag, length, self._fh.tell(), self.length)
         entry = bytearray(8 + length + _length_to_pad(length) + 4)
         entry[:8] = tag_length
         pad = _length_to_pad(length)
@@ -460,9 +507,7 @@ class DataFileReader:
             log.warning('invalid tag crc: 0x%08x != 0x%08x' % (crc_read, crc))
             # raise ValueError('invalid tag crc: 0x%08x != 0x%08x' % (crc_read, crc))
         value = entry[8:8+length]
-        if flags & 0x80:
-            value = zlib.decompress(value)
-        return tag, value, entry
+        return tag, flags, value, entry
 
     def tell(self):
         """Give the location of the current entry.
@@ -502,8 +547,9 @@ class DataFileReader:
         :return: tuple (tag, value)
         """
         position = self._fh.tell()
-        tag, value, _ = self._read_tag()
+        tag, flags, value, _ = self._read_tag()
         self._fh.seek(position)
+        value = _maybe_decompress(value, flags)
         return tag, value
 
     def advance(self):
@@ -552,6 +598,24 @@ class DataFileReader:
         c = Collection.decode(value)
         self._fh.seek(c.end_position)
 
+    def decrypt(self, signing_key, encryption_key, nonce, associated_data=None):
+        """Decrypt the next tag, if needed"""
+        tag, flags, value, _ = self._read_tag()
+        if flags & FLAG_ENCRYPT:
+            tag2, _, value2, _ = self._read_tag()
+            if tag2 != TAG_ENCRYPTION:
+                raise ValueError('Encrypted data must be followed by ENC tag')
+            mac = value2[:16]
+            signature = value2[16:]
+            value = monocypher.unlock(encryption_key, nonce, mac, value, associated_data)
+            if value is None:
+                raise ValueError('Decryption failed')
+            if not monocypher.signature_check(signature, signing_key, value):
+                raise ValueError('Signature check failed')
+        if flags & FLAG_COMPRESS:
+            value = zlib.decompress(value)
+        return tag, value
+
     def __next__(self):
         """Get the next available entry.
 
@@ -559,7 +623,7 @@ class DataFileReader:
         :raise StopIteration: when no more entries remain.
         :raise ValueError: on signature check failure.
         """
-        tag, value, entry = self._read_tag()
+        tag, flags, value, entry = self._read_tag()
         if tag is None or tag == TAG_END:
             raise StopIteration()
         if tag == TAG_SIGNATURE_START:
@@ -577,6 +641,7 @@ class DataFileReader:
             self._signature_data = None
         elif self._signature_data is not None:
             self._signature_data += entry
+        value = _maybe_decompress(value, flags)
         return tag, value
 
     def pretty_print(self):

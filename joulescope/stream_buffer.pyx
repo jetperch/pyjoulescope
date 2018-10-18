@@ -16,6 +16,8 @@
 Optimized Cython native Joulescope code.
 """
 
+# See https://cython.readthedocs.io/en/latest/index.html
+
 # cython: boundscheck=False, wraparound=False, nonecheck=False, overflowcheck=False, cdivision=True
 
 from libc.stdint cimport uint8_t, uint16_t, uint32_t, uint64_t, int32_t

@@ -146,10 +146,10 @@ class DeviceDriverApi:
         raise NotImplementedError()
 
 
-def scan(**kwargs):
+def scan(name: str=None):
     """Scan for attached devices.
 
-    :param kwargs: The platform-specific keyword arguments.
+    :param name: The case-insensitive name of the device to scan.
     :return: The list of attached backend :class:`Device` instances.
     """
     raise NotImplementedError()

@@ -12,9 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from joulescope import usb
-from typing import List
+from joulescope import datafile
+import io
 import struct
+import binascii
 import logging
 log = logging.getLogger(__name__)
 
@@ -146,25 +147,20 @@ class Bootloader:
             identifier or name from SEGMENTS.
         :param data: The raw data bytes for the flash.
         :param metadata: The metadata for firmware updates.
+        :return: 0 on success or error code
         """
         data = _filename_or_bytes(data)
         segment = SEGMENTS[segment]
         if metadata is None:
             metadata = {
-                'version': 0,
                 'encryption': 0,
-                'nonce': bytes([0] * 24),
+                'header': bytes([0] * 24),
                 'mac': bytes([0] * 16),
                 'signature': bytes([0] * 64),
             }
         metadata['size'] = len(data)
-
-        msg = struct.pack('<III', metadata['version'],
-                          metadata['size'],
-                          metadata['encryption']) + \
-            metadata['nonce'] + \
-            metadata['mac'] + \
-            metadata['signature']
+        msg = struct.pack('<II', metadata['size'], metadata['encryption'])
+        msg = msg + metadata['header'] + metadata['mac'] + metadata['signature']
         log.info('write start: segment=%d, length=%d', segment, len(data))
         rv = self._usb.control_transfer_out(
             'device', 'vendor',
@@ -189,6 +185,7 @@ class Bootloader:
             value=segment, index=0, length=1)
         _ioerror_on_bad_result(rv)
         log.info('write status=%d', rv.data[0])
+        return rv.data[0]
 
     def go(self):
         rv = self._usb.control_transfer_out(
@@ -200,71 +197,30 @@ class Bootloader:
 
     def firmware_program(self, filename):
         data = _filename_or_bytes(filename)
-        # todo: support encrypted images
-        self.program(Segment.FIRMWARE, data)
+        fh = io.BytesIO(data)
+        dr = datafile.DataFileReader(fh)
+        # todo: check distribution signature
+        tag, hdr_value = next(dr)
+        if tag != datafile.TAG_HEADER:
+            raise ValueError('incorrect format: expected header, received %r' % tag)
+        tag, data = next(dr)
+        if tag != datafile.TAG_DATA_BINARY:
+            raise ValueError('incorrect format: expected data, received %r' % tag)
+        tag, enc = next(dr)
+        if tag != datafile.TAG_ENCRYPTION:
+            raise ValueError('incorrect format: expected encryption, received %r' % tag)
+        metadata = {
+            'encryption': 1,
+            'header': hdr_value[:24],
+            'mac': enc[:16],
+            'signature': enc[16:],
+        }
+        log.info('header    = %r', binascii.hexlify(metadata['header']))
+        log.info('mac       = %r', binascii.hexlify(metadata['mac']))
+        log.info('signature = %r', binascii.hexlify(metadata['signature']))
+        return self.program(Segment.FIRMWARE, data, metadata)
 
     def calibration_program(self, filename, is_factory=False):
         data = _filename_or_bytes(filename)
-        if bool(is_factory):
-            self.program(Segment.CALIBRATION_FACTORY, data)
-        self.program(Segment.CALIBRATION_ACTIVE, data)
-
-
-def scan() -> List[Bootloader]:
-    """Scan for connected devices.
-
-    :return: The list of :class:`Device` instances.  A new instance is created
-        for each detected device.  Use :func:`scan_for_changes` to preserved
-        existing instances.
-    """
-    devices = usb.scan(DeviceInterfaceGUID)
-    devices = [Bootloader(d) for d in devices]
-    return devices
-
-
-def scan_require_one() -> Bootloader:
-    """Scan for one and only one device.
-
-    :return: The :class:`Device` found.
-    :raise RuntimeError: If no devices or more than one device was found.
-    """
-    devices = scan()
-    if not len(devices):
-        raise RuntimeError("no devices found")
-    if len(devices) > 1:
-        raise RuntimeError("multiple devices found")
-    return devices[0]
-
-
-def scan_for_changes(devices=None):
-    """Scan for device changes.
-
-    :param devices: The list of existing :class:`Bootloader` instances returned
-        by a previous scan.  Pass None or [] if no scan has yet been performed.
-    :return: The tuple of lists (devices_now, devices_added, devices_removed).
-        "devices_now" is the list of all currently connected devices.  If the
-        device was in "devices", then return the :class:`Device` instance from
-        "devices".
-        "devices_added" is the list of connected devices not in "devices".
-        "devices_removed" is the list of devices in "devices" but not "devices_now".
-    """
-    devices_prev = [] if devices is None else devices
-    devices_next = scan()
-    devices_added = []
-    devices_removed = []
-    devices_now = []
-
-    for d in devices_next:
-        matches = [x for x in devices_prev if str(x) == str(d)]
-        if len(matches):
-            devices_now.append(matches[0])
-        else:
-            devices_added.append(d)
-            devices_now.append(d)
-
-    for d in devices_prev:
-        matches = [x for x in devices_next if str(x) == str(d)]
-        if not len(matches):
-            devices_removed.append(d)
-
-    return devices_now, devices_added, devices_removed
+        segment = Segment.CALIBRATION_FACTORY if bool(is_factory) else Segment.CALIBRATION_ACTIVE
+        return self.program(segment, data)

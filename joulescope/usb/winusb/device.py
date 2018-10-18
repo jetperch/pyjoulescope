@@ -1,6 +1,7 @@
 # Copyright 2018 Jetperch LLC
 
 from joulescope.usb import core as usb_core
+from joulescope.usb.scan_info import INFO
 from .setupapi import device_interface_guid_to_paths
 from ctypes import windll, Structure, POINTER, byref, sizeof, \
     c_ubyte, c_ushort, c_ulong, c_void_p, pointer
@@ -569,12 +570,14 @@ class WinUsbDevice:
                 self.read_stream_stop(pipe_id)
 
 
-def scan(guid) -> List[WinUsbDevice]:
+def scan(name: str) -> List[WinUsbDevice]:
     """Scan for attached devices.
 
-    :param guid: The DeviceInterfaceGUID in the Microsoft WinUSB descriptor.
+    :param name: The case-insensitive name of the device to scan.
     :return: The list of discovered :class:`WinUsbDevice` instances.
     """
+    info = INFO[name.lower()]
+    guid = info['DeviceInterfaceGUID']
     paths = device_interface_guid_to_paths(guid)
     if not len(paths):
         log.info('scan found no devices')

@@ -23,6 +23,11 @@ import io
 import binascii
 import struct
 import numpy as np
+import monocypher
+import logging
+
+
+logging.basicConfig(level=logging.DEBUG)
 
 
 F1 = b'\xd3tagfmt \r\n \n  \x1a\x1cH\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x2f\x3c\x0b\x52TAG\x00\n\x00\x00\x00\x00\x01\x02\x03\x04\x05\x06\x07\x08\t\x00\x00\xb7\xe9d%END\x00\x00\x00\x00\x00\x00\x00\x00\x00\xbc\x93z\xc0'
@@ -87,6 +92,66 @@ class TestDataFile(unittest.TestCase):
         self.assertEqual(data, value)
         with self.assertRaises(StopIteration):
             next(fr)
+
+    def make_encrypted(self, compress=False):
+        data = np.arange(2**16, dtype=np.uint16).tobytes()
+        fh = io.BytesIO(F1)
+        fw = datafile.DataFileWriter(fh)
+        signing_key_prv = bytes(range(32))
+        encryption_key = bytes(range(1, 33))
+        nonce = bytes(range(16, 16 + 24 * 2, 2))
+        associated_data = bytes(range(2, 50, 2))
+        fw.append_encrypted(b'RAW', data, signing_key_prv, encryption_key, nonce, associated_data, compress=compress)
+        fw.finalize()
+        fh.seek(0)
+        fr = datafile.DataFileReader(fh)
+        return fr, {
+            'data': data,
+            'signing_key_prv': signing_key_prv,
+            'signing_key_pub': monocypher.public_key_compute(signing_key_prv),
+            'encryption_key': encryption_key,
+            'nonce': nonce,
+            'associated_data': associated_data,
+            'fh': fh,
+        }
+
+    def test_encrypted(self):
+        fr, d = self.make_encrypted()
+        tag, value = fr.decrypt(d['signing_key_pub'], d['encryption_key'], d['nonce'], d['associated_data'])
+        self.assertEqual(b'RAW', tag)
+        self.assertEqual(d['data'], value)
+        with self.assertRaises(StopIteration):
+            next(fr)
+
+    def test_encrypted_compressed(self):
+        fr, d = self.make_encrypted(compress=True)
+        tag, value = fr.decrypt(d['signing_key_pub'], d['encryption_key'], d['nonce'], d['associated_data'])
+        self.assertEqual(b'RAW', tag)
+        self.assertEqual(d['data'], value)
+        with self.assertRaises(StopIteration):
+            next(fr)
+
+    def test_encrypted_bad_signing_key(self):
+        fr, d = self.make_encrypted(compress=True)
+        sk = d['signing_key_pub'][:-1] + b'\x00'
+        with self.assertRaises(ValueError):
+            fr.decrypt(sk, d['encryption_key'], d['nonce'], d['associated_data'])
+
+    def test_encrypted_bad_encryption_key(self):
+        fr, d = self.make_encrypted(compress=True)
+        ek = d['encryption_key'][:-1] + b'\x00'
+        with self.assertRaises(ValueError):
+            fr.decrypt(d['signing_key_pub'], ek, d['nonce'], d['associated_data'])
+
+    def test_encrypted_bad_nonce(self):
+        fr, d = self.make_encrypted(compress=True)
+        with self.assertRaises(ValueError):
+            fr.decrypt(d['signing_key_pub'], d['encryption_key'], bytes([0]*24), d['associated_data'])
+
+    def test_missing_associated_data(self):
+        fr, d = self.make_encrypted(compress=True)
+        with self.assertRaises(ValueError):
+            fr.decrypt(d['signing_key_pub'], d['encryption_key'], d['nonce'])
 
     def _construct_collection(self):
         data = [bytes(range(00, 10)), bytes(range(10, 20)), bytes(range(20, 30))]
@@ -218,4 +283,3 @@ class TestDataFile(unittest.TestCase):
         next(fr)
         with self.assertRaises(ValueError):
             next(fr)
-

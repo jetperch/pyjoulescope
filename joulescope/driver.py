@@ -33,9 +33,6 @@ from typing import List
 import logging
 log = logging.getLogger(__name__)
 
-DeviceInterfaceGUID = '{99a06894-3518-41a5-a207-8519746da89f}'
-VENDOR_ID = 0x1FC9
-PRODUCT_ID = 0xFC93
 STATUS_REQUEST_LENGTH = 128
 SERIAL_NUMBER_LENGTH = 16
 HOST_API_VERSION = 1
@@ -564,8 +561,8 @@ class Device:
 
         :param fn: The function(bootloader) to execute the commands.
         """
-        _, existing_devices, _ = scan_for_changes([self])
-        existing_bootloaders = bootloader.scan()
+        _, existing_devices, _ = scan_for_changes(name='Joulescope', devices=[self])
+        existing_bootloaders = scan(name='bootloader')
         log.info('controller_firmware_upgrade')
         log.info('my_device = %s', str(self))
         log.info('existing_devices = %s', existing_devices)
@@ -579,20 +576,21 @@ class Device:
         b = []
         while not len(b):
             time.sleep(0.1)
-            _, b, _ = bootloader.scan_for_changes(existing_bootloaders)
+            _, b, _ = scan_for_changes(name='bootloader', devices=existing_bootloaders)
         time.sleep(0.1)
-        _, b, _ = bootloader.scan_for_changes(existing_bootloaders)
+        _, b, _ = scan_for_changes(name='bootloader', devices=existing_bootloaders)
         b = b[0]
         b.open()
-        fn(b)
+        rc = fn(b)
         b.go()  # closes automatically
         d = []
         while not len(d):
             time.sleep(0.1)
-            _, d, _ = scan_for_changes(existing_devices)
+            _, d, _ = scan_for_changes(name='Joulescope', devices=existing_devices)
         time.sleep(0.5)
         self._usb = d[0]._usb
         self.open()
+        return rc
 
     def controller_firmware_program(self, data):
         return self.run_from_bootloader(lambda b: b.firmware_program(data))
@@ -682,25 +680,32 @@ class View:
         return True, (self.x, self.data)
 
 
-def scan() -> List[Device]:
+def scan(name: str=None) -> List[Device]:
     """Scan for connected devices.
 
+    :param name: The case-insensitive device name to scan.
+        None (default) is equivalent to 'Joulescope'.
     :return: The list of :class:`Device` instances.  A new instance is created
         for each detected device.  Use :func:`scan_for_changes` to preserved
         existing instances.
     """
-    devices = usb.scan(DeviceInterfaceGUID)
-    devices = [Device(d) for d in devices]
+    devices = usb.scan(name)
+    if name == 'bootloader':
+        devices = [bootloader.Bootloader(d) for d in devices]
+    else:
+        devices = [Device(d) for d in devices]
     return devices
 
 
-def scan_require_one() -> Device:
+def scan_require_one(name: str=None) -> Device:
     """Scan for one and only one device.
 
+    :param name: The case-insensitive device name to scan.
+        None (default) is equivalent to 'Joulescope'.
     :return: The :class:`Device` found.
     :raise RuntimeError: If no devices or more than one device was found.
     """
-    devices = scan()
+    devices = scan(name)
     if not len(devices):
         raise RuntimeError("no devices found")
     if len(devices) > 1:
@@ -708,9 +713,11 @@ def scan_require_one() -> Device:
     return devices[0]
 
 
-def scan_for_changes(devices=None):
+def scan_for_changes(name: str=None, devices=None):
     """Scan for device changes.
 
+    :param name: The case-insensitive device name to scan.
+        None (default) is equivalent to 'Joulescope'.
     :param devices: The list of existing :class:`Device` instances returned
         by a previous scan.  Pass None or [] if no scan has yet been performed.
     :return: The tuple of lists (devices_now, devices_added, devices_removed).
@@ -721,7 +728,7 @@ def scan_for_changes(devices=None):
         "devices_removed" is the list of devices in "devices" but not "devices_now".
     """
     devices_prev = [] if devices is None else devices
-    devices_next = scan()
+    devices_next = scan(name)
     devices_added = []
     devices_removed = []
     devices_now = []

@@ -35,7 +35,7 @@ def parser_config(p):
 
 
 def on_cmd(args):
-    device = scan_require_one()
+    device = scan_require_one(name='Joulescope')
     f = lambda: run(device, filename=args.filename,
                     duration=args.duration,
                     contiguous_duration=args.contiguous)
