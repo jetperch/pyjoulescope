@@ -217,6 +217,7 @@ class Device:
             length, _ = datafile.validate_file_header(bytes(rv.data))
         except Exception:
             log.warning('invalid calibration file')
+            log.info('calibration = %s', binascii.hexlify(rv.data))
             return None
 
         calibration = b''
