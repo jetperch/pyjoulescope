@@ -45,7 +45,7 @@ def parser_config(p):
 
 
 def on_cmd(args):
-    d = scan(guid='{99a06894-3518-41a5-a207-8519746da89f}')
+    d = scan(name='Joulescope')
     if not(len(d)):
         print('No devices found')
         return 1

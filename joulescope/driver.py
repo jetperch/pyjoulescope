@@ -556,14 +556,15 @@ class Device:
             value=SensorBootloader.RESUME)
         _ioerror_on_bad_result(rv)
 
-    def run_from_bootloader(self, fn):
-        """Run commands from the bootloader and then return to the app.
-
-        :param fn: The function(bootloader) to execute the commands.
+    def bootloader(self):
+        """Start the bootloader for this device.
+        
+        :return: (bootloader, existing_devices)  Use the bootloader instance
+            to perform operations.  Use existing_devices to assist in 
+            determining when this device returns from bootloader mode.
         """
         _, existing_devices, _ = scan_for_changes(name='Joulescope', devices=[self])
         existing_bootloaders = scan(name='bootloader')
-        log.info('controller_firmware_upgrade')
         log.info('my_device = %s', str(self))
         log.info('existing_devices = %s', existing_devices)
         log.info('existing_bootloaders = %s', existing_bootloaders)
@@ -581,6 +582,14 @@ class Device:
         _, b, _ = scan_for_changes(name='bootloader', devices=existing_bootloaders)
         b = b[0]
         b.open()
+        return b, existing_devices
+        
+    def run_from_bootloader(self, fn):
+        """Run commands from the bootloader and then return to the app.
+
+        :param fn: The function(bootloader) to execute the commands.
+        """
+        b, existing_devices = self.bootloader()
         rc = fn(b)
         b.go()  # closes automatically
         d = []

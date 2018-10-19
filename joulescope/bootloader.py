@@ -43,6 +43,7 @@ class UsbdRequest:
     WRITE_FINALIZE = 6
     READ_CHUNK = 7
     GO = 8
+    ERASE = 9
 
 
 class Segment:
@@ -224,3 +225,29 @@ class Bootloader:
         data = _filename_or_bytes(filename)
         segment = Segment.CALIBRATION_FACTORY if bool(is_factory) else Segment.CALIBRATION_ACTIVE
         return self.program(segment, data)
+        
+    def erase(self, magic):
+        """Permanently erase flash on Joulescope.
+        
+        :param magic: The 32-byte erase key.
+        
+        WARNING: This will delete the application, bootloader, calibration
+            and personalization.  This renders Joulescope useless!
+        """
+        log.info('ERASE')
+        # arm
+        data = struct.pack('<III', 1, 0, 0)
+        rv = self._usb.control_transfer_out(
+            'device', 'vendor',
+            request=UsbdRequest.ERASE,
+            value=0, index=0, data=magic + data)        
+        _ioerror_on_bad_result(rv)
+        
+        # and do it... hope you meant it!
+        data = struct.pack('<III', 2, 0, 15)
+        rv = self._usb.control_transfer_out(
+            'device', 'vendor',
+            request=UsbdRequest.ERASE,
+            value=0, index=0, data=magic + data)        
+        _ioerror_on_bad_result(rv)        
+        return 0
