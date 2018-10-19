@@ -50,6 +50,7 @@ INVALID_HANDLE_VALUE = HANDLE(-1)
 
 # Common IO errors
 ERROR_FILE_NOT_FOUND = 2  # The system cannot find the file specified.
+ERROR_INVALID_HANDLE = 6  # Invalid handle
 ERROR_BAD_COMMAND = 22  # The device does not recognize the command.
 ERROR_GEN_FAILURE = 31  # A device attached to the system is not functioning.
 ERROR_IO_OPERATION_ABORTED = 995
