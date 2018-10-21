@@ -529,7 +529,7 @@ cdef class StreamBuffer:
             if sample_id < self.device_sample_id:
                 log.warning("WARNING: duplicate data")
             elif self.device_sample_id < sample_id:
-                log.info("Fill missing samples")
+                log.info("Fill missing samples: %r, %r", self.device_sample_id, sample_id)
                 self.skip_count += 1
                 self.contiguous_count = 0
                 while self.device_sample_id < sample_id:
@@ -594,7 +594,8 @@ cdef class StreamBuffer:
         cdef float cal_v
 
         if self.processed_sample_id + self.length < self.device_sample_id:
-            log.warning('process: stream_buffer is behind')
+            log.warning('process: stream_buffer is behind: %r + %r < %r',
+                        self.processed_sample_id, self.length, self.device_sample_id)
             self.processed_sample_id = self.device_sample_id - self.length
         idx_start = <uint32_t> (self.processed_sample_id % self.length)
 
@@ -868,7 +869,7 @@ def usb_packet_factory(packet_index, count=None):
     count = 1 if count is None else int(count)
     if count < 1:
         count = 1
-    frame = np.empty((packet_index + 1) * 512 * count, dtype=np.uint8)
+    frame = np.empty(512 * count, dtype=np.uint8)
     for i in range(count):
         idx = packet_index + i
         k = i * 512

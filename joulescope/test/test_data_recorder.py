@@ -24,7 +24,6 @@ import tempfile
 import numpy as np
 import os
 import shutil
-from unittest.mock import Mock
 
 
 class TestDataRecorder(unittest.TestCase):
@@ -53,12 +52,17 @@ class TestDataRecorder(unittest.TestCase):
         c.validate()
 
     def _create_file(self, packet_index, count=None):
+        stream_buffer = StreamBuffer(2000, [10])
+        if packet_index > 0:
+            data = usb_packet_factory(0, packet_index - 1)
+            stream_buffer.insert(data)
+            stream_buffer.process()
+
         config = DataRecorderConfiguration()
         config.samples_per_block = 10
         config.reductions = [10]
         config.blocks_per_reduction = [10]
         config.sample_id_offset = packet_index * 126
-        stream_buffer = StreamBuffer(2000, [10])
 
         fh = io.BytesIO()
         d = DataRecorder(fh, configuration=config)
@@ -93,20 +97,10 @@ class TestDataRecorder(unittest.TestCase):
     def test_write_read_direct_with_sample_overscan_before(self):
         fh = self._create_file(1, 1)  # will be samples 120 to 250 (not 126 to 252)
         r = DataReader().open(fh)
-        x, data = r.get(0, 200, 1)
-        np.testing.assert_allclose(np.arange(0, 200), x)
-        y = np.full((120, 3, 4), np.nan)
-        y[:, :, 1] = 0.0
-        np.testing.assert_array_equal(y, data[:120, :, :])
-        np.testing.assert_allclose(np.arange(252, 400, 2), data[126:, 0, 0])
-
-    def test_write_read_direct_with_sample_overscan_after(self):
-        fh = self._create_file(1, 1)  # will be samples 120 to 250 (not 126 to 252)
-        r = DataReader().open(fh)
-        x, data = r.get(200, 400, 1)
-        np.testing.assert_allclose(np.arange(200, 400), x)
-        np.testing.assert_array_equal(np.full((150, 3, 4), np.nan), data[50:, :, :])
-        np.testing.assert_allclose(np.arange(400, 500, 2), data[:50, 0, 0])
+        x, data = r.get(0, 140, 1)
+        np.testing.assert_allclose(np.arange(0, 140), x)
+        np.testing.assert_allclose(np.arange(240, 500, 2), data[:130, 0, 0])
+        np.testing.assert_allclose(np.full(10, np.nan), data[130:, 0, 0])
 
     def test_write_read_stats_over_samples(self):
         fh = self._create_file(0, 2)

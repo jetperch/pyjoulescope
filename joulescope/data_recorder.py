@@ -108,7 +108,7 @@ class DataRecorder:
             self._config = copy.deepcopy(configuration)
         self.stream_buffer = None
         self._config.validate()
-        self._sample_id = 0
+        self._sample_id = self._config.sample_id_offset
         self._blocks_remaining = copy.copy(self._config.blocks_per_reduction)  # type: List[int]
         self._writer = datafile.DataFileWriter(filehandle)
         self._closed = False
@@ -151,6 +151,9 @@ class DataRecorder:
 
         sample_id_next = self._sample_id + self._config.samples_per_block
         while stream_buffer.sample_id_range[1] > sample_id_next:  # have at least one block
+            if stream_buffer.sample_id_range[0] > 10000:
+                print(stream_buffer.sample_id_range)
+                raise ValueError('doh')
             # start collections as needed
             while len(self._writer.collections) <= len(self._blocks_remaining):
                 self._collection_start()
@@ -425,7 +428,8 @@ class DataReader:
         :param start: The starting sample identifier (inclusive).
         :param stop: The ending sample identifier (exclusive).
         :param increment: The number of raw samples per output sample.
-        :return: The tuple (x, data).  X is the sample_id values,The output which is either a new array or (when provided) out.
+        :return: The tuple (x, data).  X is the sample_id values.
+            Data is the Nx3x4 sample data.
         """
         if self._fh is None:
             raise IOError('file not open')
