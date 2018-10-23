@@ -510,7 +510,7 @@ cdef class StreamBuffer:
         while length >= PACKET_TOTAL_SIZE:
             buffer_type = data[0]
             status = data[1]
-            pkt_length = data[2] | ((<uint16_t> data[3] & 0x7f) << 8)
+            pkt_length = (data[2] | ((<uint16_t> data[3] & 0x7f) << 8)) & 0x7fff
             self.voltage_range = <uint8_t> ((data[3] >> 7) & 0x01)
             pkt_index = <uint64_t> (data[4] | ((<uint16_t> data[5]) << 8))
             # uint16_t usb_frame_index = data[6] | ((<uint16_t> data[7]) << 8)
