@@ -55,25 +55,25 @@ PARAMETERS = [
         'setting',
         'off',
         [
-            ('auto', 0x80),
-            ('0', 0x01),
-            ('1', 0x02),
-            ('2', 0x04),
-            ('3', 0x08),
-            ('4', 0x10),
-            ('5', 0x20),
-            ('6', 0x40),
-            ('off', 0x00),
+            ('auto',   0x80),
+            ('9 A',    0x01, ['0']),
+            ('2 A',    0x02, ['1']),
+            ('180 mA', 0x04, ['2']),
+            ('18 mA',  0x08, ['3']),
+            ('1.8 mA', 0x10, ['4']),
+            ('180 µA', 0x20, ['5']),
+            ('18 µA',  0x40, ['6']),
+            ('off',    0x00),
         ],
     ),
     Parameter(
         'v_range',
         'rw',
         'setting',
-        'low',
+        '13.2V',
         [
-            ('low', 0),
-            ('high', 1),
+            ('13.2V', 0, ['low']),
+            ('4V',    1, ['high']),
         ],
     ),
     Parameter(
@@ -124,9 +124,11 @@ def _lookup_construct(x):
         d_rev = {}
         fwd[p.name] = d_fwd
         rev[p.name] = d_rev
-        for value_name, value in p.values:
+        for value_name, value, aliases in p.values:
             d_fwd[value_name] = value
             d_rev[value] = value_name
+            for alias in aliases:
+                d_fwd[alias] = value
     return fwd, rev
 
 
