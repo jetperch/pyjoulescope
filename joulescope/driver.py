@@ -343,7 +343,6 @@ class Device:
             the caller.  This function will be called from the USB
             processing thread.  Any calls back into self MUST BE
             resynchronized.
-
         :param duration: The duration in seconds for the capture.
         :param contiguous_duration: The contiguous duration in seconds for
             the capture.  As opposed to duration, this ensures that the
@@ -432,8 +431,6 @@ class Device:
 
     def recording_start(self, filename=None):
         self.recording_stop()
-        if not self._streaming:
-            return False
         log.info('recording_start(%s)', filename)
         if filename is None:
             filename = construct_record_filename()
@@ -591,15 +588,17 @@ class Device:
         :param fn: The function(bootloader) to execute the commands.
         """
         b, existing_devices = self.bootloader()
-        rc = fn(b)
-        b.go()  # closes automatically
-        d = []
-        while not len(d):
-            time.sleep(0.1)
-            _, d, _ = scan_for_changes(name='Joulescope', devices=existing_devices)
-        time.sleep(0.5)
-        self._usb = d[0]._usb
-        self.open()
+        try:
+            rc = fn(b)
+        finally:
+            b.go()  # go closes bootloader automatically
+            d = []
+            while not len(d):
+                time.sleep(0.1)
+                _, d, _ = scan_for_changes(name='Joulescope', devices=existing_devices)
+            time.sleep(0.5)
+            self._usb = d[0]._usb
+            self.open()
         return rc
 
     def controller_firmware_program(self, data):
