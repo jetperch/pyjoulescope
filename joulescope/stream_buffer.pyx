@@ -242,7 +242,7 @@ cdef void cal_init(js_stream_buffer_calibration_s * self):
     for i in range(8):
         self.current_offset[i] = <float> 0.0
         self.current_gain[i] = <float> 1.0
-    self.current_gain[7] = NAN  # compute NAN on invalid
+    self.current_gain[7] = 0.0  # always compute zero current when off
     for i in range(2):
         self.voltage_offset[i] = <float> 0.0
         self.voltage_gain[i] = <float> 1.0
@@ -409,8 +409,8 @@ cdef class StreamBuffer:
         for i in range(7):
             cal.current_offset[i] = current_offset[i]
             cal.current_gain[i] = current_gain[i]
-        cal.current_offset[7] = NAN
-        cal.current_gain[7] = NAN
+        cal.current_offset[7] = 0.0
+        cal.current_gain[7] = 0.0
         for i in range(2):
             cal.voltage_offset[i] = voltage_offset[i]
             cal.voltage_gain[i] = voltage_gain[i]
@@ -534,8 +534,8 @@ cdef class StreamBuffer:
                 self.contiguous_count = 0
                 while self.device_sample_id < sample_id:
                     idx2 = idx * 2
-                    self.raw[idx2 + 0] = 0x3
-                    self.raw[idx2 + 1] = 0x3
+                    self.raw[idx2 + 0] = 0xffff  # missing sample is i_range 7 with raw_i = 0x3fff
+                    self.raw[idx2 + 1] = 0xffff
                     idx += 1
                     if idx >= self.length:
                         idx = 0
@@ -619,8 +619,12 @@ cdef class StreamBuffer:
             cal_v = <float> (raw_v >> 2)
             cal_v += self.cal.voltage_offset[self.voltage_range]
             cal_v *= self.cal.voltage_gain[self.voltage_range]
-            if not isfinite(cal_i):
-                cal_v = NAN
+            if 7 == i_range:
+                if 0x3fff == raw_i and 0x3fff == raw_v:  # missing sample
+                    cal_i = NAN
+                    cal_v = NAN
+                else:  # select off, current is zero by definition
+                    cal_i = <float> 0.0
             self.data_ptr[idx + 0] = cal_i
             self.data_ptr[idx + 1] = cal_v
 
