@@ -151,9 +151,6 @@ class DataRecorder:
 
         sample_id_next = self._sample_id + self._config.samples_per_block
         while stream_buffer.sample_id_range[1] > sample_id_next:  # have at least one block
-            if stream_buffer.sample_id_range[0] > 10000:
-                print(stream_buffer.sample_id_range)
-                raise ValueError('doh')
             # start collections as needed
             while len(self._writer.collections) <= len(self._blocks_remaining):
                 self._collection_start()
