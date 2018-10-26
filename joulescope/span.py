@@ -163,9 +163,14 @@ class Span:
         s = self._slide_or_truncate(s, steps_per)
 
         # right justify
-        s[0] = s[1] - (steps_per * self.quant * (self.length - 1))
+        # s[0] = s[1] - (steps_per * self.quant * (self.length - 1))
         # left justify
         # s[1] = s[0] + (steps_per * self.quant * (self.length - 1))
+        # center
+        start = (s[1] + s[0]) / 2 - (steps_per * self.quant * (self.length - 1)) / 2
+        s[0] = self.quantize_round(start, steps_per)
+        s[1] = s[0] + (steps_per * self.quant * (self.length - 1))
+
         s = self._slide_or_truncate(s)
 
         return s, steps_per
