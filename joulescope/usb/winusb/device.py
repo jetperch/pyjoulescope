@@ -344,7 +344,10 @@ class EndpointIn:
         """
         time_now = time.time()
         duration = time_now - self._time_last
-        throughput = self.byte_count_this / duration
+        if duration < 0.01:
+            throughput = 0.0
+        else:
+            throughput = self.byte_count_this / duration
         self.byte_count_total += self.byte_count_this
         status = {
             'bytes': {'value': self.byte_count_total, 'units': 'bytes'},
