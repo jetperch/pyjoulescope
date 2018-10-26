@@ -354,6 +354,7 @@ class Device:
         if self._streaming:
             self.stop()
         self.stream_buffer.reset()
+        self.view.clear()
         self._stop_fn = stop_fn
         if duration is not None:
             self.stream_buffer.sample_id_max = int(duration * self.sampling_frequency)
@@ -632,6 +633,12 @@ class View:
     def sampling_frequency(self):
         return self._device.sampling_frequency
 
+    def clear(self):
+        self.changed = True
+        self.data_idx = 0
+        if self.data is not None:
+            self.data[:, :, :] = np.nan
+
     def on_x_change(self, cmd, kwargs):
         x_range = list(self.x_range)
         if cmd == 'resize':  # {pixels: int}
@@ -651,40 +658,38 @@ class View:
             log.warning('on_x_change(%s) unsupported', cmd)
             return
 
-        if True:  # only when tracking head
-            self.x -= self.x[0]
         self.changed |= self.x_range != x_range
+        self.clear()
         self.x_range = x_range
         log.info('changed=%s, length=%s, span=%s, range=%s, samples_per=%s',
                  self.changed, len(self), self.x_range,
                  self.x_range[1] - self.x_range[0], self.samples_per)
 
     def update(self):
-        # todo allow "lag" to shift view relative to head
         length = len(self)
         buffer = self._device.stream_buffer
         sample_id_start, sample_id_end = buffer.sample_id_range
-        data_idx_start = (sample_id_start + self.samples_per - 1) // self.samples_per
-        if self.data_idx < data_idx_start or self.changed:
-            self.data[:, :, :] = np.nan
-            self.data_idx = 0
-        data_idx_end = sample_id_end // self.samples_per
-        delta = data_idx_end - self.data_idx
+        lag_time = self.span.limits[1] - self.x_range[1]
+        lag_samples = int(lag_time * self.sampling_frequency) // self.samples_per
+        data_idx_stream_end = sample_id_end // self.samples_per
+        data_idx_view_end = data_idx_stream_end - lag_samples
+        sample_id_end = data_idx_view_end * self.samples_per
+        delta = data_idx_view_end - self.data_idx
 
         if not self.changed and 0 == delta:
             return False, (self.x, self.data)
-        if delta >= length:
-            start_idx = (data_idx_end - length) * self.samples_per
-            if start_idx < 0:
-                start_idx = 0
-            # log.debug('recompute(start=%s, stop=%s, increment=%s)', start_idx, sample_id_end, self.samples_per)
-            buffer.data_get(start_idx, sample_id_end, self.samples_per, self.data)
-        else:
+        if self.changed or delta >= length:
+            self.data[:, :, :] = np.nan
+            if data_idx_view_end > 0:
+                start_idx = (data_idx_view_end - length) * self.samples_per
+                log.info('recompute(start=%s, stop=%s, increment=%s)', start_idx, sample_id_end, self.samples_per)
+                buffer.data_get(start_idx, sample_id_end, self.samples_per, self.data)
+        elif data_idx_view_end > 0:
             start_idx = self.data_idx * self.samples_per
             # log.debug('update(start=%s, stop=%s, increment=%s)', start_idx, sample_id_end, self.samples_per)
             self.data = np.roll(self.data, -delta, axis=0)
             buffer.data_get(start_idx, sample_id_end, self.samples_per, self.data[-delta:, :, :])
-        self.data_idx = data_idx_end
+        self.data_idx = data_idx_view_end
         self.changed = False
         return True, (self.x, self.data)
 
