@@ -61,8 +61,8 @@ SEGMENTS = {
     'personality': Segment.PERSONALITY,
     'calibration_active': Segment.CALIBRATION_ACTIVE,
 }
-for value in list(SEGMENTS.values()):
-    SEGMENTS[value] = value
+for segments_value in list(SEGMENTS.values()):
+    SEGMENTS[segments_value] = segments_value
 
 
 def _filename_or_bytes(x):

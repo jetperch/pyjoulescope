@@ -92,7 +92,7 @@ class DeviceThread:
 
     def _post_block(self, command, args):
         q = queue.Queue()
-        self._post(command, args, lambda rv=None: q.put(rv))
+        self._post(command, args, lambda rv_=None: q.put(rv_))
         try:
             rv = q.get(timeout=TIMEOUT)
         except queue.Empty:

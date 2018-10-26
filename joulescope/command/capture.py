@@ -50,15 +50,15 @@ def on_cmd(args):
 
 
 def run(device, filename, duration=None, contiguous_duration=None):
-    quit = False
+    quit_ = False
 
     def do_quit(*args, **kwargs):
-        nonlocal quit
-        quit = 'quit from SIGINT'
+        nonlocal quit_
+        quit_ = 'quit from SIGINT'
 
     def on_stop():
-        nonlocal quit
-        quit = 'quit from stop duration'
+        nonlocal quit_
+        quit_ = 'quit from stop duration'
 
     signal.signal(signal.SIGINT, do_quit)
     try:
@@ -71,7 +71,7 @@ def run(device, filename, duration=None, contiguous_duration=None):
         sample_id_last = 0
         sample_id_incr = 1000000
         sample_id_next = sample_id_last + sample_id_incr
-        while not quit:
+        while not quit_:
             time.sleep(0.01)
             time_now = time.time()
             if time_now - time_last > 1.0:
@@ -83,6 +83,6 @@ def run(device, filename, duration=None, contiguous_duration=None):
         device.stop()
     finally:
         device.close()
-    print('done capturing data: %s' % quit)
+    print('done capturing data: %s' % quit_)
 
     return 0

@@ -86,7 +86,7 @@ def stream_settings(device):
 
 def run(device, filename, duration, endpoint_id, threaded):
     logging.basicConfig(level=logging.DEBUG)
-    quit = False
+    quit_ = False
     d = device
     for _ in range(threaded):
         d = DeviceThread(d)
@@ -95,14 +95,14 @@ def run(device, filename, duration, endpoint_id, threaded):
 
     with open(filename, 'wb') as fh:
         def do_quit(*args, **kwargs):
-            nonlocal quit
-            quit = 'quit from SIGINT'
+            nonlocal quit_
+            quit_ = 'quit from SIGINT'
 
         def on_data(data, length=None):
-            nonlocal quit
+            nonlocal quit_
             if data is None:
-                if not quit:
-                    quit = 'quit for on_data'
+                if not quit_:
+                    quit_ = 'quit for on_data'
             else:
                 fh.write(bytes(data)[:length])
             if duration is not None:
@@ -126,7 +126,7 @@ def run(device, filename, duration, endpoint_id, threaded):
                 block_size=256 * 512,
                 data_fn=on_data,
                 process_fn=on_process)
-            while not quit:
+            while not quit_:
                 d.process(timeout=0.01)
                 time_now = time.time()
                 if time_now - time_last > 1.0:
@@ -135,6 +135,6 @@ def run(device, filename, duration, endpoint_id, threaded):
             d.read_stream_stop(endpoint_id)
         finally:
             d.close()
-        print('done capturing data: %s' % quit)
+        print('done capturing data: %s' % quit_)
 
     return 0
