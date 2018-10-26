@@ -1,8 +1,8 @@
 # Copyright 2017 Jetperch LLC
 
 from ctypes import windll, Structure, Union, \
-    POINTER, pointer, cast, wstring_at, byref, \
-    c_wchar, c_void_p, c_wchar_p, memset, sizeof
+    POINTER, pointer, byref, \
+    c_void_p, c_wchar_p, memset, sizeof
 from ctypes.wintypes import DWORD, HANDLE, BOOL, LPVOID, LPWSTR
 
 
@@ -10,8 +10,8 @@ _kernel32 = windll.kernel32
 
 
 # CreateFile dwDesiredAccess values
-GENERIC_WRITE = (1073741824)
-GENERIC_READ = (-2147483648)
+GENERIC_WRITE = 1073741824
+GENERIC_READ = -2147483648
 
 # CreateFile dwShareMode flags
 FILE_SHARE_READ = 1
@@ -221,7 +221,7 @@ FormatMessage.argtypes = [DWORD, c_void_p, DWORD, DWORD, POINTER(c_wchar_p), DWO
 
 
 def get_last_error():
-    dLastError = GetLastError();
+    dLastError = GetLastError()
     if dLastError == 0:
         return '[0] No error'
     bufptr = LPWSTR()

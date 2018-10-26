@@ -31,7 +31,7 @@ class NotificationHandler:
             time_delta = time_now - self._time_last
             if time_delta < self.period:
                 return
-        self._time_last = time_now
+            self._time_last = time_now
         self.emit_always(obj)
 
     def emit_always(self, obj=None):

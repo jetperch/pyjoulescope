@@ -425,7 +425,7 @@ class Device:
         if out_format == 'raw':
             return self.stream_buffer.raw_get(start_id, end_id).reshape((-1, 2))
         else:
-            r = self.stream_buffer.get(start_id, end_id, increment=1)
+            r = self.stream_buffer.data_get(start_id, end_id, increment=1)
             i = r[:, 0, 0].reshape((-1, 1))
             v = r[:, 1, 0].reshape((-1, 1))
             return np.hstack((i, v))

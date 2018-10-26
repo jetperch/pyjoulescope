@@ -1,7 +1,6 @@
 # Copyright 2017 Jetperch LLC
 
-from ctypes import windll, Structure, POINTER, byref, sizeof, \
-    c_ubyte, c_ushort, c_ulong, c_void_p, pointer
+from ctypes import Structure, c_ubyte, c_ushort
 
 
 # USB PIPE TYPE

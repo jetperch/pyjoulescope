@@ -17,7 +17,7 @@ Test the data recorder
 """
 
 import unittest
-from joulescope.data_recorder import DataRecorder, DataReader, DataRecorderConfiguration, datafile
+from joulescope.data_recorder import DataRecorder, DataReader, DataRecorderConfiguration
 from joulescope.stream_buffer import StreamBuffer, usb_packet_factory
 import io
 import tempfile
@@ -89,7 +89,7 @@ class TestDataRecorder(unittest.TestCase):
     def test_write_read_direct_with_offset(self):
         fh = self._create_file(0, 2)
         r = DataReader().open(fh)
-        d = np.right_shift(r.raw(5, 10), 2)
+        # d = np.right_shift(r.raw(5, 10), 2)
         x, data = r.get(5, 10, 1)
         np.testing.assert_allclose(np.arange(5, 10), x)
         np.testing.assert_allclose(np.arange(10, 20, 2), data[:, 0, 0])

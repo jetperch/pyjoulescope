@@ -47,25 +47,24 @@ class TestPattern(unittest.TestCase):
         usb = self.device.usb_device
         hw_tests.control_loopback_buffer(usb, UsbdRequest.LOOPBACK_BUFFER, LOOPBACK_BUFFER_SIZE, 4)
 
-    @unittest.skip('Not currently supported')  # todo
     def _pattern(self, duration=None):
         duration = int(duration) if duration is not None else 1.0
-        data = self.device.read(duration=duration, data_format='usb')
-        parser = PacketParser()
-        for k in data:
-            parser(k)
-        self.assertGreater(parser.packet_count, 0)
-        self.assertGreater(parser.byte_count, 0)
-        self.assertEqual(parser.rx_pattern.receive_count, parser.packet_count * 126)
-        self.assertEqual(0, parser.rx_pattern.error_count)
-        self.assertEqual(0, parser.rx_pattern.missing_count)
-        self.assertEqual(0, parser.rx_pattern.resync_count)
+        # data = self.device.read(duration=duration, data_format='usb')
+        # parser = PacketParser()
+        # self.assertGreater(parser.packet_count, 0)
+        # self.assertGreater(parser.byte_count, 0)
+        # self.assertEqual(parser.rx_pattern.receive_count, parser.packet_count * 126)
+        # self.assertEqual(0, parser.rx_pattern.error_count)
+        # self.assertEqual(0, parser.rx_pattern.missing_count)
+        # self.assertEqual(0, parser.rx_pattern.resync_count)
 
+    @unittest.skip('Not currently supported')  # todo
     def test_datapath_usb(self):
         self.device.parameter_set('control_test_mode', 'usb')
         self.device.parameter_set('source', 'pattern_usb')
         self._pattern(1)
 
+    @unittest.skip('Not currently supported')  # todo
     def test_datapath_sensor(self):
         self.device.parameter_set('control_test_mode', 'normal')
         self.device.parameter_set('source', 'pattern_sensor')
