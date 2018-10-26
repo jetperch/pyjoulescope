@@ -20,7 +20,7 @@ Optimized Cython native Joulescope code.
 
 # cython: boundscheck=False, wraparound=False, nonecheck=False, overflowcheck=False, cdivision=True
 
-from libc.stdint cimport uint8_t, uint16_t, uint32_t, uint64_t, int32_t
+from libc.stdint cimport uint8_t, uint16_t, uint32_t, uint64_t, int32_t, int64_t
 from libc.float cimport FLT_MAX, FLT_MIN
 from libc.math cimport isfinite, NAN
 
@@ -659,7 +659,7 @@ cdef class StreamBuffer:
         return 1
 
     cdef uint32_t _data_get(self, float * buffer, uint32_t buffer_samples,
-                            uint64_t start, uint64_t stop, uint32_t increment):
+                            int64_t start, int64_t stop, uint32_t increment):
         """Get the summarized statistics over a range.
         
         :param buffer: The Nx3x4 buffer to populate.
@@ -674,27 +674,45 @@ cdef class StreamBuffer:
         cdef uint32_t data_offset
         cdef float stats[STATS_FIELDS][STATS_VALUES]
         cdef uint32_t count
+        cdef uint32_t fill_count = 0
+        cdef uint32_t fill_count_tmp
         cdef uint32_t samples_per_step
         cdef uint32_t samples_per_step_next
         cdef uint32_t length
         cdef uint32_t idx_start
+        cdef int64_t end_gap
+        cdef int64_t start_orig = start
         cdef int n
+
+        if stop + self.length < self.processed_sample_id:
+            fill_count = buffer_samples_orig
+        elif start < 0:
+            # round to floor, absolute value
+            fill_count_tmp = ((-start + increment - 1) / increment)
+            start += fill_count_tmp * increment
+            #log.info('_data_get start < 0: %d [%d] => %d', start_orig, fill_count_tmp, start)
+            fill_count += fill_count_tmp
 
         start = (start / increment) * increment
         stop = (stop / increment) * increment
         if not self.range_check(start, stop):
             return 0
 
+        if (start + self.length) < self.device_sample_id:
+            fill_count_tmp = (self.device_sample_id - (start + self.length)) / increment
+            start += fill_count_tmp * increment
+            #log.info('_data_get behind < 0: %d [%d] => %d', start_orig, fill_count_tmp, start)
+            fill_count += fill_count_tmp
+
         # Fill in too old of data with NAN
-        while (start + self.length) < self.device_sample_id:
+        for n in range(fill_count):
             if buffer_samples == 0:
-                log.warning('_data_get filled with NaN')
+                log.warning('_data_get filled with NaN %d of %d', buffer_samples_orig, fill_count)
                 return buffer_samples_orig
             for j in range(STATS_FLOATS_PER_SAMPLE):
                 buffer[j] = NAN
             buffer += STATS_FLOATS_PER_SAMPLE
             buffer_samples -= 1
-            start += increment
         if buffer_samples != buffer_samples_orig:
             log.warning('_data_get filled %s', buffer_samples_orig - buffer_samples)
 
