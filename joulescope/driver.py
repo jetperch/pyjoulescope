@@ -682,7 +682,7 @@ class View:
             self.data[:, :, :] = np.nan
             if data_idx_view_end > 0:
                 start_idx = (data_idx_view_end - length) * self.samples_per
-                log.info('recompute(start=%s, stop=%s, increment=%s)', start_idx, sample_id_end, self.samples_per)
+                # log.info('recompute(start=%s, stop=%s, increment=%s)', start_idx, sample_id_end, self.samples_per)
                 buffer.data_get(start_idx, sample_id_end, self.samples_per, self.data)
         elif data_idx_view_end > 0:
             start_idx = self.data_idx * self.samples_per

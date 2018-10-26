@@ -604,6 +604,8 @@ cdef class StreamBuffer:
             raw_i = self.raw_ptr[idx + 0]
             raw_v = self.raw_ptr[idx + 1]
             i_range = <uint8_t> ((raw_i & 0x0003) | ((raw_v & 0x0001) << 2))
+            raw_i = raw_i >> 2
+            raw_v = raw_v >> 2
             sample_toggle_current = (raw_v >> 1) & 0x1
             sample_sync_count = (sample_toggle_current ^ self.sample_toggle_last ^ 1) & \
                     self.sample_toggle_mask
@@ -612,11 +614,11 @@ cdef class StreamBuffer:
             self.sample_sync_count += sample_sync_count
             self.sample_toggle_last = sample_toggle_current
             self.sample_toggle_mask = 0x1
-            cal_i = <float> (raw_i >> 2)
+            cal_i = <float> raw_i
             cal_i += self.cal.current_offset[i_range]
             cal_i *= self.cal.current_gain[i_range]
 
-            cal_v = <float> (raw_v >> 2)
+            cal_v = <float> raw_v
             cal_v += self.cal.voltage_offset[self.voltage_range]
             cal_v *= self.cal.voltage_gain[self.voltage_range]
             if 7 == i_range:
