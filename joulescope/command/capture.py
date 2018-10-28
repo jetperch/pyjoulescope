@@ -25,7 +25,7 @@ def parser_config(p):
                    help='The capture duration in seconds.')
     p.add_argument('--contiguous',
                    type=float,
-                   help='The contiguous capture duration (no misssing samples) in seconds.')
+                   help='The contiguous capture duration (no missing samples) in seconds.')
     p.add_argument('filename',
                    help='The filename for output data.')
     p.add_argument('--profile',
