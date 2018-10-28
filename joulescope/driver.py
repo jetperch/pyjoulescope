@@ -665,16 +665,21 @@ class View:
                  self.changed, len(self), self.x_range,
                  self.x_range[1] - self.x_range[0], self.samples_per)
 
-    def update(self):
-        length = len(self)
+    def _view(self):
         buffer = self._device.stream_buffer
-        sample_id_start, sample_id_end = buffer.sample_id_range
+        _, sample_id_end = buffer.sample_id_range
         lag_time = self.span.limits[1] - self.x_range[1]
         lag_samples = int(lag_time * self.sampling_frequency) // self.samples_per
         data_idx_stream_end = sample_id_end // self.samples_per
         data_idx_view_end = data_idx_stream_end - lag_samples
         sample_id_end = data_idx_view_end * self.samples_per
         delta = data_idx_view_end - self.data_idx
+        return data_idx_view_end, sample_id_end, delta
+
+    def update(self):
+        buffer = self._device.stream_buffer
+        length = len(self)
+        data_idx_view_end, sample_id_end, delta = self._view()
 
         if not self.changed and 0 == delta:
             return False, (self.x, self.data)
@@ -692,6 +697,13 @@ class View:
         self.data_idx = data_idx_view_end
         self.changed = False
         return True, (self.x, self.data)
+
+    def extract(self):
+        buffer = self._device.stream_buffer
+        length = len(self)
+        data_idx_view_end, sample_id_end, delta = self._view()
+        start_idx = (data_idx_view_end - length) * self.samples_per
+        return buffer.data_get(start_idx, sample_id_end)
 
 
 def scan(name: str=None) -> List[Device]:
