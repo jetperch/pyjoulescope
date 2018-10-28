@@ -89,8 +89,10 @@ class Span:
         steps_per = int(np.round(steps_per))
         if steps_per < 1:
             steps_per = 1
-        while steps_per > 1 and ((self.length - 1) * self.quant * steps_per) > self.s_limit_max:
-            steps_per -= 1
+        if steps_per > 1 and ((self.length - 1) * self.quant * steps_per) > self.s_limit_max:
+            steps_per = int(self.s_limit_max / ((self.length - 1) * self.quant))
+            if steps_per < 1:
+                steps_per = 1
         return steps_per
 
     def _quants_per(self, span):
