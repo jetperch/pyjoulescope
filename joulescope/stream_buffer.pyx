@@ -86,7 +86,7 @@ cdef void stats_compute_reset(float stats[STATS_FIELDS][STATS_VALUES]):
         stats[i][0] = 0.0  # mean
         stats[i][1] = 0.0  # variance
         stats[i][2] = FLT_MAX  # min
-        stats[i][3] = FLT_MIN  # max
+        stats[i][3] = -FLT_MAX  # max
 
 
 cdef void stats_compute_one(float stats[STATS_FIELDS][STATS_VALUES],
