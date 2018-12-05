@@ -70,6 +70,9 @@ class UsbdRequest:
     CALIBRATION = 8
     """Request the calibration. wIndex 0=factory, 1=active."""
 
+    SENSOR_POWER = 9
+    """Get/set the sensor power on/off."""
+
 
 class SensorBootloader:
 
@@ -524,19 +527,30 @@ class Device:
         status['buffer'] = self.stream_buffer.status()
         return status
 
+    def _sensor_status_check(self):
+        rv = self._status()
+        ec = rv.get('settings_result', {}).get('value', 1)
+        if 0 != ec:
+            raise RuntimeError('sensor_firmware_program failed %d' % (ec,))
+
     def sensor_firmware_program(self, data):
         log.info('sensor_firmware_program')
         self.stop()
+
         log.info('sensor bootloader: start')
         rv = self._usb.control_transfer_out(
             'device', 'vendor', request=UsbdRequest.SENSOR_BOOTLOADER,
             value=SensorBootloader.START)
         _ioerror_on_bad_result(rv)
+        self._sensor_status_check()
+
         log.info('sensor bootloader: erase all flash')
         rv = self._usb.control_transfer_out(
             'device', 'vendor', request=UsbdRequest.SENSOR_BOOTLOADER,
             value=SensorBootloader.ERASE)
         _ioerror_on_bad_result(rv)
+        self._sensor_status_check()
+
         chunk_size = 2 ** 10  # 16 kB
         assert(0 == (chunk_size % 256))
         index = 0
@@ -547,6 +561,7 @@ class Device:
                 'device', 'vendor', request=UsbdRequest.SENSOR_BOOTLOADER,
                 value=SensorBootloader.WRITE, index=index, data=data[:sz])
             _ioerror_on_bad_result(rv)
+            self._sensor_status_check()
             data = data[sz:]
             index += chunk_size // 256
         log.info('sensor bootloader: resume')
@@ -715,6 +730,8 @@ def scan(name: str=None) -> List[Device]:
         for each detected device.  Use :func:`scan_for_changes` to preserved
         existing instances.
     """
+    if name is None:
+        name = 'joulescope'
     devices = usb.scan(name)
     if name == 'bootloader':
         devices = [bootloader.Bootloader(d) for d in devices]
