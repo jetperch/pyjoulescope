@@ -4,7 +4,7 @@
 This file contains the list of changes made to pyjoulescope.
 
 
-## 0.1.1
+## 0.1.5
 
 2018 Dec 5
 
