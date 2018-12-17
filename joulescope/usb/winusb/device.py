@@ -579,9 +579,12 @@ def scan(name: str) -> List[WinUsbDevice]:
     :param name: The case-insensitive name of the device to scan.
     :return: The list of discovered :class:`WinUsbDevice` instances.
     """
-    info = INFO[name.lower()]
-    guid = info['DeviceInterfaceGUID']
-    paths = device_interface_guid_to_paths(guid)
+    paths = []
+    infos = INFO[name.lower()]
+    for info in infos:
+        guid = info['DeviceInterfaceGUID']
+        p = device_interface_guid_to_paths(guid)
+        paths.extend(p)
     if not len(paths):
         log.info('scan found no devices')
         return []
