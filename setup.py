@@ -23,6 +23,7 @@ https://github.com/pypa/sampleproject
 # Always prefer setuptools over distutils
 import setuptools
 import os
+import sys
 import numpy as np
 
 MYPATH = os.path.abspath(os.path.dirname(__file__))
