@@ -17,6 +17,8 @@ from joulescope.usb.core import SetupPacket, ControlTransferResponse
 from joulescope.usb.scan_info import INFO
 from typing import List
 import time
+from contextlib import contextmanager
+import numpy as np
 import ctypes
 import ctypes.util
 from ctypes import Structure, c_uint8, c_uint16, c_uint, \
@@ -193,18 +195,63 @@ _lib.libusb_control_transfer.restype = c_int
 _lib.libusb_control_transfer.argtypes = [c_void_p, c_uint8, c_uint8, c_uint16, c_uint16,
                                          POINTER(c_uint8), c_uint16, c_int]
 
+# struct libusb_transfer * LIBUSB_CALL libusb_alloc_transfer(int iso_packets);
+_lib.libusb_alloc_transfer.restype = POINTER(_libusb_transfer)
+_lib.libusb_alloc_transfer.argtypes = [c_int]
 
-_ctx = c_void_p()
+# int LIBUSB_CALL libusb_submit_transfer(struct libusb_transfer *transfer);
+_lib.libusb_submit_transfer.restype = c_int
+_lib.libusb_submit_transfer.argtypes = [POINTER(_libusb_transfer)]
 
-rc = _lib.libusb_init(pointer(_ctx))
-if rc:
-    raise RuntimeError('Could not open libusb')
+# int LIBUSB_CALL libusb_cancel_transfer(struct libusb_transfer *transfer);
+_lib.libusb_cancel_transfer.restype = c_int
+_lib.libusb_cancel_transfer.argtypes = [POINTER(_libusb_transfer)]
+
+# void LIBUSB_CALL libusb_free_transfer(struct libusb_transfer *transfer);
+_lib.libusb_free_transfer.restype = None
+_lib.libusb_free_transfer.argtypes = [POINTER(_libusb_transfer)]
+
+
+class TimeVal(Structure):
+    _fields_ = [
+        ("tv_sec", ctypes.c_long),
+        ("tv_usec", ctypes.c_long)
+    ]
+
+# int LIBUSB_CALL libusb_handle_events_timeout(libusb_context *ctx,
+#	struct timeval *tv);
+_lib.libusb_handle_events_timeout.restype = c_int
+_lib.libusb_handle_events_timeout.argtypes = [c_void_p, POINTER(TimeVal)]
+
+# int LIBUSB_CALL libusb_handle_events(libusb_context *ctx)
+_lib.libusb_handle_events.restype = c_int
+_lib.libusb_handle_events.argtypes = [c_void_p]
+
+def _libusb_context_create():
+    ctx = c_void_p()
+
+    rc = _lib.libusb_init(pointer(ctx))
+    if rc:
+        raise RuntimeError('Could not open libusb')
+    return ctx
+
+
+def _libusb_context_destroy(ctx):
+    _lib.libusb_exit(ctx)
+
+
+@contextmanager
+def _libusb_context():
+    ctx = _libusb_context_create()
+    try:
+        yield ctx
+    finally:
+        _libusb_context_destroy(ctx)
 
 
 def _path_split(path):
     vid, pid, serial_number = path.split('/')
     return int(vid, 16), int(pid, 16), serial_number
-
 
 
 def _get_string_descriptor(device, index):
@@ -233,42 +280,208 @@ def _get_string_descriptor(device, index):
     return byte_buffer[:buffer_len].decode('UTF-16-LE')
 
 
+class Transfer:
+
+    def __init__(self, size):
+        self.size = size
+        self.transfer = _lib.libusb_alloc_transfer(0)
+        self.addr = ctypes.addressof(self.transfer.contents)
+        transfer = self.transfer[0]
+        self.buffer = np.empty(self.size, dtype=np.uint8)
+        self.buffer_ptr = self.buffer.ctypes.data_as(POINTER(c_uint8))
+        transfer.buffer = self.buffer_ptr
+        transfer.flags = 0
+        transfer.length = self.size
+        transfer.actual_length = 0
+        transfer.user_data = None
+        transfer.num_iso_packets = 0
+        transfer.status = TransferStatus.COMPLETED
+        transfer.timeout_ms = 1000  # milliseconds
+
+    def __del__(self):
+        _lib.libusb_free_transfer(self.transfer)
+
+
+class EndpointIn:
+
+    def __init__(self, handle, pipe_id, transfers, block_size, data_fn, process_fn):
+        """Manage an in endpoint.
+
+        :param handle: The device handle.
+        :param pipe_id: The endpoint IN pipe identifier.
+        :param transfers: The number of outstanding transfers to pend.
+        :param block_size: The size of each transfer in bytes.
+        :param data_fn: The function to call with the received endpoint IN data.
+            After the last block, data_fn is called with None to indicate the
+            last transfer.  The data_fn should normally return True, but can
+            return False to stop the endpoint streaming.
+        :param process_fn: The function() called after data_fn was called.
+            This function can have more latency than data_fn.
+        """
+        self._handle = handle
+        self.pipe_id = pipe_id  # (endpoint_id & 0x7f) | 0x80
+        self._config = {
+            'transfer_count': transfers,
+            'transfer_size_bytes': (block_size + 511 // 512)
+        }
+        self._data_fn = data_fn
+        self._process_fn = process_fn
+
+        self._state = self.ST_IDLE
+        self._transfers_free = []  # Transfer
+        self._transfers_pending = []  # Transfer
+
+        self.transfer_count = 0
+        self.byte_count_window = 0
+        self.byte_count_total = 0
+        self._transfer_callback_fn = libusb_transfer_cb_fn(self._transfer_callback)
+        self._init()
+
+    ST_IDLE = 0
+    ST_RUNNING = 1
+    ST_STOPPING = 2
+
+    def _transfer_pending_pop(self, transfer_void_ptr):
+        for idx in range(len(self._transfers_pending)):
+            if transfer_void_ptr == self._transfers_pending[idx].addr:
+                return self._transfers_pending.pop(idx)
+        log.warning('_transfer_pending_pop not found')
+
+    def _transfer_callback(self, transfer_void_ptr):
+        transfer = self._transfer_pending_pop(transfer_void_ptr)
+        self.transfer_count += 1
+        t = transfer.transfer[0]
+        self.byte_count_window += t.actual_length
+        self.byte_count_total += t.actual_length
+
+        try:
+            if self._state == self.ST_RUNNING:
+                if t.status == TransferStatus.COMPLETED:
+                    buffer = transfer.buffer[:t.actual_length]
+                    if self._data_fn(buffer):
+                        log.info('EndpointIn %d terminated by data_fn', self.pipe_id)
+                        self._state = self.ST_STOPPING
+                        # todo what else is needed?
+                else:
+                    log.warning('transfer callback with status %d', t.status)
+        finally:
+            self._transfers_free.append(transfer)
+        self._pend()
+        if self._state == self.ST_RUNNING and callable(self._process_fn):
+            if self._process_fn():
+                log.info('EndpointIn %d terminated by process_fn', self.pipe_id)
+                self._state = self.ST_STOPPING
+                # todo what else is needed?
+
+    def _init(self):
+        for i in range(self._config['transfer_count']):
+            transfer = Transfer(self._config['transfer_size_bytes'])
+            t = transfer.transfer[0]
+            t.dev_handle = self._handle
+            t.endpoint_id = self.pipe_id
+            t.endpoint_type = TransferType.BULK
+            t.callback = self._transfer_callback_fn
+            self._transfers_free.append(transfer)
+
+    def _pend(self):
+        if self._state != self.ST_RUNNING:
+            return
+        while len(self._transfers_free):
+            transfer = self._transfers_free.pop(0)
+            transfer.transfer[0].status = TransferStatus.COMPLETED
+            self._transfers_pending.append(transfer)
+            rv = _lib.libusb_submit_transfer(transfer.transfer)
+            if rv:
+                log.warning('libusb_submit_transfer => %d', rv)
+                self._transfers_pending.remove(transfer)
+                self._transfers_free.append(transfer)
+                return
+
+    def _cancel(self):
+        while len(self._transfers_pending):
+            transfer = self._transfers_pending.pop(0)
+            _lib.libusb_cancel_transfer(transfer.transfer)
+
+    def start(self):
+        log.info("endpoint start 0x%02x transfer size = %d bytes" % (self.pipe_id, self._config['transfer_size_bytes']))
+        self.transfer_count = 0
+        self.byte_count_window = 0
+        self.byte_count_total = 0
+        self._state = self.ST_RUNNING
+        self._time_last = time.time()
+        self._pend()
+
+    def stop(self):
+        if self._state != self.ST_IDLE:
+            log.info("endpoint stop")
+            self._cancel()
+            self._data_fn(None)  # indicate done with None
+            self._state = self.ST_IDLE
+
+    def status(self):
+        """Get the endpoint status.
+
+        :return: A dict mapping status name to a value..  The value is a dict
+            containing 'value' and 'units'.
+        """
+        time_now = time.time()
+        duration = time_now - self._time_last
+        if duration < 0.01:
+            throughput = 0.0
+        else:
+            throughput = self.byte_count_window / duration
+        status = {
+            'bytes': {'value': self.byte_count_total, 'units': 'bytes'},
+            'transfers': {'value': self.transfer_count, 'units': 'transfers'},
+            'duration': {'value': duration, 'units': 'seconds'},
+            'throughput': {'value': throughput, 'units': 'Bps'},
+        }
+        self.byte_count_window = 0
+        self._time_last = time_now
+        return status
+
+
 class LibUsbDevice:
     """The LibUSB :class:`usb.api.Device` implementation"""
 
     def __init__(self, path):
+        self._ctx = None
         self._path = path
         self._handle = c_void_p(None)
+        self._endpoints = {}
 
     def __str__(self):
         return f'Joulescope {self._path}'
 
     def _open(self):
         log.info('open: start %s', self._path)
-        descriptor = _libusb_device_descriptor()
-        devices = POINTER(c_void_p)()
-        vid, pid, serial_number = _path_split(self._path)
-        sz = _lib.libusb_get_device_list(_ctx, pointer(devices))
+        self._ctx = _libusb_context_create()
         try:
-            for idx in range(sz):
-                device = devices[idx]
-                if _lib.libusb_get_device_descriptor(device, pointer(descriptor)):
-                    continue
-                if vid == descriptor.idVendor and pid == descriptor.idProduct:
-                    dh = c_void_p()
-                    rv = _lib.libusb_open(device, dh)
-                    if rv < 0:
-                        log.info('Could not open device: %04x/%04x', vid, pid)
+            descriptor = _libusb_device_descriptor()
+            devices = POINTER(c_void_p)()
+            vid, pid, serial_number = _path_split(self._path)
+            sz = _lib.libusb_get_device_list(self._ctx, pointer(devices))
+            try:
+                for idx in range(sz):
+                    device = devices[idx]
+                    if _lib.libusb_get_device_descriptor(device, pointer(descriptor)):
                         continue
-                    if serial_number == _get_string_descriptor(dh, descriptor.iSerialNumber):
-                        self._handle = dh
-                        log.info('open: success')
-                        return
-            log.warning('open:failed')
-            raise IOError('open:failed')
-        finally:
-            _lib.libusb_free_device_list(devices, 0)
-
+                    if vid == descriptor.idVendor and pid == descriptor.idProduct:
+                        dh = c_void_p(None)
+                        rv = _lib.libusb_open(device, dh)
+                        if rv < 0:
+                            log.info('Could not open device: %04x/%04x', vid, pid)
+                            continue
+                        if serial_number == _get_string_descriptor(dh, descriptor.iSerialNumber):
+                            self._handle = dh
+                            log.info('open: success')
+                            return
+                log.warning('open:failed')
+                raise IOError('open:failed')
+            finally:
+                _lib.libusb_free_device_list(devices, 0)
+        except:
+            self.close()
 
     def open(self):
         self.close()
@@ -282,8 +495,12 @@ class LibUsbDevice:
             raise IOError('libusb_set_interface_alt_setting 0,0 failed')
 
     def close(self):
-        if self._handle is not None:
-            self._handle = None
+        if self._handle:
+            _lib.libusb_close(self._handle)
+            self._handle = c_void_p(None)
+        if self._ctx:
+            _libusb_context_destroy(self._ctx)
+            self._ctx = None
 
     def control_transfer_out(self, recipient, type_, request, value=0, index=0, data=None) -> ControlTransferResponse:
         request_type = usb_core.RequestType(direction='out', type_=type_, recipient=recipient).u8
@@ -324,19 +541,37 @@ class LibUsbDevice:
         return usb_core.ControlTransferResponse(setup_packet, result, bytes(buffer[:length]))
 
     def read_stream_start(self, endpoint_id, transfers, block_size, data_fn, process_fn):
-        pass  # todo
+        pipe_id = (endpoint_id & 0x7f) | 0x80
+        endpoint = self._endpoints.pop(pipe_id, None)
+        if endpoint is not None:
+            log.warning('repeated start')
+            endpoint.stop()
+        endpoint = EndpointIn(self._handle, pipe_id, transfers,
+                              block_size, data_fn, process_fn)
+        self._endpoints[endpoint.pipe_id] = endpoint
+        endpoint.start()
 
     def read_stream_stop(self, endpoint_id):
-        pass  # todo
+        log.info('read_stream_stop %d', endpoint_id)
+        pipe_id = (endpoint_id & 0x7f) | 0x80
+        endpoint = self._endpoints.pop(pipe_id, None)
+        if endpoint is not None:
+            endpoint.stop()
 
     def status(self):
-        return {}
+        e = {}
+        s = {'endpoints': e}
+        for endpoint in self._endpoints.values():
+            e[endpoint.pipe_id] = endpoint.status()
+        return s
 
     def signal(self):
         pass  # todo
 
     def process(self, timeout=None):
-        time.sleep(0.005)
+        if self._ctx:
+            timeval = TimeVal(tv_sec=0, tv_usec=10000)
+            _lib.libusb_handle_events_timeout(self._ctx, pointer(timeval))
 
 
 class DeviceNotify:
@@ -355,38 +590,41 @@ def scan(name: str) -> List[LibUsbDevice]:
     :param name: The case-insensitive name of the device to scan.
     :return: The list of discovered :class:`WinUsbDevice` instances.
     """
-    paths = []
-    infos = INFO[name.lower()]
-    descriptor = _libusb_device_descriptor()
-    devices = POINTER(c_void_p)()
-    sz = _lib.libusb_get_device_list(_ctx, pointer(devices))
-    try:
-        for idx in range(sz):
-            device = devices[idx]
-            if _lib.libusb_get_device_descriptor(device, pointer(descriptor)):
-                raise RuntimeError('descriptor')
-            for info in infos:
-                vid = info['vendor_id']
-                pid = info['product_id']
-                if vid == descriptor.idVendor and pid == descriptor.idProduct:
-                    dh = c_void_p()
-                    rv = _lib.libusb_open(device, pointer(dh))
-                    if rv < 0:
-                        log.info('Could not open device: %04x/%04x', vid, pid)
-                        continue
-                    serial_number = _get_string_descriptor(dh, descriptor.iSerialNumber)
-                    _lib.libusb_close(dh)
-                    path = '%04x/%04x/%s' % (vid, pid, serial_number)
-                    paths.append(path)
-    finally:
-        _lib.libusb_free_device_list(devices, 0)
+    with _libusb_context() as ctx:
+        paths = []
+        infos = INFO[name.lower()]
+        descriptor = _libusb_device_descriptor()
+        devices = POINTER(c_void_p)()
+        sz = _lib.libusb_get_device_list(ctx, pointer(devices))
+        try:
+            for idx in range(sz):
+                device = devices[idx]
+                if _lib.libusb_get_device_descriptor(device, pointer(descriptor)):
+                    raise RuntimeError('descriptor')
+                for info in infos:
+                    vid = info['vendor_id']
+                    pid = info['product_id']
+                    if vid == descriptor.idVendor and pid == descriptor.idProduct:
+                        dh = c_void_p(None)
+                        rv = _lib.libusb_open(device, pointer(dh))
+                        if rv < 0:
+                            log.info('Could not open device: %04x/%04x', vid, pid)
+                            continue
+                        try:
+                            serial_number = _get_string_descriptor(dh, descriptor.iSerialNumber)
+                        finally:
+                            _lib.libusb_close(dh)
+                        path = '%04x/%04x/%s' % (vid, pid, serial_number)
+                        paths.append(path)
+        finally:
+            _lib.libusb_free_device_list(devices, 0)
 
-    if not len(paths):
-        log.info('scan found no devices')
-        return []
-    log.info('scan found %s' % paths)
-    devices = [LibUsbDevice(p) for p in paths]
-    return devices
+        if not len(paths):
+            log.info('scan found no devices')
+            return []
+        log.info('scan found %s' % paths)
+        devices = [LibUsbDevice(p) for p in paths]
+        return devices
 
 
 if __name__ == '__main__':
