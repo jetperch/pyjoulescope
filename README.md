@@ -15,8 +15,18 @@ pyjoulescope_ui package.  Developers may import this package to automate
 and script Joulescope operation. 
 The majority of code is written in Python 3.6+, but a small amount is in 
 Cython for better performance. 
-The code currently runs under Windows 10. 
-Linux and Mac OS/X drivers will be available before 2019.
+
+
+## Developer
+
+Install normal dependencies
+
+    pip3 install -r requirements.txt
+
+
+Install Cython
+
+    pip3 install cython
 
 
 ## License

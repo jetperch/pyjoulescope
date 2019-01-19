@@ -10,7 +10,6 @@ This file contains the list of changes made to pyjoulescope.
 
 *   TODO Added linux support using libusb
 *   TODO Added Mac OS X support using libusb
-*   TODO Fix file load
 
 
 ## 0.1.5

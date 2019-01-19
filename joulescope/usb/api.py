@@ -158,6 +158,24 @@ class DeviceDriverApi:
         raise NotImplementedError()
 
 
+class DeviceNotify:
+
+    def __init__(self, cbk):
+        """Start device insertion/removal notification.
+
+        :param cbk: The function called on device insertion or removal.  The
+            arguments are (inserted, info).  "inserted" is True on insertion
+            and False on removal.  "info" contains platform-specific details
+            about the device.  In general, the application should rescan for
+            relevant devices.
+        """
+        pass
+
+    def close(self):
+        """Close and stop the notifications."""
+        raise NotImplementedError()
+
+
 def scan(name: str=None):
     """Scan for attached devices.
 
