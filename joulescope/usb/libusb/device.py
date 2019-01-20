@@ -22,7 +22,7 @@ import numpy as np
 import ctypes
 import ctypes.util
 from ctypes import Structure, c_uint8, c_uint16, c_uint, \
-    c_int, c_char, c_ssize_t, c_void_p, POINTER, pointer
+    c_int, c_char, c_ssize_t, c_void_p, POINTER, pointer, byref
 import logging
 
 log = logging.getLogger(__name__)
@@ -330,6 +330,7 @@ class EndpointIn:
         self._state = self.ST_IDLE
         self._transfers_free = []  # Transfer
         self._transfers_pending = []  # Transfer
+        self.transfers_processed = 0
 
         self.transfer_count = 0
         self.byte_count_window = 0
@@ -341,37 +342,41 @@ class EndpointIn:
     ST_RUNNING = 1
     ST_STOPPING = 2
 
+    def __str__(self):
+        return 'EndpointIn(0x%02x)' % (self.pipe_id, )
+
     def _transfer_pending_pop(self, transfer_void_ptr):
         for idx in range(len(self._transfers_pending)):
             if transfer_void_ptr == self._transfers_pending[idx].addr:
                 return self._transfers_pending.pop(idx)
-        log.warning('_transfer_pending_pop not found')
+        log.warning('%s _transfer_pending_pop not found', self)
+        raise IOError('%s _transfer_pending_pop not found' % (self, ))
 
     def _transfer_callback(self, transfer_void_ptr):
         transfer = self._transfer_pending_pop(transfer_void_ptr)
         self.transfer_count += 1
         t = transfer.transfer[0]
-        self.byte_count_window += t.actual_length
-        self.byte_count_total += t.actual_length
 
         try:
             if self._state == self.ST_RUNNING:
                 if t.status == TransferStatus.COMPLETED:
+                    self.byte_count_window += t.actual_length
+                    self.byte_count_total += t.actual_length
+                    self.transfers_processed += 1
                     buffer = transfer.buffer[:t.actual_length]
                     if self._data_fn(buffer):
-                        log.info('EndpointIn %d terminated by data_fn', self.pipe_id)
-                        self._state = self.ST_STOPPING
-                        # todo what else is needed?
+                        log.info('%s terminated by data_fn', self)
+                        self._cancel()
                 else:
-                    log.warning('transfer callback with status %d', t.status)
+                    log.warning('%s, transfer callback with status %d', self, t.status)
         finally:
             self._transfers_free.append(transfer)
         self._pend()
-        if self._state == self.ST_RUNNING and callable(self._process_fn):
-            if self._process_fn():
-                log.info('EndpointIn %d terminated by process_fn', self.pipe_id)
-                self._state = self.ST_STOPPING
-                # todo what else is needed?
+        if self._state == self.ST_STOPPING and 0 == len(self._transfers_pending):
+            self._data_fn(None)  # indicate done with None
+            self._state = self.ST_IDLE
+            log.info('%s stop => idle', self)
+
 
     def _init(self):
         for i in range(self._config['transfer_count']):
@@ -398,25 +403,34 @@ class EndpointIn:
                 return
 
     def _cancel(self):
-        while len(self._transfers_pending):
-            transfer = self._transfers_pending.pop(0)
+        self._state = self.ST_STOPPING
+        log.info('%s cancel %d', self, len(self._transfers_pending))
+        for transfer in self._transfers_pending:
             _lib.libusb_cancel_transfer(transfer.transfer)
 
+    def process_signal(self):
+        if self.transfer_count and self._state == self.ST_RUNNING:
+            self.transfer_count = 0
+            if self._process_fn():
+                log.info('%s terminated by process_fn', self)
+                self._cancel()
+                return True
+        return False
+
     def start(self):
-        log.info("endpoint start 0x%02x transfer size = %d bytes" % (self.pipe_id, self._config['transfer_size_bytes']))
+        log.info("%s start transfer size = %d bytes" % (self, self._config['transfer_size_bytes']))
         self.transfer_count = 0
         self.byte_count_window = 0
         self.byte_count_total = 0
         self._state = self.ST_RUNNING
         self._time_last = time.time()
         self._pend()
+        time.sleep(0.0001)
 
     def stop(self):
         if self._state != self.ST_IDLE:
-            log.info("endpoint stop")
+            log.info('%s stop', self)
             self._cancel()
-            self._data_fn(None)  # indicate done with None
-            self._state = self.ST_IDLE
 
     def status(self):
         """Get the endpoint status.
@@ -570,8 +584,12 @@ class LibUsbDevice:
 
     def process(self, timeout=None):
         if self._ctx:
-            timeval = TimeVal(tv_sec=0, tv_usec=10000)
-            _lib.libusb_handle_events_timeout(self._ctx, pointer(timeval))
+            timeval = TimeVal(tv_sec=0, tv_usec=25000)
+            _lib.libusb_handle_events_timeout(self._ctx, byref(timeval))
+            for endpoint in self._endpoints.values():
+                endpoint.process_signal()
+                if endpoint._state == endpoint.ST_IDLE:
+                    self.read_stream_start(endpoint.pipe_id)
 
 
 class DeviceNotify:
