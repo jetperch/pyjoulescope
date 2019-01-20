@@ -388,8 +388,14 @@ class Device:
         if self._streaming:
             self._usb.read_stream_stop(2)
             self._streaming = False
-            self._stream_settings_send()
-            self.recording_stop()
+            try:
+                self._stream_settings_send()
+            except:
+                log.exception('Device.stop(): while attempting _stream_settings_send:')
+            try:
+                self.recording_stop()
+            except:
+                log.exception('Device.stop(): while attempting recording_stop:')
             return True
         return False
 

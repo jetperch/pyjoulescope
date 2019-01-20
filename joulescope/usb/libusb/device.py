@@ -17,11 +17,12 @@ from joulescope.usb.core import SetupPacket, ControlTransferResponse
 from joulescope.usb.scan_info import INFO
 from typing import List
 import time
+import threading
 from contextlib import contextmanager
 import numpy as np
 import ctypes
 import ctypes.util
-from ctypes import Structure, c_uint8, c_uint16, c_uint, \
+from ctypes import Structure, c_uint8, c_uint16, c_uint32, c_uint, \
     c_int, c_char, c_ssize_t, c_void_p, POINTER, pointer, byref
 import logging
 
@@ -227,6 +228,57 @@ _lib.libusb_handle_events_timeout.argtypes = [c_void_p, POINTER(TimeVal)]
 _lib.libusb_handle_events.restype = c_int
 _lib.libusb_handle_events.argtypes = [c_void_p]
 
+
+class HotplugFlag:
+    NONE = 0
+    ENUMERATE = 1 << 0
+
+
+class HotplugEvent:
+    DEVICE_ARRIVED = 0x01
+    DEVICE_LEFT    = 0x02
+
+
+HOTPLUG_MATCH_ANY = -1
+
+
+# typedef int (LIBUSB_CALL *libusb_hotplug_callback_fn)(libusb_context *ctx,
+#						libusb_device *device,
+#						libusb_hotplug_event event,
+#						void *user_data);
+_libusb_hotplug_callback_fn = ctypes.CFUNCTYPE(c_int, c_void_p, c_void_p, c_int, c_void_p)
+
+# int LIBUSB_CALL libusb_hotplug_register_callback(libusb_context *ctx,
+#						libusb_hotplug_event events,
+#						libusb_hotplug_flag flags,
+#						int vendor_id, int product_id,
+#						int dev_class,
+#						libusb_hotplug_callback_fn cb_fn,
+#						void *user_data,
+#						libusb_hotplug_callback_handle *callback_handle);
+_lib.libusb_hotplug_register_callback.restype = c_int
+_lib.libusb_hotplug_register_callback.argtypes = [c_void_p, c_int, c_int, c_int, c_int, c_int,
+                                                  _libusb_hotplug_callback_fn, c_void_p, POINTER(c_int)]
+
+# void LIBUSB_CALL libusb_hotplug_deregister_callback(libusb_context *ctx,
+#						libusb_hotplug_callback_handle callback_handle);
+_lib.libusb_hotplug_deregister_callback.restype = c_int
+_lib.libusb_hotplug_deregister_callback.argtypes = [c_void_p, c_int]
+
+
+class Capability:
+    HAS_CAPABILITY = 0x0000
+    HAS_HOTPLUG = 0x0001
+    HAS_HID_ACCESS = 0x0100
+    SUPPORTS_DETACH_KERNEL_DRIVER = 0x0101
+
+
+# int LIBUSB_CALL libusb_has_capability(uint32_t capability);
+_lib.libusb_has_capability.restype = c_int
+_lib.libusb_has_capability.argtypes = [c_uint32]
+
+
+
 def _libusb_context_create():
     ctx = c_void_p()
 
@@ -367,6 +419,9 @@ class EndpointIn:
                     if self._data_fn(buffer):
                         log.info('%s terminated by data_fn', self)
                         self._cancel()
+                elif t.status == TransferStatus.NO_DEVICE:
+                    log.warning('%s, transfer callback with status NO DEVICE', self)
+                    self._cancel()
                 else:
                     log.warning('%s, transfer callback with status %d', self, t.status)
         finally:
@@ -586,20 +641,69 @@ class LibUsbDevice:
         if self._ctx:
             timeval = TimeVal(tv_sec=0, tv_usec=25000)
             _lib.libusb_handle_events_timeout(self._ctx, byref(timeval))
+            endpoints_stop = []
             for endpoint in self._endpoints.values():
                 endpoint.process_signal()
                 if endpoint._state == endpoint.ST_IDLE:
-                    self.read_stream_start(endpoint.pipe_id)
+                    endpoints_stop.append(endpoint.pipe_id)
+            for pipe_id in endpoints_stop:
+                self.read_stream_stop(pipe_id)
 
 
 class DeviceNotify:
 
     def __init__(self, cbk):
         self._cbk = cbk
+        self._window_thread = None
+        self._do_quit = True
+        if 0 == _lib.libusb_has_capability(Capability.HAS_HOTPLUG):
+            raise IOError('libusb does not support hotplug')
+        self.open()
+
+    def _hotplug_cbk(self, ctx, device, ev, user_data):
+        inserted = bool(ev & HotplugEvent.DEVICE_ARRIVED)
+        removed = bool(ev & HotplugEvent.DEVICE_LEFT)
+        log.info('hotplug: inserted=%s, removed=%s', inserted, removed)
+        self._cbk(inserted, 0)
+        return 0
+
+    def _run(self):
+        log.debug('_run_window start')
+        timeval = TimeVal(tv_sec=0, tv_usec=100000)
+        timeval_ptr = pointer(timeval)
+        handle = c_int()
+        cbk_fn = _libusb_hotplug_callback_fn(self._hotplug_cbk)
+        cbk_user_data = c_void_p()
+        with _libusb_context() as ctx:
+            rv = _lib.libusb_hotplug_register_callback(
+                ctx,
+                HotplugEvent.DEVICE_ARRIVED | HotplugEvent.DEVICE_LEFT,
+                0, # flags
+                HOTPLUG_MATCH_ANY,  # vid
+                HOTPLUG_MATCH_ANY,  # pid
+                HOTPLUG_MATCH_ANY,  # device class
+                cbk_fn,
+                cbk_user_data,
+                byref(handle))
+            if rv:
+                raise IOError('could not register hotplug')
+            while not self._do_quit:
+                _lib.libusb_handle_events_timeout(ctx, timeval_ptr)
+            _lib.libusb_hotplug_deregister_callback(ctx, handle)
+
+    def open(self):
+        self.close()
+        self._do_quit = False
+        log.info('open')
+        self._window_thread = threading.Thread(name='device_notify', target=self._run)
+        self._window_thread.start()
 
     def close(self):
-        """Close and stop the notifications."""
-        pass
+        if self._window_thread:
+            log.info('close')
+            self._do_quit = True
+            self._window_thread.join()
+            self._window_thread = None
 
 
 def scan(name: str) -> List[LibUsbDevice]:
