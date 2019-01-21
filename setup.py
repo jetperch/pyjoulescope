@@ -26,6 +26,7 @@ import os
 import sys
 import numpy as np
 
+VERSION = '0.2.1'  # CHANGE THIS VERSION!
 MYPATH = os.path.abspath(os.path.dirname(__file__))
 
 try:
@@ -52,9 +53,16 @@ if USE_CYTHON:
 with open(os.path.join(MYPATH, 'README.md'), encoding='utf-8') as f:
     long_description = f.read()
 
+
+if sys.platform.startswith('win'):
+    PLATFORM_INSTALL_REQUIRES = ['pypiwin32>=223']
+else:
+    PLATFORM_INSTALL_REQUIRES = ['libusb1>=1.7']
+
+
 setuptools.setup(
     name='joulescope',
-    version='0.1.5',
+    version=VERSION,
     description='Joulescope™ host driver and utilities',
     long_description=long_description,
     long_description_content_type='text/markdown',
@@ -91,13 +99,12 @@ setuptools.setup(
     # See https://packaging.python.org/en/latest/requirements.html
     install_requires=[
         'numpy>=1.15.2',
-        'pypiwin32>=223',
         'python-dateutil>=2.7.3',
         'pymonocypher>=0.1.0',
-    ],
+    ] + PLATFORM_INSTALL_REQUIRES,
 
     extras_require={
-        'dev': ['check-manifest', 'Cython', 'coverage'],
+        'dev': ['check-manifest', 'Cython', 'coverage', 'wheel'],
     },   
 
     entry_points={
