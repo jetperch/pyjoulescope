@@ -6,10 +6,10 @@ This file contains the list of changes made to pyjoulescope.
 
 ## 0.2.1
 
-2019 Jan XX -- IN PROGRESS
+2019 Jan 24
 
-*   TODO Added linux support using libusb
-*   TODO Added Mac OS X support using libusb
+*   Added linux support using libusb
+*   Added Mac OS X support using libusb
 
 
 ## 0.1.5
