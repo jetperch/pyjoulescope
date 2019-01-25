@@ -1,6 +1,6 @@
 numpy>=1.15.2
 pymonocypher>=0.1.0
-pypiwin32>=223; sys_platform == 'windows'
+pypiwin32>=223; sys_platform == 'win32'
 libusb1>=1.7; sys_platform == 'linux'
 libusb1>=1.7; sys_platform == 'darwin'
 python-dateutil>=2.7.3
