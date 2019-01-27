@@ -18,10 +18,10 @@
 
 import argparse
 import logging
-from joulescope.command import capture, capture_usb, program
+from joulescope.command import capture, capture_usb, program, recording
 
 
-commands = [capture, capture_usb, program]
+commands = [capture, capture_usb, program, recording]
 """This list of available command modules.  Each module must contain a 
 parser_config(subparser) function.  The function must return the callable(args)
 that will be executed for the command."""

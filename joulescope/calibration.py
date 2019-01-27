@@ -28,9 +28,10 @@ PRODUCT = '1.1.1'
 
 
 def _stuffed(x):
-    while len(x) < 8:
+    while len(x) < 9:
         x.append(x[-1])
-    x[7] = float('nan')
+    x[7] = 0.0
+    x[8] = float('nan')
     return np.array(x, dtype=np.float32)
 
 
@@ -95,8 +96,8 @@ class Calibration:
         self.subtype_id = 1
         self.time = dateutil.parser.parse('2018-01-01T00:00:00.00000Z')
         self.serial_number = '00000000000000000000000000000000'
-        self.current_offset = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, np.nan], dtype=np.float32)
-        self.current_gain = np.array([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, np.nan], dtype=np.float32)
+        self.current_offset = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, np.nan], dtype=np.float32)
+        self.current_gain = np.array([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0, np.nan], dtype=np.float32)
         self.voltage_offset = np.array([0.0, 0.0], dtype=np.float32)
         self.voltage_gain = np.array([1.0, 1.0], dtype=np.float32)
         self.signed = False
@@ -146,10 +147,9 @@ class Calibration:
             hardware_compatibility=0,
             serial_number=binascii.unhexlify(self.serial_number),
         )
-        if len(self.current_offset) == 7:
-            self.current_offset = np.concatenate((self.current_offset, [np.nan]))
-            self.current_gain = np.concatenate((self.current_gain, [np.nan]))
-        if len(self.current_offset) != 8 or len(self.current_gain) != 8:
+        self.current_offset = np.concatenate((self.current_offset[:7], [0.0, np.nan]))
+        self.current_gain = np.concatenate((self.current_gain[:7], [0.0, np.nan]))
+        if len(self.current_offset) != 9 or len(self.current_gain) != 9:
             raise ValueError('Invalid length for current')
         if len(self.voltage_offset) != 2 or len(self.voltage_gain) != 2:
             raise ValueError('Invalid length for voltage')
@@ -222,6 +222,8 @@ class Calibration:
 
         v_range = 0
         i, v, i_range, missing_sample_count = raw_split(data)
+        idx = np.logical_and(np.logical_and(i_range == 7, i == 0x3fff), v == 0x3fff)
+        i_range[idx] += 1
 
         # get 14-bit right justified current and voltage data
         i = i.astype(np.float32)
