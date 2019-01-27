@@ -596,7 +596,7 @@ class DataFileReader:
         if tag != TAG_COLLECTION_START:
             raise RuntimeError('Not a collection start')
         c = Collection.decode(value)
-        self._fh.seek(c.end_position)
+        return self._fh.seek(c.end_position)
 
     def decrypt(self, signing_key, encryption_key, nonce, associated_data=None):
         """Decrypt the next tag, if needed"""

@@ -26,7 +26,7 @@ Install normal dependencies
 
 Install Cython
 
-    pip3 install cython
+    pip3 install check-manifest Cython coverage wheel
 
 
 ## License

@@ -238,6 +238,45 @@ cdef uint32_t reduction_stats(js_stream_buffer_reduction_s * r,
     return valid
 
 
+cdef _reduction_downsample(js_stream_buffer_reduction_s * r,
+        float * buffer, uint32_t idx_start, uint32_t idx_stop, uint32_t increment):
+    cdef uint32_t idx = idx_start
+    cdef float stats[STATS_FIELDS][STATS_VALUES]
+    while idx + increment <= idx_stop:
+        reduction_stats(r, stats, idx, increment)
+        memcpy(buffer, stats, sizeof(stats))
+        buffer += STATS_FLOATS_PER_SAMPLE
+        idx += increment
+
+
+def reduction_downsample(reduction, idx_start, idx_stop, increment):
+    """Downsample a data reduction.
+
+    :param x: The sample id or times for each reduction entry.
+    :param reduction: The np.float32 (N, 3, 4) array.
+    :param idx_start: The starting index (inclusive) in reduction.
+    :param idx_stop: The stopping index (exclusive) in reduction.
+    :param increment: The increment value
+    :return: The downsampled reduction.
+
+    The x-values can be constructed:
+
+        x = np.arange(idx_start, idx_stop - increment + 1, increment, dtype=np.float64)
+    """
+    cdef js_stream_buffer_reduction_s r_inst
+    r_inst.length = len(reduction)
+    length = (idx_stop - idx_start) // increment
+    out = np.empty((length, 3, 4), dtype=np.float32)
+    cdef np.ndarray[np.float32_t, ndim=3, mode = 'c'] reduction_c = reduction
+    r_inst.data = <float *> reduction_c.data
+
+    out = np.empty((length, 3, 4), dtype=np.float32)
+    cdef np.ndarray[np.float32_t, ndim=3, mode = 'c'] out_c = out
+    cdef float * out_ptr = <float *> out_c.data
+    _reduction_downsample(&r_inst, out_ptr, idx_start, idx_stop, increment)
+    return out
+
+
 cdef void cal_init(js_stream_buffer_calibration_s * self):
     for i in range(8):
         self.current_offset[i] = <float> 0.0
@@ -912,4 +951,57 @@ def usb_packet_factory(packet_index, count=None):
                 v |= j & 0x0002
             frame[k + j * 2] = v & 0xff
             frame[k + j * 2 + 1] = (v >> 8) & 0xff
+    return frame
+
+
+cpdef usb_packet_factory_signal(packet_index, count=None, samples_total=None):
+    """Construct USB Bulk packets for testing.
+
+    :param packet_index: The USB packet index for the first packet.
+    :param count: The number of consecutive packets to construct.
+    :param samples_total: The total number samples in the signal.  This value
+        is used to unsure uniqueness.
+    :return: The bytes containing the packet data
+    """
+    cdef uint16_t ij
+    cdef uint16_t vj
+    cdef float slope
+    cdef uint64_t sample_offset = 0
+    cdef int i
+    cdef int j
+    cdef int k
+    cdef int z
+
+
+    count = 1 if count is None else int(count)
+    if count < 1:
+        count = 1
+    sample_rate = 2000000
+    samples_total = sample_rate * 100 if samples_total is None else int(samples_total)
+    slope = (2 ** 14 - 1) / samples_total
+    stream_buffer = StreamBuffer(sample_rate // 10, [100])
+
+    cdef frame = np.empty(512 * count, dtype=np.uint8)
+    for i in range(count):
+        packet_idx = packet_index + i
+        k = i * 512
+        frame[k + 0] = 1     # packet type raw
+        frame[k + 1] = 0     # status = 0
+        frame[k + 2] = 0x00  # length LSB
+        frame[k + 3] = 0x02  # length MSB
+        frame[k + 4] = packet_idx & 0xff
+        frame[k + 5] = (packet_idx >> 8) & 0xff
+        frame[k + 6] = 0
+        frame[k + 7] = 0
+        k += 8
+        for j in range(SAMPLES_PER_PACKET):
+            ij = <uint16_t> ((<float> sample_offset) * slope)
+            vj = 16383 - ij
+            ij = (ij << 2)
+            vj = (vj << 2) | 0x02
+            z = k + j * 4
+            frame[z + 0] = ij & 0xff
+            frame[z + 1] = (ij >> 8) & 0xff
+            frame[z + 2] = vj & 0xff
+            frame[z + 3] = (vj >> 8) & 0xff
     return frame

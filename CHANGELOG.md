@@ -4,12 +4,20 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 0.2.2
+
+2019 Jan 27
+
+*   Added data file read & data file write support (file format changed).
+*   Added command-line tool "recording" for dealing the ".jls" files.
+
+
 ## 0.2.1
 
-2019 Jan XX -- IN PROGRESS
+2019 Jan 25
 
-*   TODO Added linux support using libusb
-*   TODO Added Mac OS X support using libusb
+*   Added linux support using libusb
+*   Added Mac OS X support using libusb
 
 
 ## 0.1.5

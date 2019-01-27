@@ -19,7 +19,7 @@ from joulescope.usb.device_thread import DeviceThread
 from .parameters_v1 import PARAMETERS, PARAMETERS_DICT, name_to_value, value_to_name
 from . import datafile
 from . import bootloader
-from . data_recorder import DataRecorder, construct_record_filename, DataRecorderConfiguration
+from . data_recorder import DataRecorder, construct_record_filename
 from joulescope.stream_buffer import StreamBuffer
 from joulescope.calibration import Calibration
 import struct
@@ -106,8 +106,7 @@ class Device:
         self._parameters = {}
         self._reductions = REDUCTIONS
         self._sampling_frequency = SAMPLING_FREQUENCY
-        sb_len = self._sampling_frequency * STREAM_BUFFER_DURATION
-        self.stream_buffer = StreamBuffer(sb_len, self._reductions)
+        self.stream_buffer = None
         self.view = None  #
         self._streaming = False
         self._stop_fn = None
@@ -202,8 +201,9 @@ class Device:
 
         :raise IOError: on failure.
         """
-        self.stream_buffer.reset()
         self._usb.open()
+        sb_len = self._sampling_frequency * STREAM_BUFFER_DURATION
+        self.stream_buffer = StreamBuffer(sb_len, self._reductions)
         self.calibration = self._calibration_read()
         self.view = View(self)
 
@@ -273,6 +273,7 @@ class Device:
         except:
             log.exception('USB close failed')
         self.view = None
+        self.stream_buffer = None
 
     def _wait_for_sensor_command(self, timeout=None):
         timeout = 2.0 if timeout is None else float(timeout)
@@ -444,14 +445,10 @@ class Device:
         log.info('recording_start(%s)', filename)
         if filename is None:
             filename = construct_record_filename()
-        c = DataRecorderConfiguration()
-        c.sampling_frequency = self._sampling_frequency
-        c.reductions = self._reductions
-        c.sample_id_offset = self.stream_buffer.sample_id_range[1]
         self._data_recorder = DataRecorder(
             filename,
-            configuration=c,
-            calibration=self.calibration.data)
+            calibration=self.calibration.data,
+            sampling_frequency=self._sampling_frequency)
         # todo save voltage gain to _data_recorder
         return True
 
