@@ -4,6 +4,15 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 0.2.3
+
+2019 Feb 8
+
+*   Modified span scaling to use pivot point rather than force to center,
+    which results in more intuitive UI behavior.
+*   Suppress glitches (up to 2 samples) which occur on current range switches.
+
+
 ## 0.2.2
 
 2019 Jan 27

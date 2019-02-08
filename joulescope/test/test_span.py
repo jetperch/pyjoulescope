@@ -29,9 +29,9 @@ class TestSpan(unittest.TestCase):
         self.assertEqual(10.0, s.a_limit_min)
         self.assertEqual([1.0, 11.0], s.conform([1.0, 11.0]))
         self.assertEqual(1.0, s.quants_per([1.0, 11.0]))
-        self.assertEqual(([1.0, 11.0], 1.0), s.conform_quant_per([1.0, 11.0]))
+        self.assertEqual(([2.0, 12.0], 1.0), s.conform_quant_per([1.0, 11.0]))
         span, steps_per, axis = s.conform_discrete([1.0, 11.0])
-        self.assertEqual([1.0, 11.0], span)
+        self.assertEqual([2.0, 12.0], span)
         self.assertEqual(1.0, steps_per)
         self.assertEqual([1.0, 11.0], s.scale([1.0, 11.0]))
 
@@ -45,12 +45,23 @@ class TestSpan(unittest.TestCase):
     def test_conform_discrete_min_gain(self):
         s = Span([10.0, 30.0], 1.0, 11)
         sc, spans_per, x = s.conform_discrete([19.5, 20.5])
-        np.testing.assert_allclose([15, 25], sc)
+        np.testing.assert_allclose([16, 26], sc)
         self.assertEqual(1, spans_per)
-        np.testing.assert_allclose(np.arange(15, 26, dtype=np.float), x)
+        np.testing.assert_allclose(np.arange(16, 27, dtype=np.float), x)
 
     def test_conform_discrete_small(self):
         s = Span([10.0, 30.0], 1.0, 11)
         sc, spans_per, x = s.conform_discrete([19.0, 21.0])
-        np.testing.assert_allclose([15.0, 25.0], sc)
+        np.testing.assert_allclose([16.0, 26.0], sc)
+
+    def test_conform_discrete_pivot(self):
+        s = Span([10.0, 30.0], 0.001, 1000)
+        span = [27.000, 27.999]
+        pivot = 27.1
+        sc, spans_per, x = s.conform_discrete([27.000, 27.999])
+        np.testing.assert_allclose(span, sc)
+        sc, spans_per, x = s.conform_discrete(span=span, gain=0.5, pivot=pivot)
+        k0 = (pivot - span[0]) / (span[1] - span[0])
+        k1 = (pivot - sc[0]) / (sc[1] - sc[0])
+        np.testing.assert_allclose(k1, k0, rtol=0.015)
 

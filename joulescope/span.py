@@ -35,6 +35,10 @@ class Span:
         self._length = 0
         self.limits = self._round_span(limits, 1)
         self.length = length
+        log.info(self)
+
+    def __str__(self):
+        return 'Span(%r, %r, %r)' % (self.limits, self.quant, self._length)
 
     @property
     def length(self):
@@ -118,15 +122,16 @@ class Span:
         a = self._quants_per(span)
         return self._bound_steps_per(a)
 
-    def scale(self, span, center=None, gain=None):
-        if center is None:
-            center = (span[1] + span[0]) / 2
+    def scale(self, span, pivot=None, gain=None):
+        if pivot is None:
+            pivot = (span[1] + span[0]) / 2
         if gain is None:
             gain = 1.0
-        s = (span[1] - span[0]) * gain / 2
-        return [center - s, center + s]
+        z1 = pivot + (span[0] - pivot) * gain
+        z2 = z1 + (span[1] - span[0]) * gain
+        return [z1, z2]
 
-    def conform_quant_per(self, span, incr=None, gain=None, center=None):
+    def conform_quant_per(self, span, incr=None, gain=None, pivot=None):
         """Conform quantized.
 
         :param span: The span to quantize.
@@ -137,7 +142,7 @@ class Span:
         :param gain: Gain fraction applied to increase/decrease the range.
             When not None, automatically compute incr.
             None (default) behaves normally.
-        :param center: The center for the scale operation.
+        :param pivot: The pivot for the scale operation.
         :return: (span, steps_per) where span is the (min, max) range of the
             span and steps_per are the number of quantization steps between
             each sample.
@@ -151,7 +156,14 @@ class Span:
                 incr = 1
             elif gain < 1:
                 incr = -1
-        s = self.scale(s_prev, center, gain)
+        if pivot is None:
+            pivot = (s_prev[1] + s_prev[0]) / 2  # center
+        window_sz = s_prev[1] - s_prev[0]
+        if window_sz > 0:
+            pivot_fract = (pivot - s_prev[0]) / (s_prev[1] - s_prev[0])
+        else:
+            pivot_fract = 0.5
+        s = self.scale(s_prev, pivot, gain)
 
         # adjust start base upon quantization
         steps_per = self.quants_per(s)
@@ -169,7 +181,8 @@ class Span:
         # left justify
         # s[1] = s[0] + (steps_per * self.quant * (self.length - 1))
         # center
-        start = (s[1] + s[0]) / 2 - (steps_per * self.quant * (self.length - 1)) / 2
+        pivot_quant = self.quantize_round(pivot, steps_per, direction=-1)
+        start = pivot_quant - (steps_per * self.quant * np.round(pivot_fract * self.length - 1))
         s[0] = self.quantize_round(start, steps_per)
         s[1] = s[0] + (steps_per * self.quant * (self.length - 1))
 
@@ -177,7 +190,7 @@ class Span:
 
         return s, steps_per
 
-    def conform_discrete(self, span, incr=None, gain=None, center=None):
+    def conform_discrete(self, span, incr=None, gain=None, pivot=None):
         """Update a span to conform to rules.
 
         :param span: The (min, max) span to conform.
@@ -188,14 +201,14 @@ class Span:
         :param gain: Gain fraction applied to increase/decrease the range.
             When not None, automatically compute incr.
             None (default) behaves normally.
-        :param center: The center for the scale operation.
+        :param pivot: The pivot point to maintain for the scale operation.
         :return: (span, steps_per, axis).  Span is the (min, max) adjusted to be
             within limits and no smaller than quant per step.  The steps_per
             are the number of quantized samples per resulting samples.  The axis
             is the np.ndarray of quantized values for use as a plotting axis.
         """
-        log.info('conform_discrete(span=%r, incr=%r, gain=%r, center=%r)',
-                 span, incr, gain, center)
+        log.info('conform_discrete(span=%r, incr=%r, gain=%r, pivot=%r)',
+                 span, incr, gain, pivot)
         steps_per = 1
         s = self._slide_or_truncate(span)
 
@@ -205,7 +218,7 @@ class Span:
         elif self.length == 1:
             a = np.array([s[0]])
         else:
-            s, steps_per = self.conform_quant_per(s, incr, gain, center)
+            s, steps_per = self.conform_quant_per(s, incr, gain, pivot)
             a = np.arange(self.length, dtype=np.float)
             a *= self.quant * steps_per
             a += s[0]
