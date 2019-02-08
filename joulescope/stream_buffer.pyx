@@ -45,6 +45,7 @@ DEF CAL_SAMPLE_SZ = 2 * 4  # sizeof(float)
 DEF STATS_FIELDS = 3  # current, voltage, power
 DEF STATS_VALUES = 4  # mean, variance, min, max
 DEF STATS_FLOATS_PER_SAMPLE = STATS_FIELDS * STATS_VALUES
+DEF SUPPRESS_SAMPLES_DEFAULT = 2
 
 log = logging.getLogger(__name__)
 
@@ -311,6 +312,10 @@ cdef class StreamBuffer:
     cdef js_stream_buffer_calibration_s cal
     cdef js_stream_buffer_reduction_s reductions[REDUCTION_MAX]
 
+    cdef int32_t suppress_samples  # the total number of samples to suppress after range change
+    cdef int32_t suppress_count  # the suppress counter, 1 = replace previous
+    cdef uint8_t i_range_last  # the last i_range for detection changes.
+
     cdef uint32_t stats_counter  # excludes NAN for mean
     cdef uint32_t stats_remaining
     cdef float stats[STATS_FIELDS][STATS_VALUES]  # [i, v, power][mean, var, min, max]
@@ -379,6 +384,10 @@ cdef class StreamBuffer:
         self._contiguous_max = 0  # used to automatically stop streaming
         self._callback = None  # fn(np.array [3][4] of statistics, energy)
         self._energy_picojoules = 0  # integer for infinite precision
+
+        self.suppress_samples = SUPPRESS_SAMPLES_DEFAULT
+        self.suppress_count = 0
+        self.i_range_last = 0xff
 
     def __init__(self, length, reductions):
         self.reset()
@@ -477,6 +486,8 @@ cdef class StreamBuffer:
         self._contiguous_max = 1 << 63  # big enough
         self._energy_picojoules = 0
         self.stats_counter = 0
+        self.suppress_count = 0
+        self.i_range_last = 0xff
         for idx in range(REDUCTION_MAX):
             self.reductions[idx].sample_counter = 0
         self._stats_reset()
@@ -624,6 +635,7 @@ cdef class StreamBuffer:
     cdef void _process(self):
         cdef uint32_t idx_start
         cdef uint32_t idx
+        cdef uint32_t suppress_idx
         cdef uint16_t raw_i
         cdef uint16_t raw_v
         cdef uint8_t i_range
@@ -643,6 +655,9 @@ cdef class StreamBuffer:
             raw_i = self.raw_ptr[idx + 0]
             raw_v = self.raw_ptr[idx + 1]
             i_range = <uint8_t> ((raw_i & 0x0003) | ((raw_v & 0x0001) << 2))
+            if i_range != self.i_range_last and self.i_range_last < 255:
+                self.suppress_count = self.suppress_samples + 1
+            self.i_range_last = i_range
             sample_toggle_current = (raw_v >> 1) & 0x1
             raw_i = raw_i >> 2
             raw_v = raw_v >> 2
@@ -669,20 +684,42 @@ cdef class StreamBuffer:
             self.data_ptr[idx + 0] = cal_i
             self.data_ptr[idx + 1] = cal_v
 
-            self.stats_counter += 1
-            stats_compute_one(self.stats, cal_i, cal_v)
-
+            # Suppress Joulescope range switching glitch (at least for now).
             self.processed_sample_id += 1
+            if self.suppress_count > 0:
+                if self.suppress_count == 1:
+                    suppress_idx = idx_start + self.length - self.suppress_samples
+                    while suppress_idx >= self.length:
+                        suppress_idx -= self.length
+                    for a in range(self.suppress_samples + 1):
+                        self.data_ptr[2 * suppress_idx + 0] = cal_i
+                        self.data_ptr[2 * suppress_idx + 1] = cal_v
+                        suppress_idx += 1
+                        if suppress_idx >= self.length:
+                            suppress_idx = 0
+                        self._process_stats(cal_i, cal_v)
+                else:
+                    self.data_ptr[idx + 0] = NAN
+                    self.data_ptr[idx + 1] = NAN
+                self.suppress_count -= 1
+            else:
+                self._process_stats(cal_i, cal_v)
+
             idx_start += 1
             if idx_start >= self.length:
                 idx_start = 0
 
-            if self.stats_remaining > 1:
-                self.stats_remaining -= 1
-            elif self.stats_remaining == 1:
-                self.stats_finalize()
-                self.reduction_update_0()
-                self._stats_reset()
+
+    cdef void _process_stats(self, cal_i, cal_v):
+        self.stats_counter += 1
+        stats_compute_one(self.stats, cal_i, cal_v)
+        if self.stats_remaining > 1:
+            self.stats_remaining -= 1
+        elif self.stats_remaining == 1:
+            self.stats_finalize()
+            self.reduction_update_0()
+            self._stats_reset()
+
 
     def process(self):
         self._process()
