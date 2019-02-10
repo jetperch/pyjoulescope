@@ -4,6 +4,13 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 0.2.4
+
+2019 Feb 10
+
+*   Fixed incorrect formatting in three_sig_figs for negative numbers.
+
+
 ## 0.2.3
 
 2019 Feb 8

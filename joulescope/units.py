@@ -88,9 +88,9 @@ def three_sig_figs(x, units=None, space1=None, space2=None):
     z = abs(x)
     if z >= 100:
         s = '%.0f' % z
-    elif x >= 10:
+    elif z >= 10:
         s = '%.1f' % z
-    elif x >= 1:
+    elif z >= 1:
         s = '%.2f' % z
     else:
         s = '%.3f' % z

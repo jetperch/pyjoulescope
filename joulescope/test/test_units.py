@@ -72,3 +72,9 @@ class TestUnits(unittest.TestCase):
         self.assertEqual(1000, units.str_to_number('1kOhm'))
         self.assertEqual(1000, units.str_to_number('1 kOhm'))
         self.assertEqual(1e-6, units.str_to_number('1uF'))
+
+    def test_negative_numbers(self):
+        self.assertEqual('-1.50 A', units.three_sig_figs(-1.5, 'A'))
+        self.assertEqual('-150 mA', units.three_sig_figs(-0.15, 'A'))
+        self.assertEqual('-15.0 mA', units.three_sig_figs(-0.015, 'A'))
+        self.assertEqual('-1.50 mA', units.three_sig_figs(-0.0015, 'A'))
