@@ -57,8 +57,8 @@ NAME_TO_COLUMN = {
     'voltage': 1,
     'v': 1,
     'v_raw': 1,
-    'power': 1,
-    'p': 1,
+    'power': 2,
+    'p': 2,
 }
 
 

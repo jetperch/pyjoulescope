@@ -4,6 +4,13 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 0.2.5
+
+2019 TBD???
+
+*   Fixed incorrect column index for "power"
+
+
 ## 0.2.4
 
 2019 Feb 10
