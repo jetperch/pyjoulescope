@@ -19,7 +19,10 @@ from typing import List
 import time
 import threading
 from contextlib import contextmanager
+import platform
 import numpy as np
+import os
+import sys
 import ctypes
 import ctypes.util
 from ctypes import Structure, c_uint8, c_uint16, c_uint32, c_uint, \
@@ -32,7 +35,15 @@ log = logging.getLogger(__name__)
 STRING_LENGTH_MAX = 255
 CONTROL_TRANSFER_TIMEOUT_MS = 1000  # default in milliseconds
 
-_lib = ctypes.cdll.LoadLibrary(ctypes.util.find_library('usb-1.0'))
+find_lib = ctypes.util.find_library('usb-1.0')
+if find_lib is None:
+    if platform.system() == 'Darwin' and getattr(sys, 'frozen', False):
+        os_version = platform.uname().release.split('.')[0]
+        find_lib = os.path.join(sys._MEIPASS, '%s_libusb-1.0.0.dylib' % os_version)
+        log.info('Darwin lib: %s', find_lib)
+    else:
+        raise RuntimeError('Could not import libusb')
+_lib = ctypes.cdll.LoadLibrary(find_lib)
 
 
 class DescriptorType:

@@ -11,6 +11,7 @@ This file contains the list of changes made to pyjoulescope.
 *   Improved USB device error handling.
 *   Allow data_recorder raw defaults to fetch entire file.
 *   Added VERSION and __version__ members.
+*   Added support for older Mac OS versions when packaged.
 
 
 ## 0.2.6
