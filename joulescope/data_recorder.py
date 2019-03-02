@@ -289,7 +289,7 @@ class DataReader:
             raise ValueError('stop out of range: %d <= %d <= %d: %s' %
                              (idx_start, stop, idx_end, increment))
 
-    def raw(self, start, stop, out=None):
+    def raw(self, start=None, stop=None, out=None):
         """Get the raw data.
 
         :param start: The starting sample identifier.
@@ -298,6 +298,11 @@ class DataReader:
             N must be >= (stop - start).
         :return: The output which is either a new array or (when provided) out.
         """
+        r_start, r_stop = self.sample_id_range
+        if start is None:
+            start = r_start
+        if stop is None:
+            stop = r_stop        
         self._fh.seek(self._data_start_position)
         self._validate_range(start, stop)
         length = stop - start
