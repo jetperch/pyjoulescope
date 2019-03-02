@@ -517,12 +517,16 @@ class WinUsbDevice:
                 # device did not receive all of the data!
                 result = 1
         else:  #pkt.direction == 'in':
-            if length > setup_packet.length:
+            if result:
+                pass
+            elif length > setup_packet.length:
                 # received more data than requested!
                 result = 1
             else:
                 #b = POINTER(c_ubyte).from_buffer(buffer)[:length]
                 buffer = bytes(buffer[:length])
+        if result:
+            log.warning('control_transfer %s', kernel32.get_error_str(result))
         return usb_core.ControlTransferResponse(setup_packet, result, buffer)
     
     def control_transfer_out(self, recipient, type_, request, value=0, index=0, data=None):

@@ -232,22 +232,26 @@ FormatMessage.restype = DWORD
 FormatMessage.argtypes = [DWORD, c_void_p, DWORD, DWORD, POINTER(c_wchar_p), DWORD, c_void_p]
 
 
-def get_last_error():
-    dLastError = GetLastError()
-    if dLastError == 0:
+def get_error_str(error_code):
+    if error_code == 0:
         return '[0] No error'
     bufptr = LPWSTR()
     FormatMessage(
-        (FORMAT_MESSAGE_FROM_SYSTEM | 
-         FORMAT_MESSAGE_IGNORE_INSERTS | 
-         FORMAT_MESSAGE_ARGUMENT_ARRAY | 
+        (FORMAT_MESSAGE_FROM_SYSTEM |
+         FORMAT_MESSAGE_IGNORE_INSERTS |
+         FORMAT_MESSAGE_ARGUMENT_ARRAY |
          FORMAT_MESSAGE_ALLOCATE_BUFFER),
         0,
-        dLastError,
+        error_code,
         0,
         byref(bufptr),
         0,
         0)
 
     s = bufptr.value.strip()
-    return '[%d] %s' % (dLastError, s)
+    return '[%d] %s' % (error_code, s)
+
+
+def get_last_error():
+    dLastError = GetLastError()
+    return get_error_str(dLastError)
