@@ -64,7 +64,7 @@ with open(os.path.join(MYPATH, 'README.md'), encoding='utf-8') as f:
 if sys.platform.startswith('win'):
     PLATFORM_INSTALL_REQUIRES = ['pypiwin32>=223']
 else:
-    PLATFORM_INSTALL_REQUIRES = ['libusb1>=1.7']
+    PLATFORM_INSTALL_REQUIRES = []
 
 
 setuptools.setup(
