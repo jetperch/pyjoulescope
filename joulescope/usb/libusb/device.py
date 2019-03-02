@@ -512,7 +512,7 @@ class EndpointIn:
 
 def may_raise_ioerror(rv, msg):
     if 0 != rv:
-        raise IOError(msg + (' [%d]' % (str(rv), )))
+        raise IOError(msg + (' [%d]' % (rv, )))
 
 
 class LibUsbDevice:
