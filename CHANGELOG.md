@@ -4,6 +4,15 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 0.2.7
+
+2019 Mar 2
+
+*   Improved control_transfer error handling.
+*   Allow data_recorder raw defaults to fetch entire file.
+*   Added VERSION and __version__ members.
+
+
 ## 0.2.6
 
 2019 Feb 16

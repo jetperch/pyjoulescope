@@ -15,5 +15,12 @@
 import pathlib
 import os
 
+try:
+    from .version import VERSION
+except ImportError:
+    VERSION = 'UNRELEASED'
+
+__version__ = VERSION
+
 MYPATH = os.path.dirname(os.path.abspath(__file__))
 JOULESCOPE_DIR = os.path.join(pathlib.Path.home(), 'joulescope')
