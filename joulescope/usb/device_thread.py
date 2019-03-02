@@ -82,8 +82,9 @@ class DeviceThread:
                     cbk = default_callback
                 try:
                     _quit = self.cmd_process(cmd, args, cbk)
-                except Exception:
+                except Exception as ex:
                     log.exception('DeviceThread.process')
+                    cbk(ex)
         except queue.Empty:
             pass
         return _quit
@@ -110,6 +111,8 @@ class DeviceThread:
         except queue.Empty:
             log.error('device thread hung')
             raise  # todo check thread status
+        if isinstance(rv, Exception):
+            raise IOError(rv)
         log.debug('_post_block %s done', command)  # rv
         return rv
 
@@ -129,7 +132,10 @@ class DeviceThread:
     def close(self):
         if self._thread is not None:
             log.info('close')
-            self._post_block('close', None)
+            try:
+                self._post_block('close', None)
+            except Exception:
+                log.exception('while attempting to close')
             self._thread.join(timeout=TIMEOUT)
             self._thread = None
 

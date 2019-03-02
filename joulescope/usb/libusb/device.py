@@ -510,6 +510,11 @@ class EndpointIn:
         return status
 
 
+def may_raise_ioerror(rv, msg):
+    if 0 != rv:
+        raise IOError(msg + (' [%d]' % (str(rv), )))
+
+
 class LibUsbDevice:
     """The LibUSB :class:`usb.api.Device` implementation"""
 
@@ -556,12 +561,12 @@ class LibUsbDevice:
         self.close()
         self._open()
         log.info('Configure device')
-        if 0 != _lib.libusb_set_configuration(self._handle, 1):
-            raise IOError('libusb_set_configuration 1 failed')
-        if 0 != _lib.libusb_claim_interface(self._handle, 0):
-            raise IOError('libusb_claim_interface 0 failed')
-        if 0 != _lib.libusb_set_interface_alt_setting(self._handle, 0, 0):
-            raise IOError('libusb_set_interface_alt_setting 0,0 failed')
+        rv = _lib.libusb_set_configuration(self._handle, 1)
+        may_raise_ioerror(rv, 'libusb_set_configuration 1 failed')
+        rv = _lib.libusb_claim_interface(self._handle, 0)
+        may_raise_ioerror(rv, 'libusb_claim_interface 0 failed')
+        rv = _lib.libusb_set_interface_alt_setting(self._handle, 0, 0)
+        may_raise_ioerror(rv, 'libusb_set_interface_alt_setting 0,0 failed')
 
     def close(self):
         if self._handle:

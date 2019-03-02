@@ -279,12 +279,16 @@ class Device:
         timeout = 2.0 if timeout is None else float(timeout)
         time_start = time.time()
         while True:
+            dt = time.time() - time_start
+            if dt >= timeout:
+                raise RuntimeError('timed out')
             s = self._status()
+            if 0 != s['return_code']['value']:
+                log.warning('Error while getting status: %s', s['return_code']['str'])
+                time.sleep(0.5)
+                continue
             rv = s.get('settings_result', {}).get('value', -1)
             if rv in [-1, 19]:
-                dt = time.time() - time_start
-                if dt >= timeout:
-                    raise RuntimeError('timed out')
                 time.sleep(0.005)
                 continue
             return rv
@@ -477,8 +481,9 @@ class Device:
             request=UsbdRequest.STATUS,
             value=0, index=0, length=STATUS_REQUEST_LENGTH)
         if 0 != rv.result:
-            log.warning('usb control transfer failed %d', rv.result)
-            return {}
+            s = usb.get_error_str(rv.result)
+            log.warning('usb control transfer failed: %s', s)
+            return {'return_code': {'value': rv.result, 'str': s, 'units': ''}}
         pdu = bytes(rv.data)
         expected_length = 8 + 16
         if len(pdu) < expected_length:
@@ -519,6 +524,11 @@ class Device:
                 'value': values[5],
                 'format': '0x{:02x}',
                 'units': ''},
+            'return_code': {
+                'value': 0,
+                'format': '{}',
+                'units': '',
+            },
         }
         for key, value in status.items():
             value['name'] = key
