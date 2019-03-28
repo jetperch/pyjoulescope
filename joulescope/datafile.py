@@ -31,7 +31,7 @@ The file format must meet multiple objectives:
 The streaming requirement means that seeking back to the start of the
 file is not allowed.  Any collections or sections must be indicated with
 tags.  However, reading and writing files can seek, so tags may be
-rewritten with offset information.
+rewritten with offset information for improved performance.
 
 The file format starts with a 32 byte header:
   16 bytes: b'\xd3tagfmt \r\n \n  \x1a\x1c'

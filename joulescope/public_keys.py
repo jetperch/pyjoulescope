@@ -14,7 +14,7 @@
 
 """
 Joulescope uses public key cryptography to sign calibrations and
-firmware update.  This file contains the keys.
+firmware update.  This file contains the public keys.
 """
 
 from binascii import unhexlify as uhx

@@ -25,6 +25,7 @@ from joulescope.calibration import Calibration
 import struct
 import copy
 import time
+import json
 import os
 import queue
 import numpy as np
@@ -37,6 +38,7 @@ STATUS_REQUEST_LENGTH = 128
 SERIAL_NUMBER_LENGTH = 16
 HOST_API_VERSION = 1
 CALIBRATION_SIZE_MAX = 0x8000
+PACKET_VERION = 1
 
 
 def _ioerror_on_bad_result(rv):
@@ -70,8 +72,11 @@ class UsbdRequest:
     CALIBRATION = 8
     """Request the calibration. wIndex 0=factory, 1=active."""
 
-    SENSOR_POWER = 9
-    """Get/set the sensor power on/off."""
+    EXTIO = 9
+    """Get/set the external GPI/O settings."""
+
+    INFO = 10
+    """Get the current device information metadata JSON string."""
 
 
 class SensorBootloader:
@@ -85,6 +90,7 @@ class SensorBootloader:
 class PacketType:
     SETTINGS = 1
     STATUS = 2
+    EXTIO = 3
 
 
 LOOPBACK_BUFFER_SIZE = 132
@@ -171,6 +177,8 @@ class Device:
         p = PARAMETERS_DICT[name]
         if p.path == 'setting':
             self._stream_settings_send()
+        elif p.path == 'extio':
+            self._extio_set()
 
     def parameter_get(self, name):
         """Get a parameter value.
@@ -204,8 +212,30 @@ class Device:
         self._usb.open()
         sb_len = self._sampling_frequency * STREAM_BUFFER_DURATION
         self.stream_buffer = StreamBuffer(sb_len, self._reductions)
+        info = self._info()
+        if info is not None:
+            log.info('info:\n%s', json.dumps(info, indent=2))
         self.calibration = self._calibration_read()
         self.view = View(self)
+
+    def _info(self):
+        """Get the device information structure.
+
+        :return: The device information structure.
+
+        First implemented in 0.3.  Older firmware returns None.
+        """
+        rv = self._usb.control_transfer_in(
+            'device', 'vendor',
+            request=UsbdRequest.INFO,
+            value=0, index=0, length=1024)
+        if 0 != rv.result:  # firmware prior to 0.3
+            return None
+        try:
+            return json.loads(rv.data[8:].decode('utf-8'))
+        except json.decoder.JSONDecodeError:
+            log.exception('Could not decode INFO: %s', rv.data[8:])
+            return None
 
     def _calibration_read_raw(self, factory=None):
         value = 0 if bool(factory) else 1
@@ -294,7 +324,6 @@ class Device:
             return rv
 
     def _stream_settings_send(self):
-        version = 1
         length = 16
         if self._streaming:
             streaming = self._parameters['control_test_mode']
@@ -302,7 +331,7 @@ class Device:
             streaming = 0
         options = (self._parameters['v_range'] << 1) | self._parameters['ovr_to_lsb']
         msg = struct.pack('<BBBBIBBBBBBBB',
-                          version,
+                          PACKET_VERION,
                           length,
                           PacketType.SETTINGS,
                           0,  # reserved
@@ -319,6 +348,30 @@ class Device:
         _ioerror_on_bad_result(rv)
         if streaming == 0:
             self._wait_for_sensor_command()
+
+    def _extio_set(self):
+        msg = struct.pack('<BBBBIBBBBBBBBII',
+                          PACKET_VERION,
+                          24,
+                          PacketType.EXTIO,
+                          0,  # hdr_rsv1
+                          0,  # hdr_rsv4
+                          0,  # flags
+                          self._parameters['trigger_source'],
+                          self._parameters['current_gpi'],
+                          self._parameters['voltage_gpi'],
+                          self._parameters['gpo0'],
+                          self._parameters['gpo1'],
+                          0,  # uart_tx mapping reserved
+                          0,  # rsv1_u8
+                          0,  # rsv3_u32, baudrate reserved
+                          self._parameters['io_voltage'],
+        )
+        print(msg)
+        rv = self._usb.control_transfer_out(
+            'device', 'vendor', request=UsbdRequest.EXTIO,
+            value=0, index=0, data=msg)
+        _ioerror_on_bad_result(rv)
 
     def _on_data(self, data):
         # invoked from USB thread
