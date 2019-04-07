@@ -49,9 +49,12 @@ class DeviceDriverApi:
         """Close the USB device."""
         raise NotImplementedError()
 
-    def control_transfer_out(self, recipient, type_, request, value=0, index=0, data=None) -> ControlTransferResponse:
+    def control_transfer_out(self, cbk_fn, recipient, type_, request, value=0, index=0, data=None) -> bool:
         """Perform a control transfer with data from host to device.
 
+        :param cbk_fn: The function called with the class:`ControlTransferResponse` result.
+            This method guarantees that cbk_fn will always be called.
+            cbk_fn may be called BEFORE exiting this method call.
         :param recipient: The recipient which is one of ['device', 'interface', 'endpoint', 'other']
         :param type_: The type which is one of ['standard', 'class', 'vendor'].
         :param request: The bRequest value.
@@ -59,22 +62,23 @@ class DeviceDriverApi:
         :param index: The wIndex value.
         :param data: The optional data to transfer from host to device.
             None (default) skips the data phase.
-
-        :return: A :class:`ControlTransferResponse` instance.
+        :return: True on pending, False on error.
         """
         raise NotImplementedError()
 
-    def control_transfer_in(self, recipient, type_, request, value, index, length) -> ControlTransferResponse:
+    def control_transfer_in(self, cbk_fn, recipient, type_, request, value, index, length) -> bool:
         """Perform a control transfer with data from device to host.
 
+        :param cbk_fn: The function called with the class:`ControlTransferResponse` result.
+            This method guarantees that cbk_fn will always be called.
+            cbk_fn may be called BEFORE exiting this method call.
         :param recipient: The recipient which is one of ['device', 'interface', 'endpoint', 'other']
         :param type_: The type which is one of ['standard', 'class', 'vendor'].
         :param request: The bRequest value.
         :param value: The wValue value.
         :param index: The wIndex value.
         :param length: The maximum number of bytes to transfer from device to host.
-
-        :return: A :class:`ControlTransferResponse` instance.
+        :return: True on pending, False on error.
         """
         raise NotImplementedError()
 
@@ -122,6 +126,9 @@ class DeviceDriverApi:
         """Stop a read stream.
 
         :param endpoint_id: The target endpoint address.
+
+        When stop is complete, the data_fn provided to read_stream_start will
+        be called with None.
 
         Use :meth:`read_stream_start` to start.
         """

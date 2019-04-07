@@ -306,20 +306,20 @@ class Device:
         self.stream_buffer = None
 
     def _wait_for_sensor_command(self, timeout=None):
-        timeout = 2.0 if timeout is None else float(timeout)
+        timeout = 1.0 if timeout is None else float(timeout)
         time_start = time.time()
         while True:
             dt = time.time() - time_start
-            if dt >= timeout:
+            if dt > timeout:
                 raise RuntimeError('timed out')
             s = self._status()
             if 0 != s['return_code']['value']:
                 log.warning('Error while getting status: %s', s['return_code']['str'])
-                time.sleep(0.5)
+                time.sleep(0.4)
                 continue
             rv = s.get('settings_result', {}).get('value', -1)
             if rv in [-1, 19]:
-                time.sleep(0.005)
+                time.sleep(0.010)
                 continue
             return rv
 
@@ -334,14 +334,17 @@ class Device:
                           PACKET_VERION,
                           length,
                           PacketType.SETTINGS,
-                          0,  # reserved
-                          0,  # reserved
+                          0,  # rsvl (1 byte)
+                          0,  # rsv4 (4 byte)
                           self._parameters['sensor_power'],
-                          self._parameters['i_range'],
+                          self._parameters['i_range'],  # select
                           self._parameters['source'],
                           options,
                           streaming,
-                          0, 0, 0)
+                          0,  # rsv1_u8
+                          0,  # rsv2_u8
+                          0   # rsv3_u8
+                          )
         rv = self._usb.control_transfer_out(
             'device', 'vendor', request=UsbdRequest.SETTINGS,
             value=0, index=0, data=msg)

@@ -56,10 +56,10 @@ class DeviceThread:
             return True
         elif cmd == 'control_transfer_out':
             args, kwargs = args
-            cbk(self._device.control_transfer_out(*args, **kwargs))
+            self._device.control_transfer_out(cbk, *args, **kwargs)
         elif cmd == 'control_transfer_in':
             args, kwargs = args
-            cbk(self._device.control_transfer_in(*args, **kwargs))
+            self._device.control_transfer_in(cbk, *args, **kwargs)
         elif cmd == 'read_stream_start':
             args, kwargs = args
             cbk(self._device.read_stream_start(*args, **kwargs))
@@ -105,11 +105,12 @@ class DeviceThread:
 
     def _post_block(self, command, args):
         q = queue.Queue()
+        log.debug('_post_block %s start', command)
         self._post(command, args, lambda rv_=None: q.put(rv_))
         try:
             rv = q.get(timeout=TIMEOUT)
         except queue.Empty:
-            log.error('device thread hung')
+            log.error('device thread hung: %s', command)
             raise  # todo check thread status
         if isinstance(rv, Exception):
             raise IOError(rv)

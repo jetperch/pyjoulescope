@@ -375,6 +375,122 @@ class EndpointIn:
         return status
 
 
+class ControlTransferAsync:
+
+    def __init__(self, winusb):
+        self._winusb = winusb
+        self._overlapped = None
+        self._event = None
+        self._commands = []  # list of pending control transfer commands
+        self._time_start = None
+
+    @property
+    def event(self):
+        return self._event
+
+    def open(self):
+        self._event = kernel32.CreateEvent(
+            None,   # default security
+            True,   # manual reset
+            False,  # not initially signalled
+            None    # no name
+        )
+        if self._event is None:
+            raise ValueError('could not create control event')
+        self._overlapped = TransferOverlapped(self._event, 4096)
+
+    def close(self):
+        self._commands, commands = [], self._commands
+        if commands:
+            WinUsb_AbortPipe(self._winusb, 0)
+            command = commands.pop(0)
+            self._finish(command, do_wait=False)
+        while commands:
+            cbk_fn, setup_packet, _ = commands.pop(0)
+            cbk_fn(usb_core.ControlTransferResponse(setup_packet, False, None))
+        if self._event:
+            kernel32.CloseHandle(self._event)
+            self._event = None
+        if self._overlapped:
+            self._overlapped = None
+
+    def pend(self, cbk_fn, setup_packet: usb_core.SetupPacket, buffer=None):
+        """Pend an asynchronous Control Transfer.
+
+        :param cbk_fn: The function to call when the control transfer completes.
+            A :class:`usb_core.ControlTransferResponse` is the sole argument.
+        :param setup_packet:
+        :param buffer: The buffer (if length > 0) for write transactions.
+        """
+        command = [cbk_fn, setup_packet, buffer]
+        was_empty = not bool(self._commands)
+        self._commands.append(command)
+        if was_empty:
+            return self._issue()
+        return True
+
+    def _issue(self):
+        if not self._commands:
+            return True
+        cbk_fn, setup_packet, buffer = self._commands[0]
+        pkt = usb_core.RequestType(value=setup_packet.request_type)
+        self._overlapped.reset()
+        if pkt.direction == 'out':
+            if setup_packet.length > 0:
+                log.info('ControlTransferAsync._issue buffer type: %s', type(buffer))
+                self._overlapped.data[:setup_packet.length] = np.frombuffer(buffer, dtype=np.uint8)
+        result = WinUsb_ControlTransfer(
+            self._winusb,
+            setup_packet,
+            self._overlapped.b,
+            setup_packet.length,
+            None,
+            self._overlapped.ptr)
+        result = sanitize_boolean_return_code(result)
+        self._time_start = time.time()
+        if result != kernel32.ERROR_IO_PENDING:
+            log.warning('ControlTransferAsync._issue %s', kernel32.get_error_str(result))
+            response = usb_core.ControlTransferResponse(setup_packet, result, None)
+            cbk_fn(response)
+            return False
+        return True
+
+    def _finish(self, command, do_wait=True):
+        buffer = None
+        cbk_fn, setup_packet, _ = command
+        length_transferred = c_ulong()
+        rc = WinUsb_GetOverlappedResult(self._winusb, self._overlapped.ptr, byref(length_transferred), do_wait)
+        if rc == 0:  # any value other than 0 is success
+            rc = kernel32.GetLastError()
+            log.warning('ControlTransferAsync._finish result: %s', kernel32.get_error_str(rc))
+        else:
+            rc = 0
+            pkt = usb_core.RequestType(value=setup_packet.request_type)
+            duration = time.time() - self._time_start
+            if pkt.direction == 'in' and setup_packet.length:
+                log.debug('ControlTransferAsync._finish duration=%.6f s, length: %s, %s',
+                         duration, setup_packet.length, length_transferred.value)
+                buffer = bytes(self._overlapped.data[:length_transferred.value])
+            else:
+                log.debug('ControlTransferAsync._finish duration=%.6f s', duration)
+        response = usb_core.ControlTransferResponse(setup_packet, rc, buffer)
+        cbk_fn(response)
+
+    def process(self):
+        """Check if control transfer completed"""
+        if not self._commands:
+            return
+        rc = kernel32.WaitForSingleObject(self._event, 0)
+        if rc == kernel32.WAIT_TIMEOUT:
+            pass  # not ready yet
+        elif rc != kernel32.WAIT_OBJECT_0:
+            log.warning('ControlTransferAsync.process wait %d', rc)
+        else:  # transfer is done!
+            command = self._commands.pop(0)
+            self._finish(command)
+            self._issue()
+
+
 class WinUsbDevice:
     """The WinUSB :class:`usb.api.Device` implementation"""
 
@@ -384,17 +500,9 @@ class WinUsbDevice:
         self._winusb = HANDLE()  # The WinUSB handle for the device's default interface
         self._interface = 0
         self._endpoints = {}  # type: Dict[int, EndpointIn]
-
-        # create event for self.signal()
-        self._event = kernel32.CreateEvent(
-            None,   # default security
-            True,   # manual reset
-            False,  # not initially signalled
-            None    # no name
-        )
-        if self._event is None:
-            raise RuntimeError('could not create event')
+        self._event = None
         self._event_list = (HANDLE * kernel32.MAXIMUM_WAIT_OBJECTS)()
+        self._control_transfer = ControlTransferAsync(self._winusb)
         self._update_event_list()
 
     def __str__(self):
@@ -409,8 +517,11 @@ class WinUsbDevice:
             return 'Joulescope'
 
     def _update_event_list(self):
-        self.event_list_count = 1
-        self._event_list[0] = self._event
+        self.event_list_count = 0
+        for event in [self._event, self._control_transfer.event]:
+            if event:
+                self._event_list[self.event_list_count] = event
+                self.event_list_count += 1
         for endpoint in self._endpoints.values():
             if endpoint.event is not None:
                 self._event_list[self.event_list_count] = endpoint.event
@@ -429,6 +540,18 @@ class WinUsbDevice:
 
     def open(self):
         self.close()
+        log.info('WinUsbDevice.open')
+
+        # create event for self.signal()
+        self._event = kernel32.CreateEvent(
+            None,   # default security
+            True,   # manual reset
+            False,  # not initially signalled
+            None    # no name
+        )
+        if self._event is None:
+            raise RuntimeError('could not create event')
+
         self._file = kernel32.CreateFile(
             self._path,
             kernel32.GENERIC_WRITE | kernel32.GENERIC_READ,
@@ -445,17 +568,24 @@ class WinUsbDevice:
             raise IOError('%s : open failed %s' % (self, kernel32.get_last_error()))
         log.info('is_high_speed = %s', self._is_high_speed)
         log.info('interface_settings = %s', self._query_interface_settings(0))
+        self._control_transfer.open()
+        self._update_event_list()
 
     def close(self):
+        log.info('WinUsbDevice.close')
         for endpoint in self._endpoints.values():
             endpoint.stop()
         self._endpoints.clear()
+        self._control_transfer.close()
         if self._file is not None:
             WinUsb_Free(self._winusb)
             self._winusb = HANDLE()
             kernel32.CloseHandle(self._file)
             self._file = None
         self._interface = 0
+        if self._event:
+            kernel32.CloseHandle(self._event)
+            self._event = None
 
     @property
     def _is_high_speed(self):
@@ -492,55 +622,18 @@ class WinUsbDevice:
             raise IOError('WinUsb_QueryPipe failed: ' + kernel32.get_last_error())
         return pipe_info
 
-    def control_transfer(self, setup_packet: usb_core.SetupPacket, buffer=None) -> usb_core.ControlTransferResponse:
-        length_transferred = c_ulong()
-        pkt = usb_core.RequestType(value=setup_packet.request_type)
-        if pkt.direction == 'in':
-            if buffer is None:
-                buffer = (c_ubyte * setup_packet.length)()
-            else:
-                assert(len(buffer) >= setup_packet.length)
-        else:
-            if setup_packet.length > 0:
-                assert(len(buffer) >= setup_packet.length)
-        if setup_packet.length == 0:
-            result = WinUsb_ControlTransfer(self._winusb, setup_packet, None, 0, byref(length_transferred), None)
-        else:
-            if not isinstance(buffer, c_ubyte * len(buffer)):
-                buffer = (c_ubyte * setup_packet.length)(* buffer)
-            result = WinUsb_ControlTransfer(self._winusb, setup_packet, buffer, len(buffer), byref(length_transferred), None)
-        result = sanitize_boolean_return_code(result)
-        length = length_transferred.value
-        if pkt.direction == 'out':
-            buffer = None
-            if result == 0 and length != setup_packet.length:
-                # device did not receive all of the data!
-                result = 1
-        else:  #pkt.direction == 'in':
-            if result:
-                pass
-            elif length > setup_packet.length:
-                # received more data than requested!
-                result = 1
-            else:
-                #b = POINTER(c_ubyte).from_buffer(buffer)[:length]
-                buffer = bytes(buffer[:length])
-        if result:
-            log.warning('control_transfer %s', kernel32.get_error_str(result))
-        return usb_core.ControlTransferResponse(setup_packet, result, buffer)
-    
-    def control_transfer_out(self, recipient, type_, request, value=0, index=0, data=None):
+    def control_transfer_out(self, cbk_fn, recipient, type_, request, value=0, index=0, data=None):
         log.debug('control_transfer_out')
         request_type = usb_core.RequestType(direction='out', type_=type_, recipient=recipient).u8
         length = 0 if data is None else len(data)
         pkt = usb_core.SetupPacket(request_type, request, value, index, length)
-        return self.control_transfer(pkt, data)
+        return self._control_transfer.pend(cbk_fn, pkt, data)
     
-    def control_transfer_in(self, recipient, type_, request, value, index, length):
+    def control_transfer_in(self, cbk_fn, recipient, type_, request, value, index, length):
         log.debug('control_transfer_in')
         request_type = usb_core.RequestType(direction='in', type_=type_, recipient=recipient).u8
         pkt = usb_core.SetupPacket(request_type, request, value, index, length)
-        return self.control_transfer(pkt)
+        return self._control_transfer.pend(cbk_fn, pkt)
 
     def read_stream_start(self, endpoint_id, transfers, block_size, data_fn, process_fn):
         log.info('read_stream_start %d', endpoint_id)
@@ -587,6 +680,7 @@ class WinUsbDevice:
                     stop_endpoint_ids.append(endpoint.pipe_id)
             for pipe_id in stop_endpoint_ids:
                 self.read_stream_stop(pipe_id)
+            self._control_transfer.process()
 
 
 def scan(name: str) -> List[WinUsbDevice]:

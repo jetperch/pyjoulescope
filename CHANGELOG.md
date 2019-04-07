@@ -4,6 +4,14 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 0.3.0
+
+2019 Apr ???
+
+*   Added asynchronous control transfers so streaming continues correctly.
+*   Improved robustness and recovery on Joulescope fw/hw issues.
+
+
 ## 0.2.7
 
 2019 Mar 2
