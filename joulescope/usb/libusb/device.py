@@ -23,6 +23,7 @@ import platform
 import numpy as np
 import os
 import sys
+import struct
 import ctypes
 import ctypes.util
 from ctypes import Structure, c_uint8, c_uint16, c_uint32, c_uint, \
@@ -30,6 +31,7 @@ from ctypes import Structure, c_uint8, c_uint16, c_uint32, c_uint, \
 import logging
 
 log = logging.getLogger(__name__)
+# log.setLevel(logging.DEBUG)
 
 
 STRING_LENGTH_MAX = 255
@@ -343,14 +345,24 @@ def _get_string_descriptor(device, index):
     return byte_buffer[:buffer_len].decode('UTF-16-LE')
 
 
+_transfer_callback_discard_fn = libusb_transfer_cb_fn(lambda x: None)
+"""Default null callback that is always safe."""
+
+
 class Transfer:
 
     def __init__(self, size):
-        self.size = size
-        self.transfer = _lib.libusb_alloc_transfer(0)
+        try:
+            self.size = len(size)  # also serves as list-like duck-typing test
+            self.buffer = np.frombuffer(size, dtype=np.uint8)
+            log.debug('Transfer: copy buffer %d', self.size)
+        except TypeError:
+            self.size = size
+            self.buffer = np.empty(self.size, dtype=np.uint8)
+            log.debug('Transfer: create buffer %d', self.size)
+        self.transfer = _lib.libusb_alloc_transfer(0)  # type: _libusb_transfer
         self.addr = ctypes.addressof(self.transfer.contents)
         transfer = self.transfer[0]
-        self.buffer = np.empty(self.size, dtype=np.uint8)
         self.buffer_ptr = self.buffer.ctypes.data_as(POINTER(c_uint8))
         transfer.buffer = self.buffer_ptr
         transfer.flags = 0
@@ -360,9 +372,112 @@ class Transfer:
         transfer.num_iso_packets = 0
         transfer.status = TransferStatus.COMPLETED
         transfer.timeout_ms = 1000  # milliseconds
+        transfer.callback = _transfer_callback_discard_fn
 
     def __del__(self):
         _lib.libusb_free_transfer(self.transfer)
+
+
+class ControlTransferAsync:
+
+    def __init__(self, handle):
+        """Manage asynchronous control transfers.
+
+        :param handle: The device handle.
+        """
+        self._handle = handle
+        self._transfer_callback_fn = libusb_transfer_cb_fn(self._transfer_callback)
+        self._commands = []  # Pending control transfer commands as list of [cbk_fn, setup_packet, buffer]
+        self._transfer_pending = None  # type: Transfer
+        self._time_start = None
+
+    def __str__(self):
+        return 'ControlTransferAsync()'
+
+    def _transfer_callback(self, transfer_void_ptr):
+        if self._transfer_pending is None:
+            log.warning('Transfer callback when none pending')
+            return
+        if self._transfer_pending.addr != transfer_void_ptr:
+            log.warning('Transfer mismatch')
+            return
+        transfer, self._transfer_pending = self._transfer_pending, None
+        if self._commands:
+            self._finish(self._commands.pop(0), transfer)
+        else:
+            log.warning('Transfer callback when no commands')
+        self._issue()
+
+    def close(self):
+        commands, self._commands = self._commands, []
+        if self._transfer_pending:
+            log.info('ControlTransferAsync.close cancel pending transfer, %d', len(commands))
+            transfer, self._transfer_pending = self._transfer_pending, None
+            transfer.transfer[0].callback = _transfer_callback_discard_fn
+            _lib.libusb_cancel_transfer(transfer.transfer)
+            # callback function will be invoked later
+        else:
+            log.info('ControlTransferAsync.close %d', len(commands))
+        for cbk_fn, setup_packet, _ in commands:
+            response = usb_core.ControlTransferResponse(setup_packet, TransferStatus.CANCELLED, None)
+            cbk_fn(response)
+
+    def pend(self, cbk_fn, setup_packet: usb_core.SetupPacket, buffer=None):
+        """Pend an asynchronous Control Transfer.
+
+        :param cbk_fn: The function to call when the control transfer completes.
+            A :class:`usb_core.ControlTransferResponse` is the sole argument.
+        :param setup_packet:
+        :param buffer: The buffer (if length > 0) for write transactions.
+        """
+        command = [cbk_fn, setup_packet, buffer]
+        was_empty = not bool(self._commands)
+        self._commands.append(command)
+        if was_empty:
+            return self._issue()
+        return True
+
+    def _issue(self):
+        if not self._commands:
+            return True
+        _, setup_packet, buffer = self._commands[0]
+        hdr = struct.pack('<BBHHH', setup_packet.request_type, setup_packet.request,
+                          setup_packet.value, setup_packet.index, setup_packet.length)
+        if buffer is not None:
+            transfer = Transfer(hdr + buffer)
+        else:
+            transfer = Transfer(len(hdr) + setup_packet.length)
+            transfer.buffer[:len(hdr)] = np.frombuffer(hdr, dtype=np.uint8)
+        t = transfer.transfer[0]
+        t.dev_handle = self._handle
+        t.endpoint_id = 0
+        t.endpoint_type = TransferType.CONTROL
+        t.callback = self._transfer_callback_fn
+        self._transfer_pending = transfer
+        self._time_start = time.time()
+        rv = _lib.libusb_submit_transfer(transfer.transfer)
+        if rv:
+            log.warning('libusb_submit_transfer => %d', rv)
+            t.status = TransferStatus.ERROR
+            self._transfer_callback(transfer.addr)
+            return False
+        return True
+
+    def _finish(self, command, transfer):
+        buffer = None
+        rc = transfer.transfer[0].status
+        cbk_fn, setup_packet, _ = command
+        pkt = usb_core.RequestType(value=setup_packet.request_type)
+        duration = time.time() - self._time_start
+        if pkt.direction == 'out':
+            log.debug('ControlTransferAsync._finish rc=%d, duration=%.6f s', rc, duration)
+        else:
+            actual_length = transfer.transfer[0].actual_length
+            log.debug('ControlTransferAsync._finish rc=%d, duration=%.6f s, length: %s, %s',
+                      rc, duration, setup_packet.length, actual_length)
+            buffer = bytes(transfer.buffer[8:(actual_length+8)])
+        response = usb_core.ControlTransferResponse(setup_packet, rc, buffer)
+        cbk_fn(response)
 
 
 class EndpointIn:
@@ -534,6 +649,7 @@ class LibUsbDevice:
         self._path = path
         self._handle = c_void_p(None)
         self._endpoints = {}
+        self._control_transfer = None  # type: ControlTransferAsync
 
     def __str__(self):
         return f'Joulescope {self._path}'
@@ -578,8 +694,12 @@ class LibUsbDevice:
         may_raise_ioerror(rv, 'libusb_claim_interface 0 failed')
         rv = _lib.libusb_set_interface_alt_setting(self._handle, 0, 0)
         may_raise_ioerror(rv, 'libusb_set_interface_alt_setting 0,0 failed')
+        self._control_transfer = ControlTransferAsync(self._handle)
 
     def close(self):
+        if self._control_transfer:
+            self._control_transfer.close()
+            self._control_transfer = None
         if self._handle:
             _lib.libusb_close(self._handle)
             self._handle = c_void_p(None)
@@ -587,43 +707,16 @@ class LibUsbDevice:
             _libusb_context_destroy(self._ctx)
             self._ctx = None
 
-    def control_transfer_out(self, recipient, type_, request, value=0, index=0, data=None) -> ControlTransferResponse:
+    def control_transfer_out(self, cbk_fn, recipient, type_, request, value=0, index=0, data=None):
         request_type = usb_core.RequestType(direction='out', type_=type_, recipient=recipient).u8
         length = 0 if data is None else len(data)
         setup_packet = usb_core.SetupPacket(request_type, request, value, index, length)
-        if length:
-            buffer = (c_uint8 * length)(*data)
-        else:
-            buffer = c_void_p()
-        rv = _lib.libusb_control_transfer(self._handle, request_type, request, value, index,
-                                          buffer, length, CONTROL_TRANSFER_TIMEOUT_MS)
-        if rv < 0:
-            log.warning('control_transfer_out rv=%d', rv)
-            result = rv
-        elif rv > length:
-            log.warning('control_transfer_out: length too long (%d > %d)', rv, length)
-            result = 1
-        else:
-            result = 0
-        length = min(rv, length)
-        return usb_core.ControlTransferResponse(setup_packet, result, bytes(buffer[:length]))
+        return self._control_transfer.pend(cbk_fn, setup_packet, data)
 
-    def control_transfer_in(self, recipient, type_, request, value, index, length) -> ControlTransferResponse:
+    def control_transfer_in(self, cbk_fn, recipient, type_, request, value, index, length) -> ControlTransferResponse:
         request_type = usb_core.RequestType(direction='in', type_=type_, recipient=recipient).u8
-        buffer = (c_uint8 * length)()
         setup_packet = usb_core.SetupPacket(request_type, request, value, index, length)
-        rv = _lib.libusb_control_transfer(self._handle, request_type, request, value, index,
-                                          buffer, length, CONTROL_TRANSFER_TIMEOUT_MS)
-        if rv < 0:
-            log.warning('control_transfer_in rv=%d', rv)
-            result = rv
-        elif rv > length:
-            log.warning('control_transfer_in: length too long (%d > %d)', rv, length)
-            result = 1
-        else:
-            result = 0
-        length = min(length, rv)
-        return usb_core.ControlTransferResponse(setup_packet, result, bytes(buffer[:length]))
+        return self._control_transfer.pend(cbk_fn, setup_packet, None)
 
     def read_stream_start(self, endpoint_id, transfers, block_size, data_fn, process_fn):
         pipe_id = (endpoint_id & 0x7f) | 0x80
