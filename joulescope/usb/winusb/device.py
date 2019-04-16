@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from joulescope.usb import core as usb_core
+from joulescope.usb.impl_tools import RunUntilDone
 from joulescope.usb.scan_info import INFO
 from .setupapi import device_interface_guid_to_paths
 from ctypes import windll, Structure, POINTER, byref, sizeof, \
@@ -623,13 +624,25 @@ class WinUsbDevice:
         return pipe_info
 
     def control_transfer_out(self, cbk_fn, recipient, type_, request, value=0, index=0, data=None):
+        if cbk_fn is None:
+            run_until_done = RunUntilDone(1.0, 'control_transfer_out')
+            self.control_transfer_out(run_until_done.cbk_fn, recipient, type_, request, value, index, data)
+            while not run_until_done.is_done():
+                self.process(0.01)
+            return run_until_done.value_args0
         log.debug('control_transfer_out')
         request_type = usb_core.RequestType(direction='out', type_=type_, recipient=recipient).u8
         length = 0 if data is None else len(data)
         pkt = usb_core.SetupPacket(request_type, request, value, index, length)
         return self._control_transfer.pend(cbk_fn, pkt, data)
-    
+
     def control_transfer_in(self, cbk_fn, recipient, type_, request, value, index, length):
+        if cbk_fn is None:
+            run_until_done = RunUntilDone(1.0, 'control_transfer_in')
+            self.control_transfer_in(run_until_done.cbk_fn, recipient, type_, request, value, index, length)
+            while not run_until_done.is_done():
+                self.process(0.01)
+            return run_until_done.value_args0
         log.debug('control_transfer_in')
         request_type = usb_core.RequestType(direction='in', type_=type_, recipient=recipient).u8
         pkt = usb_core.SetupPacket(request_type, request, value, index, length)
