@@ -78,6 +78,9 @@ class UsbdRequest:
     INFO = 10
     """Get the current device information metadata JSON string."""
 
+    TEST_MODE = 11
+    """Enter a test mode."""
+
 
 class SensorBootloader:
 
@@ -691,6 +694,16 @@ class Device:
 
     def calibration_program(self, data, is_factory=False):
         return self.run_from_bootloader(lambda b: b.calibration_program(data, is_factory))
+
+    def enter_test_mode(self, index=None, value=None):
+        index = 0 if index is None else int(index)
+        value = 0 if value is None else int(value)
+        rv = self._usb.control_transfer_out(
+            'device', 'vendor', request=UsbdRequest.TEST_MODE,
+            index=index,
+            value=value)
+        _ioerror_on_bad_result(rv)
+
 
 
 class View:
