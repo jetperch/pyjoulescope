@@ -81,8 +81,11 @@ def calibration_program(data, is_factory):
 
 
 def on_run(args):
-    with open(args.filename, 'rb') as f:
-        data = f.read()
+    if args.filename == '!':
+        data = b''
+    else:
+        with open(args.filename, 'rb') as f:
+            data = f.read()
     start_time = time.time()
     if args.target == 'controller':
         rc = controller_program(data)

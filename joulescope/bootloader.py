@@ -66,7 +66,9 @@ for segments_value in list(SEGMENTS.values()):
 
 
 def _filename_or_bytes(x):
-    if isinstance(x, str):
+    if x is None:
+        return b''
+    elif isinstance(x, str):
         with open(x, 'rb') as f:
             return f.read()
     else:
@@ -109,12 +111,12 @@ class Bootloader:
 
     def comm_test(self):
         rv = self._usb.control_transfer_out(
-            'device', 'vendor',
+            None, 'device', 'vendor',
             request=UsbdRequest.LOOPBACK_WVALUE,
             value=0x1234, index=0)
         _ioerror_on_bad_result(rv)
         rv = self._usb.control_transfer_in(
-            'device', 'vendor',
+            None, 'device', 'vendor',
             request=UsbdRequest.LOOPBACK_WVALUE,
             value=0, index=0, length=2)
         _ioerror_on_bad_result(rv)
@@ -123,7 +125,7 @@ class Bootloader:
 
     def info_get(self):
         rv = self._usb.control_transfer_in(
-            'device', 'vendor',
+            None, 'device', 'vendor',
             request=UsbdRequest.INFO,
             value=0, index=0, length=INFO_REQUEST_LENGTH)
         _ioerror_on_bad_result(rv)
@@ -135,7 +137,7 @@ class Bootloader:
 
     def chunk_read(self, segment, chunk):
         rv = self._usb.control_transfer_in(
-            'device', 'vendor',
+            None, 'device', 'vendor',
             request=UsbdRequest.READ_CHUNK,
             value=segment, index=chunk, length=CHUNK_SIZE)
         _ioerror_on_bad_result(rv)
@@ -148,7 +150,9 @@ class Bootloader:
             identifier or name from SEGMENTS.
         :param data: The raw data bytes for the flash.
         :param metadata: The metadata for firmware updates.
-        :return: 0 on success or error code
+        :return: 0 on success or error code.
+
+        This function erases the existing application, even on failure.
         """
         data = _filename_or_bytes(data)
         segment = SEGMENTS[segment]
@@ -164,7 +168,7 @@ class Bootloader:
         msg = msg + metadata['header'] + metadata['mac'] + metadata['signature']
         log.info('write start: segment=%d, length=%d', segment, len(data))
         rv = self._usb.control_transfer_out(
-            'device', 'vendor',
+            None, 'device', 'vendor',
             request=UsbdRequest.WRITE_START,
             value=segment, index=0, data=msg)
         _ioerror_on_bad_result(rv)
@@ -173,7 +177,7 @@ class Bootloader:
             chunk_data = data[:CHUNK_SIZE]
             log.info('write chunk %d, length=%d', chunk, len(chunk_data))
             rv = self._usb.control_transfer_out(
-                'device', 'vendor',
+                None, 'device', 'vendor',
                 request=UsbdRequest.WRITE_CHUNK,
                 value=segment, index=chunk, data=chunk_data)
             _ioerror_on_bad_result(rv)
@@ -181,7 +185,7 @@ class Bootloader:
             chunk += 1
         log.info('write finalize')
         rv = self._usb.control_transfer_in(
-            'device', 'vendor',
+            None, 'device', 'vendor',
             request=UsbdRequest.WRITE_FINALIZE,
             value=segment, index=0, length=1)
         _ioerror_on_bad_result(rv)
@@ -190,7 +194,7 @@ class Bootloader:
 
     def go(self):
         rv = self._usb.control_transfer_out(
-            'device', 'vendor',
+            None, 'device', 'vendor',
             request=UsbdRequest.GO,
             value=0, index=0)
         _ioerror_on_bad_result(rv)
@@ -198,27 +202,30 @@ class Bootloader:
 
     def firmware_program(self, filename):
         data = _filename_or_bytes(filename)
-        fh = io.BytesIO(data)
-        dr = datafile.DataFileReader(fh)
-        # todo: check distribution signature
-        tag, hdr_value = next(dr)
-        if tag != datafile.TAG_HEADER:
-            raise ValueError('incorrect format: expected header, received %r' % tag)
-        tag, data = next(dr)
-        if tag != datafile.TAG_DATA_BINARY:
-            raise ValueError('incorrect format: expected data, received %r' % tag)
-        tag, enc = next(dr)
-        if tag != datafile.TAG_ENCRYPTION:
-            raise ValueError('incorrect format: expected encryption, received %r' % tag)
-        metadata = {
-            'encryption': 1,
-            'header': hdr_value[:24],
-            'mac': enc[:16],
-            'signature': enc[16:],
-        }
-        log.info('header    = %r', binascii.hexlify(metadata['header']))
-        log.info('mac       = %r', binascii.hexlify(metadata['mac']))
-        log.info('signature = %r', binascii.hexlify(metadata['signature']))
+        if len(data):
+            fh = io.BytesIO(data)
+            dr = datafile.DataFileReader(fh)
+            # todo: check distribution signature
+            tag, hdr_value = next(dr)
+            if tag != datafile.TAG_HEADER:
+                raise ValueError('incorrect format: expected header, received %r' % tag)
+            tag, data = next(dr)
+            if tag != datafile.TAG_DATA_BINARY:
+                raise ValueError('incorrect format: expected data, received %r' % tag)
+            tag, enc = next(dr)
+            if tag != datafile.TAG_ENCRYPTION:
+                raise ValueError('incorrect format: expected encryption, received %r' % tag)
+            metadata = {
+                'encryption': 1,
+                'header': hdr_value[:24],
+                'mac': enc[:16],
+                'signature': enc[16:],
+            }
+            log.info('header    = %r', binascii.hexlify(metadata['header']))
+            log.info('mac       = %r', binascii.hexlify(metadata['mac']))
+            log.info('signature = %r', binascii.hexlify(metadata['signature']))
+        else:
+            metadata = None
         return self.program(Segment.FIRMWARE, data, metadata)
 
     def calibration_program(self, filename, is_factory=False):
@@ -238,7 +245,7 @@ class Bootloader:
         # arm
         data = struct.pack('<III', 1, 0, 0)
         rv = self._usb.control_transfer_out(
-            'device', 'vendor',
+            None, 'device', 'vendor',
             request=UsbdRequest.ERASE,
             value=0, index=0, data=magic + data)        
         _ioerror_on_bad_result(rv)
@@ -246,7 +253,7 @@ class Bootloader:
         # and do it... hope you meant it!
         data = struct.pack('<III', 2, 0, 15)
         rv = self._usb.control_transfer_out(
-            'device', 'vendor',
+            None, 'device', 'vendor',
             request=UsbdRequest.ERASE,
             value=0, index=0, data=magic + data)        
         _ioerror_on_bad_result(rv)        
