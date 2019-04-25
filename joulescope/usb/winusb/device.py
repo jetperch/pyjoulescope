@@ -466,6 +466,7 @@ class ControlTransferAsync:
             log.warning('ControlTransferAsync._finish result: %s', kernel32.get_error_str(rc))
         else:
             rc = 0
+            kernel32.ResetEvent(self._event)
             pkt = usb_core.RequestType(value=setup_packet.request_type)
             duration = time.time() - self._time_start
             if pkt.direction == 'in' and setup_packet.length:
