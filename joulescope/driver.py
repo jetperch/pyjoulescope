@@ -455,11 +455,11 @@ class Device:
             try:
                 self._stream_settings_send()
             except:
-                log.exception('Device.stop(): while attempting _stream_settings_send:')
+                log.warning('Device.stop() while attempting _stream_settings_send')
             try:
                 self.recording_stop()
             except:
-                log.exception('Device.stop(): while attempting recording_stop:')
+                log.warning('Device.stop() while attempting recording_stop')
             return True
         return False
 
@@ -535,31 +535,32 @@ class Device:
         return self._streaming
 
     def _status(self):
+        def _status_error(ec, msg_str):
+            log.warning('status failed %d: %s', ec, msg_str)
+            return {'return_code': {'value': ec, 'str': msg_str, 'units': ''}}
+
         rv = self._usb.control_transfer_in(
             'device', 'vendor',
             request=UsbdRequest.STATUS,
             value=0, index=0, length=STATUS_REQUEST_LENGTH)
         if 0 != rv.result:
-            s = usb.get_error_str(rv.result)
-            log.warning('usb control transfer failed: %s', s)
-            return {'return_code': {'value': rv.result, 'str': s, 'units': ''}}
+            s = 'usb control transfer failed: {}'.format(usb.get_error_str(rv.result))
+            return _status_error(rv.result, s)
         pdu = bytes(rv.data)
         expected_length = 8 + 16
         if len(pdu) < expected_length:
-            log.warning('status msg pdu too small: %d < %d',
-                        len(pdu), expected_length)
-            return {}
+            msg = 'status msg pdu too small: %d < %d' % (len(pdu), expected_length)
+            return _status_error(1, msg)
         version, hdr_length, pdu_type = struct.unpack('<BBB', pdu[:3])
         if version != HOST_API_VERSION:
-            log.warning('status msg API version mismatch: %d != %d',
-                        version, HOST_API_VERSION)
-            return {}
+            msg = 'status msg API version mismatch: %d != %d' % (version, HOST_API_VERSION)
+            return _status_error(1, msg)
         if pdu_type != PacketType.STATUS:
-            return {}
+            msg = 'status msg pdu_type mismatch: %d != %d' % (pdu_type, PacketType.STATUS)
+            return _status_error(1, msg)
         if hdr_length != expected_length:
-            log.warning('status msg length mismatch: %d != %d',
-                        hdr_length, expected_length)
-            return {}
+            msg = 'status msg length mismatch: %d != %d' % (hdr_length, expected_length)
+            return _status_error(1, msg)
         values = struct.unpack('<iIIBBBx', pdu[8:])
         status = {
             'settings_result': {
