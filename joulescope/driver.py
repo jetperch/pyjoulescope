@@ -606,7 +606,16 @@ class Device:
             raise RuntimeError('sensor_firmware_program failed %d' % (ec,))
 
     def extio_status(self):
-        """Read the EXTIO GPI value"""
+        """Read the EXTIO GPI value.
+
+        :return: A dict containing the extio status.  Each key is the status
+            item name.  The value is itself a dict with the following keys:
+
+            * name: The status name, which is the same as the top-level key.
+            * value: The actual value
+            * units: The units, if applicable.
+            * format: The recommended formatting string (optional).
+        """
         rv = self._usb.control_transfer_in(
             'device', 'vendor',
             request=UsbdRequest.EXTIO,
