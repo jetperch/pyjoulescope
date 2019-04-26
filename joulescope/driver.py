@@ -35,6 +35,7 @@ import logging
 log = logging.getLogger(__name__)
 
 STATUS_REQUEST_LENGTH = 128
+EXTIO_REQUEST_LENGTH = 128
 SERIAL_NUMBER_LENGTH = 16
 HOST_API_VERSION = 1
 CALIBRATION_SIZE_MAX = 0x8000
@@ -373,7 +374,6 @@ class Device:
                           0,  # rsv3_u32, baudrate reserved
                           self._parameters['io_voltage'],
         )
-        print(msg)
         rv = self._usb.control_transfer_out(
             'device', 'vendor', request=UsbdRequest.EXTIO,
             value=0, index=0, data=msg)
@@ -604,6 +604,66 @@ class Device:
         ec = rv.get('settings_result', {}).get('value', 1)
         if 0 != ec:
             raise RuntimeError('sensor_firmware_program failed %d' % (ec,))
+
+    def extio_status(self):
+        """Read the EXTIO GPI value"""
+        rv = self._usb.control_transfer_in(
+            'device', 'vendor',
+            request=UsbdRequest.EXTIO,
+            value=0, index=0, length=EXTIO_REQUEST_LENGTH)
+        if 0 != rv.result:
+            s = usb.get_error_str(rv.result)
+            log.warning('usb control transfer failed: %s', s)
+            return {'return_code': {'value': rv.result, 'str': s, 'units': ''}}
+        pdu = bytes(rv.data)
+        expected_length = 8 + 16
+        if len(pdu) < expected_length:
+            log.warning('status msg pdu too small: %d < %d',
+                        len(pdu), expected_length)
+            return {}
+        version, hdr_length, pdu_type = struct.unpack('<BBB', pdu[:3])
+        if version != HOST_API_VERSION:
+            log.warning('status msg API version mismatch: %d != %d',
+                        version, HOST_API_VERSION)
+            return {}
+        if pdu_type != PacketType.EXTIO:
+            return {}
+        if hdr_length != expected_length:
+            log.warning('status msg length mismatch: %d != %d',
+                        hdr_length, expected_length)
+            return {}
+        values = struct.unpack('<BBBBBBBBII', pdu[8:24])
+        status = {
+            'flags': {
+                'value': values[0],
+                'units': ''},
+            'trigger_source': {
+                'value': values[1],
+                'units': ''},
+            'current_gpi': {
+                'value': values[2],
+                'units': ''},
+            'voltage_gpi': {
+                'value': values[3],
+                'units': ''},
+            'gpo0': {
+                'value': values[4],
+                'units': ''},
+            'gpo1': {
+                'value': values[5],
+                'units': ''},
+            'gpi_value': {
+                'value': values[7],
+                'units': '',
+            },
+            'io_voltage': {
+                'value': values[9],
+                'units': 'mV',
+            },
+        }
+        for key, value in status.items():
+            value['name'] = key
+        return status
 
     def sensor_firmware_program(self, data):
         log.info('sensor_firmware_program')

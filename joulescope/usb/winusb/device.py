@@ -438,7 +438,7 @@ class ControlTransferAsync:
         self._overlapped.reset()
         if pkt.direction == 'out':
             if setup_packet.length > 0:
-                log.info('ControlTransferAsync._issue buffer type: %s', type(buffer))
+                log.debug('ControlTransferAsync._issue buffer type: %s', type(buffer))
                 self._overlapped.data[:setup_packet.length] = np.frombuffer(buffer, dtype=np.uint8)
         result = WinUsb_ControlTransfer(
             self._winusb,

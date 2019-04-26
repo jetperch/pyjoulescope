@@ -10,6 +10,7 @@ This file contains the list of changes made to pyjoulescope.
 
 *   Added asynchronous control transfers so streaming continues correctly.
 *   Improved robustness and recovery on Joulescope fw/hw issues.
+*   Added GPI value read (IN) for compliance testing.
 
 
 ## 0.2.7
