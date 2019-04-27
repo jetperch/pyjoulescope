@@ -16,6 +16,7 @@
 """Joulescope command-line utility."""
 
 
+import sys
 import argparse
 import logging
 from joulescope.command import capture, capture_usb, program, recording
@@ -70,3 +71,7 @@ def run():
         parser.print_help()
         parser.exit()
     return args.func(args)
+
+
+if __name__ == "__main__":
+    sys.exit(run())
