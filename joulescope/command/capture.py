@@ -29,7 +29,7 @@ def parser_config(p):
     p.add_argument('filename',
                    help='The filename for output data.')
     p.add_argument('--profile',
-                   action='store_true',
+                   choices=['cProfile', 'yappi'],
                    help='Profile the capture')
     return on_cmd
 
@@ -39,14 +39,23 @@ def on_cmd(args):
     f = lambda: run(device, filename=args.filename,
                     duration=args.duration,
                     contiguous_duration=args.contiguous)
-    if args.profile:
+    if args.profile is None:
+        return f()
+    elif args.profile == 'cProfile':
         import cProfile
         import pstats
         cProfile.runctx('f()', globals(), locals(), "Profile.prof")
         s = pstats.Stats("Profile.prof")
         s.strip_dirs().sort_stats("time").print_stats()
+    elif args.profile == 'yappi':
+        import yappi
+        yappi.start()
+        rv = f()
+        yappi.get_func_stats().print_all()
+        yappi.get_thread_stats().print_all()
+        return rv
     else:
-        return f()
+        raise ValueError('bad profile argument')
 
 
 def run(device, filename, duration=None, contiguous_duration=None):
@@ -84,5 +93,4 @@ def run(device, filename, duration=None, contiguous_duration=None):
     finally:
         device.close()
     print('done capturing data: %s' % quit_)
-
     return 0
