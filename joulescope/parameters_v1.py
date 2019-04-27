@@ -73,7 +73,7 @@ PARAMETERS = [
         '15V',
         [
             ('15V', 0, ['low']),
-            ('5V',    1, ['high']),
+            ('5V',  1, ['high']),
         ],
     ),
     Parameter(
