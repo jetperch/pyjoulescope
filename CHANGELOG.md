@@ -4,6 +4,15 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 0.3.1
+
+2019 May ??
+
+*   Added log messages for troubleshooting robustness issues.
+*   Improved device thread error handling
+*   Eliminated small WinUsb memory leak in normal disconnect case
+
+
 ## 0.3.0
 
 2019 Apr 27

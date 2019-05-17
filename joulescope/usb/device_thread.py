@@ -87,31 +87,44 @@ class DeviceThread:
                     cbk(ex)
         except queue.Empty:
             pass
+        except Exception:
+            log.exception('DeviceThread.process unhandled')
         return _quit
 
     def run(self):
         _quit = False
+        log.info('DeviceThread.run start')
         while not _quit:
             try:
                 self._device.process(timeout=1.0)
                 _quit = self.cmd_process_all()
             except Exception:
                 log.exception('In device thread')
+        log.info('DeviceThread.run done')
 
     def _post(self, command, args, cbk):
         # log.debug('DeviceThread %s', command)
-        self._cmd_queue.put((command, args, cbk))
-        self._device.signal()
+        if self._thread is None:
+            log.info('DeviceThread.post(%s) when thread not running', command)
+        else:
+            self._cmd_queue.put((command, args, cbk))
+            self._device.signal()
 
     def _post_block(self, command, args):
         q = queue.Queue()
         log.debug('_post_block %s start', command)
         self._post(command, args, lambda rv_=None: q.put(rv_))
-        try:
-            rv = q.get(timeout=TIMEOUT)
-        except queue.Empty:
-            log.error('device thread hung: %s', command)
-            raise  # todo check thread status
+        if self._thread is None:
+            raise IOError('DeviceThread not running')
+        else:
+            try:
+                rv = q.get(timeout=TIMEOUT)
+            except queue.Empty as ex:
+                log.error('device thread hung: %s', command)
+                self.close()
+                rv = ex
+            except Exception as ex:
+                rv = ex
         if isinstance(rv, Exception):
             raise IOError(rv)
         log.debug('_post_block %s done', command)  # rv

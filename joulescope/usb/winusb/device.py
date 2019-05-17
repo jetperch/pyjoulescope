@@ -297,7 +297,7 @@ class EndpointIn:
     def _cancel(self):
         length_transferred = c_ulong(0)
         if not WinUsb_AbortPipe(self._winusb, self.pipe_id):
-            log.warning('WinUsb_AbortPipe: %s', kernel32.get_last_error())
+            log.warning('WinUsb_AbortPipe pipe_id %d: %s', self.pipe_id, kernel32.get_last_error())
         while len(self._overlapped_pending):
             ov = self._overlapped_pending.pop(0)
             if not WinUsb_GetOverlappedResult(self._winusb, ov.ptr, byref(length_transferred), True):
@@ -402,18 +402,27 @@ class ControlTransferAsync:
 
     def close(self):
         self._commands, commands = [], self._commands
+
+        # cannot abort control pipe!  How to handle?
+        # WinUsb_AbortPipe(self._winusb, 0) => [87] The parameter is incorrect.
+        # WinUsb_AbortPipe(self._winusb, 1) => [87] The parameter is incorrect.
+
+        commands_len = len(commands)
         if commands:
-            WinUsb_AbortPipe(self._winusb, 0)
             command = commands.pop(0)
             self._finish(command, do_wait=False)
         while commands:
             cbk_fn, setup_packet, _ = commands.pop(0)
             cbk_fn(usb_core.ControlTransferResponse(setup_packet, False, None))
-        if self._event:
-            kernel32.CloseHandle(self._event)
-            self._event = None
-        if self._overlapped:
-            self._overlapped = None
+        if commands_len == 0:
+            if self._event:
+                kernel32.CloseHandle(self._event)
+                self._event = None
+            if self._overlapped:
+                self._overlapped = None
+        else:
+            # todo - fix memory leak: must handle device error with ongoing control transfer!
+            pass
 
     def pend(self, cbk_fn, setup_packet: usb_core.SetupPacket, buffer=None):
         """Pend an asynchronous Control Transfer.
@@ -461,17 +470,19 @@ class ControlTransferAsync:
         cbk_fn, setup_packet, _ = command
         length_transferred = c_ulong()
         rc = WinUsb_GetOverlappedResult(self._winusb, self._overlapped.ptr, byref(length_transferred), do_wait)
-        if rc == 0:  # any value other than 0 is success
+        if rc == 0:  # failed (any value other than 0 is success)
             rc = kernel32.GetLastError()
+            if rc not in [kernel32.ERROR_IO_INCOMPLETE, kernel32.ERROR_IO_PENDING]:
+                kernel32.ResetEvent(self._event)
             log.warning('ControlTransferAsync._finish result: %s', kernel32.get_error_str(rc))
         else:
-            rc = 0
             kernel32.ResetEvent(self._event)
+            rc = 0
             pkt = usb_core.RequestType(value=setup_packet.request_type)
             duration = time.time() - self._time_start
             if pkt.direction == 'in' and setup_packet.length:
                 log.debug('ControlTransferAsync._finish duration=%.6f s, length: %s, %s',
-                         duration, setup_packet.length, length_transferred.value)
+                          duration, setup_packet.length, length_transferred.value)
                 buffer = bytes(self._overlapped.data[:length_transferred.value])
             else:
                 log.debug('ControlTransferAsync._finish duration=%.6f s', duration)

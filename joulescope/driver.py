@@ -949,4 +949,6 @@ def scan_for_changes(name: str=None, devices=None):
         if not len(matches):
             devices_removed.append(d)
 
+    log.info('scan_for_changes %d devices: %d added, %d removed',
+             len(devices_now), len(devices_added), len(devices_removed))
     return devices_now, devices_added, devices_removed
