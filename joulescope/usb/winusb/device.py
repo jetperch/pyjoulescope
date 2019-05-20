@@ -721,8 +721,8 @@ def scan(name: str) -> List[WinUsbDevice]:
         p = device_interface_guid_to_paths(guid)
         paths.extend(p)
     if not len(paths):
-        log.info('scan found no devices')
+        log.debug('scan found no devices')
         return []
-    log.info('scan found %s' % paths)
+    log.debug('scan found %s' % paths)
     devices = [WinUsbDevice(p) for p in paths]
     return devices

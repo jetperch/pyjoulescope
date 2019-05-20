@@ -154,6 +154,7 @@ class Bootloader:
 
         This function erases the existing application, even on failure.
         """
+        log.info('%s: program', self)
         data = _filename_or_bytes(data)
         segment = SEGMENTS[segment]
         if metadata is None:
@@ -193,6 +194,7 @@ class Bootloader:
         return rv.data[0]
 
     def go(self):
+        log.info('%s: go', self)
         rv = self._usb.control_transfer_out(
             None, 'device', 'vendor',
             request=UsbdRequest.GO,
@@ -201,6 +203,7 @@ class Bootloader:
         self.close()
 
     def firmware_program(self, filename):
+        log.info('%s: firmware_program', self)
         data = _filename_or_bytes(filename)
         if len(data):
             fh = io.BytesIO(data)
@@ -229,6 +232,7 @@ class Bootloader:
         return self.program(Segment.FIRMWARE, data, metadata)
 
     def calibration_program(self, filename, is_factory=False):
+        log.info('%s: calibration_program', self)
         data = _filename_or_bytes(filename)
         segment = Segment.CALIBRATION_FACTORY if bool(is_factory) else Segment.CALIBRATION_ACTIVE
         return self.program(segment, data)
@@ -241,7 +245,7 @@ class Bootloader:
         WARNING: This will delete the application, bootloader, calibration
             and personalization.  This renders Joulescope useless!
         """
-        log.info('ERASE')
+        log.info('%s ERASE', self)
         # arm
         data = struct.pack('<III', 1, 0, 0)
         rv = self._usb.control_transfer_out(
