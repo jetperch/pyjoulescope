@@ -143,13 +143,15 @@ class Bootloader:
         _ioerror_on_bad_result(rv)
         return bytes(rv.data)
 
-    def program(self, segment, data, metadata=None):
+    def program(self, segment, data, metadata=None, progress_cbk=None):
         """Program a segment with data.
 
         :param segment: The segment to program in flash, either integer
             identifier or name from SEGMENTS.
         :param data: The raw data bytes for the flash.
         :param metadata: The metadata for firmware updates.
+        :param progress_cbk:  The optional Callable[[float], None] which is called
+            with the progress fraction from 0.0 to 1.0
         :return: 0 on success or error code.
 
         This function erases the existing application, even on failure.
@@ -164,6 +166,10 @@ class Bootloader:
                 'mac': bytes([0] * 16),
                 'signature': bytes([0] * 64),
             }
+        if progress_cbk is None:
+            progress_cbk = lambda x: None
+
+        progress_cbk(0.000)
         metadata['size'] = len(data)
         msg = struct.pack('<II', metadata['size'], metadata['encryption'])
         msg = msg + metadata['header'] + metadata['mac'] + metadata['signature']
@@ -173,10 +179,14 @@ class Bootloader:
             request=UsbdRequest.WRITE_START,
             value=segment, index=0, data=msg)
         _ioerror_on_bad_result(rv)
+
+        total_size = len(data)
         chunk = 0
         while len(data):
+            fraction_done = chunk * CHUNK_SIZE / total_size
             chunk_data = data[:CHUNK_SIZE]
-            log.info('write chunk %d, length=%d', chunk, len(chunk_data))
+            progress_cbk(fraction_done)
+            log.info('write chunk %d, length=%d | %.1f%%', chunk, len(chunk_data), fraction_done * 100)
             rv = self._usb.control_transfer_out(
                 None, 'device', 'vendor',
                 request=UsbdRequest.WRITE_CHUNK,
@@ -191,6 +201,7 @@ class Bootloader:
             value=segment, index=0, length=1)
         _ioerror_on_bad_result(rv)
         log.info('write status=%d', rv.data[0])
+        progress_cbk(1.0)
         return rv.data[0]
 
     def go(self):
@@ -202,7 +213,14 @@ class Bootloader:
         _ioerror_on_bad_result(rv)
         self.close()
 
-    def firmware_program(self, filename):
+    def firmware_program(self, filename, progress_cbk=None):
+        """
+
+        :param filename:
+        :param progress_cbk:  The optional Callable[[float], None] which is called
+            with the progress fraction from 0.0 to 1.0
+        :return: 0 on success or error code.
+        """
         log.info('%s: firmware_program', self)
         data = _filename_or_bytes(filename)
         if len(data):
@@ -229,7 +247,7 @@ class Bootloader:
             log.info('signature = %r', binascii.hexlify(metadata['signature']))
         else:
             metadata = None
-        return self.program(Segment.FIRMWARE, data, metadata)
+        return self.program(Segment.FIRMWARE, data, metadata, progress_cbk)
 
     def calibration_program(self, filename, is_factory=False):
         log.info('%s: calibration_program', self)

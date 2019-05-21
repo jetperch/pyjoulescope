@@ -237,9 +237,11 @@ class Device:
             return None
         try:
             return json.loads(rv.data[8:].decode('utf-8'))
+        except UnicodeDecodeError:
+            log.exception('INFO has invalid unicode: %s', binascii.hexlify(rv.data[8:]))
         except json.decoder.JSONDecodeError:
             log.exception('Could not decode INFO: %s', rv.data[8:])
-            return None
+        return None
 
     def _calibration_read_raw(self, factory=None):
         value = 0 if bool(factory) else 1
@@ -675,8 +677,17 @@ class Device:
             value['name'] = key
         return status
 
-    def sensor_firmware_program(self, data):
+    def sensor_firmware_program(self, data, progress_cbk=None):
+        """Program the sensor microcontroller firmware
+
+        :param data: The firmware to program as a raw binary file.
+        :param progress_cbk:  The optional Callable[[float], None] which is called
+            with the progress fraction from 0.0 to 1.0
+        :raise: on error.
+        """
         log.info('sensor_firmware_program')
+        if progress_cbk is None:
+            progress_cbk = lambda x: None
         self.stop()
 
         log.info('sensor bootloader: start')
@@ -693,12 +704,16 @@ class Device:
         _ioerror_on_bad_result(rv)
         self._sensor_status_check()
 
+        log.info('sensor bootloader: program')
+        total_size = len(data)
         chunk_size = 2 ** 10  # 16 kB
         assert(0 == (chunk_size % 256))
         index = 0
         while len(data):
             sz = chunk_size if len(data) > chunk_size else len(data)
-            log.info('sensor bootloader: program chunk index=%d, sz=%d', index, sz)
+            fraction_done = (index * 256) / total_size
+            progress_cbk(fraction_done)
+            log.info('sensor bootloader: program chunk index=%d, sz=%d | %.1f%%', index, sz, fraction_done * 100)
             rv = self._usb.control_transfer_out(
                 'device', 'vendor', request=UsbdRequest.SENSOR_BOOTLOADER,
                 value=SensorBootloader.WRITE, index=index, data=data[:sz])
@@ -710,6 +725,7 @@ class Device:
         rv = self._usb.control_transfer_out(
             'device', 'vendor', request=UsbdRequest.SENSOR_BOOTLOADER,
             value=SensorBootloader.RESUME)
+        progress_cbk(1.0)
         _ioerror_on_bad_result(rv)
 
     def bootloader(self):
@@ -759,8 +775,8 @@ class Device:
             self.open()
         return rc
 
-    def controller_firmware_program(self, data):
-        return self.run_from_bootloader(lambda b: b.firmware_program(data))
+    def controller_firmware_program(self, data, progress_cbk=None):
+        return self.run_from_bootloader(lambda b: b.firmware_program(data, progress_cbk))
 
     def calibration_program(self, data, is_factory=False):
         return self.run_from_bootloader(lambda b: b.calibration_program(data, is_factory))
