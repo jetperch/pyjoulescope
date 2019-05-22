@@ -15,6 +15,8 @@ This file contains the list of changes made to pyjoulescope.
 *   Fixed INFO record processing.
 *   Added event_callback_fn and added support to win32 driver.
 *   Improved win32 driver error handling & recovery.
+*   Promoted driver._info to driver.info.
+*   Improved documentation.
 
 
 ## 0.3.0
