@@ -17,6 +17,7 @@ This file contains the list of changes made to pyjoulescope.
 *   Improved win32 driver error handling & recovery.
 *   Promoted driver._info to driver.info.
 *   Improved documentation.
+*   Keep x_max in view range whenever streaming is active.
 
 
 ## 0.3.0

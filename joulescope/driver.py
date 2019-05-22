@@ -905,7 +905,14 @@ class View:
             log.warning('on_x_change(%s) unsupported', cmd)
             return
 
-        self.changed |= self.x_range != x_range
+        if self._device.is_streaming:
+            x_max = self.span.limits[1]
+            if x_range[1] < x_max:
+                x_shift = x_max - x_range[1]
+                x_range = [x_range[0] + x_shift, x_max]
+            x_range, self.samples_per, self.x = self.span.conform_discrete(x_range)
+
+        self.changed |= (self.x_range != x_range)
         self.clear()
         self.x_range = x_range
         log.info('changed=%s, length=%s, span=%s, range=%s, samples_per=%s',
