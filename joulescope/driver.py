@@ -95,6 +95,7 @@ class PacketType:
     SETTINGS = 1
     STATUS = 2
     EXTIO = 3
+    INFO = 4
 
 
 LOOPBACK_BUFFER_SIZE = 132
@@ -234,6 +235,19 @@ class Device:
             request=UsbdRequest.INFO,
             value=0, index=0, length=1024)
         if 0 != rv.result:  # firmware prior to 0.3
+            return None
+        if len(rv.data) < 8:
+            log.warning('info record too short')
+            return None
+        version, hdr_length, pdu_type = struct.unpack('<BBB', rv.data[:3])
+        if version != HOST_API_VERSION:
+            log.warning('info msg API version mismatch: %d != %d' % (version, HOST_API_VERSION))
+            return None
+        if pdu_type != PacketType.INFO:
+            log.warning('info msg pdu_type mismatch: %d != %d' % (pdu_type, PacketType.INFO))
+            return None
+        if hdr_length != len(rv.data):
+            log.warning('info msg length mismatch: %d != %d' % (hdr_length, len(rv.data)))
             return None
         try:
             return json.loads(rv.data[8:].decode('utf-8'))
