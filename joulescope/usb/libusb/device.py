@@ -507,6 +507,7 @@ class EndpointIn:
         self._process_fn = process_fn
 
         self._state = self.ST_IDLE
+        self._time_last = None
         self._transfers_free = []  # Transfer
         self._transfers_pending = []  # Transfer
         self.transfers_processed = 0
@@ -558,7 +559,6 @@ class EndpointIn:
             self._data_fn(None)  # indicate done with None
             self._state = self.ST_IDLE
             log.info('%s stop => idle', self)
-
 
     def _init(self):
         for i in range(self._config['transfer_count']):
@@ -685,7 +685,8 @@ class LibUsbDevice:
         except:
             self.close()
 
-    def open(self):
+    def open(self, event_callback_fn=None):
+        # todo support event_callback_fn on errors
         self.close()
         self._open()
         log.info('Configure device')

@@ -12,6 +12,9 @@ This file contains the list of changes made to pyjoulescope.
 *   Improved device thread error handling.
 *   Eliminated small WinUsb memory leak in normal disconnect case.
 *   Added progress callbacks for programming operations.
+*   Fixed INFO record processing.
+*   Added event_callback_fn and added support to win32 driver.
+*   Improved win32 driver error handling & recovery.
 
 
 ## 0.3.0

@@ -20,7 +20,12 @@ This module defines the USB backend.  Each target platform
 to this API.
 """
 
-from .core import ControlTransferResponse
+from enum import Enum
+
+
+class DeviceEvent(Enum):
+    UNDEFINED = 0
+    ERROR = 1  # an error that prevents this device from functioning, such as device removal
 
 
 class DeviceDriverApi:
@@ -38,10 +43,17 @@ class DeviceDriverApi:
         """
         raise NotImplementedError()
 
-    def open(self):
+    def open(self, event_callback_fn):
         """Open the USB device.
 
+        :param event_callback_fn: The function(event, message) to call on
+            asynchronous events, mostly to allow robust handling of device
+            errors.  "event" is one of the :class:`DeviceEvent` values,
+            and the message is a more detailed description of the event.
         :raise IOError: On failure.
+
+        The event_callback_fn may be called asynchronous and from other
+        threads.  The event_callback_fn must implement any thread safety.
         """
         raise NotImplementedError()
 

@@ -50,7 +50,8 @@ class DeviceThread:
         if cmd == 'status':
             cbk(self._device.status())
         elif cmd == 'open':
-            cbk(self._device.open())
+            event_callback_fn = args
+            cbk(self._device.open(event_callback_fn))
         elif cmd == 'close':
             cbk(self._device.close())
             return True
@@ -136,12 +137,12 @@ class DeviceThread:
         else:
             return str(self._device)
 
-    def open(self):
+    def open(self, event_callback_fn=None):
         self.close()
         log.info('open')
         self._thread = threading.Thread(name='usb_device', target=self.run)
         self._thread.start()
-        return self._post_block('open', None)
+        return self._post_block('open', event_callback_fn)
 
     def close(self):
         if self._thread is not None:

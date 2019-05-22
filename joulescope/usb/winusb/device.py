@@ -224,6 +224,7 @@ class EndpointIn:
         self._time_last = 0.0
 
         self._state = self.ST_IDLE
+        self.stop_code = 0
         self.byte_count_this = 0
         self.byte_count_total = 0
         self.transfer_count = 0
@@ -238,6 +239,7 @@ class EndpointIn:
     ST_STOPPING = 2
 
     def _open(self):
+        self.stop_code = 0
         self.event = kernel32.CreateEvent(
             None,   # default security
             True,   # manual reset
@@ -260,20 +262,28 @@ class EndpointIn:
     def _issue(self, ov):
         ov.reset()
         result = WinUsb_ReadPipe(self._winusb, self.pipe_id, ov.b, ov.size, None, ov.ptr)
-        if not result and (kernel32.GetLastError() != kernel32.ERROR_IO_PENDING):
-            raise RuntimeError(kernel32.get_last_error())
+        ec = kernel32.GetLastError()
+        if not result and (ec != kernel32.ERROR_IO_PENDING):
+            msg = 'EndpointIn %d issue failed: %s' % (self.pipe_id, kernel32.get_error_str(ec))
+            log.info(msg)
+            self._overlapped_free.append(ov)
+            self._halt(ec)
+            return True
         self._overlapped_pending.append(ov)
+        return False
 
     def _pend(self):
         while len(self._overlapped_free):
             ov = self._overlapped_free.pop(0)
-            self._issue(ov)
+            if self._issue(ov):
+                return True
+        return False
 
     def _expire(self):
         rv = False
         length_transferred = c_ulong(0)
         count = 0
-        while len(self._overlapped_pending):
+        while not rv and len(self._overlapped_pending):
             ov = self._overlapped_pending[0]
             if WinUsb_GetOverlappedResult(self._winusb, ov.ptr, byref(length_transferred), False):
                 ov = self._overlapped_pending.pop(0)
@@ -284,11 +294,19 @@ class EndpointIn:
                 if self._data_fn(ov.data[:length]):
                     log.info('EndpointIn %d terminated by data_fn', self.pipe_id)
                     rv = True
+                    self._halt(0)
                     self._overlapped_free.append(ov)
-                    break
-                self._issue(ov)
+                else:
+                    rv = self._issue(ov)
             else:
-                break
+                ec = kernel32.GetLastError()
+                if ec in [kernel32.ERROR_IO_INCOMPLETE, kernel32.ERROR_IO_PENDING]:
+                    break
+                ov = self._overlapped_pending.pop(0)
+                self._overlapped_free.append(ov)
+                log.warning('EndpointIn WinUsb_GetOverlappedResult fatal: %s', kernel32.get_error_str(ec))
+                rv = True
+                self._halt(ec)
         if count > self.transfer_expire_max:
             self.transfer_expire_max = count
         self._process_transfers += count
@@ -304,11 +322,18 @@ class EndpointIn:
                 ec = kernel32.GetLastError()
                 if ec == kernel32.ERROR_IO_OPERATION_ABORTED:
                     pass  # aborted as requested, no issue
-                elif ec in [kernel32.ERROR_FILE_NOT_FOUND, kernel32.ERROR_GEN_FAILURE]:
+                elif ec in [kernel32.ERROR_FILE_NOT_FOUND, kernel32.ERROR_GEN_FAILURE, kernel32.ERROR_DEVICE_NOT_CONNECTED]:
                     log.debug('cancel overlapped: %s', kernel32.get_last_error())
                 else:
                     log.warning('cancel overlapped: %s', kernel32.get_last_error())
             self._overlapped_free.append(ov)
+
+    def _halt(self, stop_code):
+        if self._state != self.ST_STOPPING:
+            self._state = self.ST_STOPPING
+            self._cancel()
+        if stop_code and 0 == self.stop_code:
+            self.stop_code = stop_code
 
     def process(self):
         """Process pending data.
@@ -318,11 +343,8 @@ class EndpointIn:
         if self._state != self.ST_RUNNING:
             return
         rv = self._expire()
-        if rv:
-            self._state = self.ST_STOPPING
-            self._cancel()
-        else:
-            self._pend()
+        if not rv:
+            rv = self._pend()
         return rv
 
     def process_signal(self):
@@ -384,12 +406,14 @@ class ControlTransferAsync:
         self._event = None
         self._commands = []  # list of pending control transfer commands
         self._time_start = None
+        self.stop_code = 0
 
     @property
     def event(self):
         return self._event
 
     def open(self):
+        self.stop_code = 0
         self._event = kernel32.CreateEvent(
             None,   # default security
             True,   # manual reset
@@ -402,11 +426,7 @@ class ControlTransferAsync:
 
     def close(self):
         self._commands, commands = [], self._commands
-
-        # cannot abort control pipe!  How to handle?
-        # WinUsb_AbortPipe(self._winusb, 0) => [87] The parameter is incorrect.
-        # WinUsb_AbortPipe(self._winusb, 1) => [87] The parameter is incorrect.
-
+        # cannot abort control pipe using WinUSB!
         commands_len = len(commands)
         if commands:
             command = commands.pop(0)
@@ -421,8 +441,14 @@ class ControlTransferAsync:
             if self._overlapped:
                 self._overlapped = None
         else:
-            # todo - fix memory leak: must handle device error with ongoing control transfer!
-            pass
+            pass  # defer to _close_event
+
+    def _close_event(self):
+        if self._event:
+            kernel32.CloseHandle(self._event)
+            self._event = None
+            if self._overlapped:
+                self._overlapped = None
 
     def pend(self, cbk_fn, setup_packet: usb_core.SetupPacket, buffer=None):
         """Pend an asynchronous Control Transfer.
@@ -431,7 +457,12 @@ class ControlTransferAsync:
             A :class:`usb_core.ControlTransferResponse` is the sole argument.
         :param setup_packet:
         :param buffer: The buffer (if length > 0) for write transactions.
+        :return: True on pending, False on error.
         """
+        if self.stop_code:
+            response = usb_core.ControlTransferResponse(setup_packet, self.stop_code, None)
+            cbk_fn(response)
+            return False
         command = [cbk_fn, setup_packet, buffer]
         was_empty = not bool(self._commands)
         self._commands.append(command)
@@ -459,6 +490,8 @@ class ControlTransferAsync:
         result = sanitize_boolean_return_code(result)
         self._time_start = time.time()
         if result != kernel32.ERROR_IO_PENDING:
+            if 0 == self.stop_code:
+                self.stop_code = result
             log.warning('ControlTransferAsync._issue %s', kernel32.get_error_str(result))
             response = usb_core.ControlTransferResponse(setup_packet, result, None)
             cbk_fn(response)
@@ -474,7 +507,7 @@ class ControlTransferAsync:
             rc = kernel32.GetLastError()
             if rc not in [kernel32.ERROR_IO_INCOMPLETE, kernel32.ERROR_IO_PENDING]:
                 kernel32.ResetEvent(self._event)
-            log.warning('ControlTransferAsync._finish result: %s', kernel32.get_error_str(rc))
+                log.warning('ControlTransferAsync._finish result: %s', kernel32.get_error_str(rc))
         else:
             kernel32.ResetEvent(self._event)
             rc = 0
@@ -501,7 +534,10 @@ class ControlTransferAsync:
         else:  # transfer is done!
             command = self._commands.pop(0)
             self._finish(command)
-            self._issue()
+            if 0 == self.stop_code:
+                self._issue()
+            else:
+                self._close_event()
 
 
 class WinUsbDevice:
@@ -515,6 +551,7 @@ class WinUsbDevice:
         self._endpoints = {}  # type: Dict[int, EndpointIn]
         self._event = None
         self._event_list = (HANDLE * kernel32.MAXIMUM_WAIT_OBJECTS)()
+        self._event_callback_fn = None
         self._control_transfer = ControlTransferAsync(self._winusb)
         self._update_event_list()
 
@@ -551,9 +588,10 @@ class WinUsbDevice:
             return '0000-0000'
         return parts[2]
 
-    def open(self):
+    def open(self, event_callback_fn=None):
         self.close()
         log.info('WinUsbDevice.open')
+        self._event_callback_fn = event_callback_fn
 
         # create event for self.signal()
         self._event = kernel32.CreateEvent(
@@ -562,27 +600,32 @@ class WinUsbDevice:
             False,  # not initially signalled
             None    # no name
         )
-        if self._event is None:
-            raise RuntimeError('could not create event')
 
-        self._file = kernel32.CreateFile(
-            self._path,
-            kernel32.GENERIC_WRITE | kernel32.GENERIC_READ,
-            kernel32.FILE_SHARE_WRITE | kernel32.FILE_SHARE_READ, 
-            None, 
-            kernel32.OPEN_EXISTING,
-            kernel32.FILE_ATTRIBUTE_NORMAL | kernel32.FILE_FLAG_OVERLAPPED, 
-            None)
+        try:
+            if self._event is None:
+                raise RuntimeError('could not create event')
 
-        if self._file == kernel32.INVALID_HANDLE_VALUE:
-            raise IOError('%s : open failed on invalid handle' % self)
-        result = WinUsb_Initialize(self._file, byref(self._winusb))
-        if result == 0:
-            raise IOError('%s : open failed %s' % (self, kernel32.get_last_error()))
-        log.info('is_high_speed = %s', self._is_high_speed)
-        log.info('interface_settings = %s', self._query_interface_settings(0))
-        self._control_transfer.open()
-        self._update_event_list()
+            self._file = kernel32.CreateFile(
+                self._path,
+                kernel32.GENERIC_WRITE | kernel32.GENERIC_READ,
+                kernel32.FILE_SHARE_WRITE | kernel32.FILE_SHARE_READ,
+                None,
+                kernel32.OPEN_EXISTING,
+                kernel32.FILE_ATTRIBUTE_NORMAL | kernel32.FILE_FLAG_OVERLAPPED,
+                None)
+
+            if self._file == kernel32.INVALID_HANDLE_VALUE:
+                raise IOError('%s : open failed on invalid handle' % self)
+            result = WinUsb_Initialize(self._file, byref(self._winusb))
+            if result == 0:
+                raise IOError('%s : open failed %s' % (self, kernel32.get_last_error()))
+            log.info('is_high_speed = %s', self._is_high_speed)
+            log.info('interface_settings = %s', self._query_interface_settings(0))
+            self._control_transfer.open()
+            self._update_event_list()
+        except Exception:
+            self.close()
+            raise
 
     def close(self):
         log.info('WinUsbDevice.close')
@@ -599,6 +642,7 @@ class WinUsbDevice:
         if self._event:
             kernel32.CloseHandle(self._event)
             self._event = None
+        self._event_callback_fn = None
 
     @property
     def _is_high_speed(self):
@@ -704,6 +748,10 @@ class WinUsbDevice:
                 if endpoint.process_signal():
                     stop_endpoint_ids.append(endpoint.pipe_id)
             for pipe_id in stop_endpoint_ids:
+                endpoint = self._endpoints.pop(pipe_id, None)
+                if endpoint.stop_code and self._event_callback_fn:
+                    msg = 'Endpoint pipe_id %d halted: %s' % (pipe_id, kernel32.get_error_str(endpoint.stop_code))
+                    self._event_callback_fn(1, msg)
                 self.read_stream_stop(pipe_id)
             self._control_transfer.process()
 

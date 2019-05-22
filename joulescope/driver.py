@@ -209,17 +209,28 @@ class Device:
         log.info('serial number = %s', serial_number)
         return serial_number
 
-    def open(self):
+    def open(self, event_callback_fn=None):
         """Open the device for use
 
+        :param event_callback_fn: The function(event, message) to call on
+            asynchronous events, mostly to allow robust handling of device
+            errors.  "event" is one of the :class:`DeviceEvent` values,
+            and the message is a more detailed description of the event.
+
         :raise IOError: on failure.
+
+        The event_callback_fn may be called asynchronous and from other
+        threads.  The event_callback_fn must implement any thread safety.
         """
-        self._usb.open()
+        self._usb.open(event_callback_fn)
         sb_len = self._sampling_frequency * STREAM_BUFFER_DURATION
         self.stream_buffer = StreamBuffer(sb_len, self._reductions)
-        info = self._info()
-        if info is not None:
-            log.info('info:\n%s', json.dumps(info, indent=2))
+        try:
+            info = self._info()
+            if info is not None:
+                log.info('info:\n%s', json.dumps(info, indent=2))
+        except Exception:
+            log.warning('could not fetch info record')
         self.calibration = self._calibration_read()
         self.view = View(self)
 
