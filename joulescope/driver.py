@@ -1,4 +1,4 @@
-# Copyright 2018 Jetperch LLC
+# Copyright 2018-2019 Jetperch LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -161,7 +161,13 @@ class Device:
             self.stream_buffer.callback = cbk
 
     def parameters(self, name=None):
-        """Get the list of :class:`joulescope.parameter.Parameter` instances"""
+        """Get the list of :class:`joulescope.parameter.Parameter` instances.
+
+        :param name: The optional name of the parameter to retrieve.
+            None (default) returns a list of all parameters.
+        :return: The list of all parameters.  If name is provided, then just
+            return that single parameters.
+        """
         if name is not None:
             for p in PARAMETERS:
                 if p.name == name:
@@ -196,7 +202,13 @@ class Device:
 
     @property
     def serial_number(self):
-        """Get the unique 16-byte LPC54608 serial number."""
+        """Get the unique 16-byte LPC54608 microcontroller serial number.
+
+        :return: The microcontroller serial number.
+
+        The serial number assigned during manufacturing is available using
+        self.info()['ctl']['hw']['sn_mfg'].
+        """
         rv = self._usb.control_transfer_in(
             'device', 'vendor',
             request=UsbdRequest.SERIAL_NUMBER,
@@ -226,7 +238,7 @@ class Device:
         sb_len = self._sampling_frequency * STREAM_BUFFER_DURATION
         self.stream_buffer = StreamBuffer(sb_len, self._reductions)
         try:
-            info = self._info()
+            info = self.info()
             if info is not None:
                 log.info('info:\n%s', json.dumps(info, indent=2))
         except Exception:
@@ -234,7 +246,7 @@ class Device:
         self.calibration = self._calibration_read()
         self.view = View(self)
 
-    def _info(self):
+    def info(self):
         """Get the device information structure.
 
         :return: The device information structure.
@@ -531,6 +543,12 @@ class Device:
             return np.hstack((i, v))
 
     def recording_start(self, filename=None):
+        """Begin recording to a file.
+
+        :param filename: The target filename or file-like object for the
+            recording.  None (default) constructs a filename in the
+            default path.
+        """
         self.recording_stop()
         log.info('recording_start(%s)', filename)
         if filename is None:
@@ -543,6 +561,7 @@ class Device:
         return True
 
     def recording_stop(self):
+        """Stop recording to a file."""
         if self._data_recorder is not None:
             log.info('recording_stop')
             self._data_recorder.close()
@@ -622,6 +641,10 @@ class Device:
         return status
 
     def status(self):
+        """Get the current device status.
+
+        :return: A dict containing status information.
+        """
         status = self._usb.status()
         status['driver'] = self._status()
         status['buffer'] = self.stream_buffer.status()
@@ -807,6 +830,15 @@ class Device:
         return self.run_from_bootloader(lambda b: b.calibration_program(data, is_factory))
 
     def enter_test_mode(self, index=None, value=None):
+        """Enter a custom test mode.
+
+        :param index: The test mode index.
+        :param value: The test mode value.
+
+        You probably should not be using this method.  You will not destroy
+        anything, but you will likely stop your Joulescope from working
+        normally until you unplug it.
+        """
         index = 0 if index is None else int(index)
         value = 0 if value is None else int(value)
         rv = self._usb.control_transfer_out(
@@ -814,7 +846,6 @@ class Device:
             index=index,
             value=value)
         _ioerror_on_bad_result(rv)
-
 
 
 class View:
