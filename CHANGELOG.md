@@ -6,7 +6,7 @@ This file contains the list of changes made to pyjoulescope.
 
 ## 0.3.1
 
-2019 May ??
+2019 June 3
 
 *   Added log messages for troubleshooting robustness issues.
 *   Improved device thread error handling.
@@ -18,6 +18,7 @@ This file contains the list of changes made to pyjoulescope.
 *   Promoted driver._info to driver.info.
 *   Improved documentation.
 *   Keep x_max in view range whenever streaming is active.
+*   Added view_time_to_sample_id.
 
 
 ## 0.3.0
