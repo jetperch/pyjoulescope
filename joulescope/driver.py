@@ -930,6 +930,14 @@ class View:
         delta = data_idx_view_end - self.data_idx
         return data_idx_view_end, sample_id_end, delta
 
+    def view_time_to_sample_id(self, t):
+        _, sample_id_end, _ = self._view()
+        x_min, x_max = self.x_range
+        if not x_min <= t <= x_max:
+            return None
+        s = sample_id_end - int((x_max - t) * self.sampling_frequency)
+        return s
+
     def update(self):
         buffer = self._device.stream_buffer
         length = len(self)
