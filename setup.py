@@ -53,7 +53,7 @@ extensions = [
 
 if USE_CYTHON:
     from Cython.Build import cythonize
-    extensions = cythonize(extensions)  # , annotate=True)
+    extensions = cythonize(extensions, compiler_directives={'language_level': '3'})  # , annotate=True)
 
 
 # Get the long description from the README file

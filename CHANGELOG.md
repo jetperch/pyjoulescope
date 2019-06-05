@@ -4,6 +4,14 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 0.3.2
+
+2019 June ?? (in development)
+
+*   Added StreamBuffer.stats_get to explicitly compute stats over a range.
+*   Migrated to cython language_level=3.
+
+
 ## 0.3.1
 
 2019 June 3

@@ -37,7 +37,7 @@ DEF PACKET_INDEX_MASK = 0xffff
 DEF PACKET_INDEX_WRAP = PACKET_INDEX_MASK + 1
 
 DEF REDUCTION_MAX = 20
-DEF SAMPLES_PER_PACKET = PACKET_PAYLOAD_SIZE / (2 * 2)
+DEF SAMPLES_PER_PACKET = PACKET_PAYLOAD_SIZE // (2 * 2)
 
 DEF RAW_SAMPLE_SZ = 2 * 2  # sizeof(uint16_t)
 DEF CAL_SAMPLE_SZ = 2 * 4  # sizeof(float)
@@ -150,13 +150,13 @@ cdef void stats_compute_end(float stats[STATS_FIELDS][STATS_VALUES],
     stats[2][1] = p_var * scale
 
 
-cdef uint32_t stats_compute_run(
+cdef uint64_t stats_compute_run(
         float stats[STATS_FIELDS][STATS_VALUES],
         float * data, uint32_t data_length,
         uint64_t sample_id, uint32_t length):
     cdef uint32_t idx = sample_id % data_length
     cdef uint32_t data_idx
-    cdef uint32_t counter = 0
+    cdef uint64_t counter = 0
     stats_compute_reset(stats)
     for i in range(length):
         data_idx = idx * 2
@@ -530,7 +530,7 @@ cdef class StreamBuffer:
         if 0 == r.enabled:
             return
         cdef uint32_t idx = self.reduction_index(r, 1)
-        memcpy(r.data + idx * sizeof(self.stats) / sizeof(float), self.stats, sizeof(self.stats))
+        memcpy(r.data + idx * sizeof(self.stats) // sizeof(float), self.stats, sizeof(self.stats))
         self.reduction_update_n(1, self.reductions[0].samples_per_step)
 
     cdef void stats_finalize(self):
@@ -736,6 +736,35 @@ cdef class StreamBuffer:
             return 0
         return 1
 
+    def stats_get(self, start, stop):
+        """Get exact statistics over the specified range.
+
+        :param start: The starting sample_id (inclusive).
+        :param stop: The ending sample_id (exclusive).
+        :return: The np.ndarray((3, 4), dtype=np.float32) data of
+            (fields, values) with
+            fields (current, voltage, power) and
+            values (mean, variance, min, max).
+        """
+        cdef uint64_t length
+        cdef uint64_t count
+        cdef float stats[STATS_FIELDS][STATS_VALUES]
+
+        # todo optimize for long lengths: use reductions
+        if start < 0 or stop < 0:
+            log.warning('sample_id < 0: %d, %d', start, stop)
+            return None
+        if not self.range_check(start, stop):
+            return None
+        length = stop - start
+        out = np.empty((STATS_FIELDS, STATS_VALUES), dtype=np.float32)
+        cdef np.ndarray[np.float32_t, ndim=2, mode = 'c'] out_c = out
+        count = stats_compute_run(stats, self.data_ptr, self.length, start, length)
+        if count != length:
+            return None
+        memcpy(out_c.data, stats, sizeof(stats))
+        return out
+
     cdef uint32_t _data_get(self, float * buffer, uint32_t buffer_samples,
                             int64_t start, int64_t stop, uint32_t increment):
         """Get the summarized statistics over a range.
@@ -751,7 +780,7 @@ cdef class StreamBuffer:
         cdef uint32_t idx
         cdef uint32_t data_offset
         cdef float stats[STATS_FIELDS][STATS_VALUES]
-        cdef uint32_t count
+        cdef uint64_t count
         cdef uint32_t fill_count = 0
         cdef uint32_t fill_count_tmp
         cdef uint32_t samples_per_step
@@ -766,18 +795,18 @@ cdef class StreamBuffer:
             fill_count = buffer_samples_orig
         elif start < 0:
             # round to floor, absolute value
-            fill_count_tmp = ((-start + increment - 1) / increment)
+            fill_count_tmp = ((-start + increment - 1) // increment)
             start += fill_count_tmp * increment
             #log.info('_data_get start < 0: %d [%d] => %d', start_orig, fill_count_tmp, start)
             fill_count += fill_count_tmp
 
-        start = (start / increment) * increment
-        stop = (stop / increment) * increment
+        start = (start // increment) * increment
+        stop = (stop // increment) * increment
         if not self.range_check(start, stop):
             return 0
 
         if (start + self.length) < self.device_sample_id:
-            fill_count_tmp = (self.device_sample_id - (start + self.length)) / increment
+            fill_count_tmp = (self.device_sample_id - (start + self.length)) // increment
             start += fill_count_tmp * increment
             #log.info('_data_get behind < 0: %d [%d] => %d', start_orig, fill_count_tmp, start)
             fill_count += fill_count_tmp
@@ -836,7 +865,7 @@ cdef class StreamBuffer:
             if n < 1:
                 raise RuntimeError('could not find reduction')
             n = n - 1
-            start = (start / samples_per_step) * samples_per_step
+            start = (start // samples_per_step) * samples_per_step
             while start + increment <= stop and buffer_samples:
                 length = <uint32_t> ((start + increment) / samples_per_step - start / samples_per_step)
                 idx_start = <uint32_t> ((start % self.length) / samples_per_step)

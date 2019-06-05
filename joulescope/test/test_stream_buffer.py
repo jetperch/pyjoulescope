@@ -120,3 +120,14 @@ class TestStreamBuffer(unittest.TestCase):
         data = b.data_get(0, 1, 1)
         self.assertEqual((1, 3, 4), data.shape)
         np.testing.assert_allclose([-20.0, -4.0, 80.0], data[0, :, 0])
+
+    def test_stats(self):
+        b = StreamBuffer(2000, [10, 10])
+        frame = usb_packet_factory(0, 1)
+        b.insert(frame)
+        b.process()
+        data = b.data_get(13, 29, 1)
+        s = b.stats_get(13, 29)
+        np.testing.assert_allclose(np.mean(data[:, 0, 0]), s[0][0])
+        np.testing.assert_allclose(np.var(data[:, 0, 0]), s[0][1])
+
