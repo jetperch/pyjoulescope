@@ -762,11 +762,13 @@ cdef class StreamBuffer:
             return 0
         return 1
 
-    def stats_get(self, start, stop):
+    def stats_get(self, start, stop, out=None):
         """Get exact statistics over the specified range.
 
         :param start: The starting sample_id (inclusive).
         :param stop: The ending sample_id (exclusive).
+        :param out: The optional output array.  None (default) creates
+            and outputs a new array.
         :return: The np.ndarray((3, 4), dtype=np.float32) data of
             (fields, values) with
             fields (current, voltage, power) and
@@ -790,7 +792,8 @@ cdef class StreamBuffer:
 
         stats_compute_reset(stats_accum)
         length = stop - start
-        out = np.empty((STATS_FIELDS, STATS_VALUES), dtype=np.float32)
+        if out is None:
+            out = np.empty((STATS_FIELDS, STATS_VALUES), dtype=np.float32)
         cdef np.ndarray[np.float32_t, ndim=2, mode = 'c'] out_c = out
 
         ranges = [[start, stop], [None, None]]
@@ -863,6 +866,7 @@ cdef class StreamBuffer:
         cdef int64_t end_gap
         cdef int64_t start_orig = start
         cdef int n
+        cdef np.ndarray[np.float32_t, ndim=2, mode = 'c'] out_c
 
         if stop + self.length < self.processed_sample_id:
             fill_count = buffer_samples_orig
@@ -873,8 +877,6 @@ cdef class StreamBuffer:
             #log.info('_data_get start < 0: %d [%d] => %d', start_orig, fill_count_tmp, start)
             fill_count += fill_count_tmp
 
-        start = (start // increment) * increment
-        stop = (stop // increment) * increment
         if not self.range_check(start, stop):
             return 0
 
@@ -928,22 +930,13 @@ cdef class StreamBuffer:
                 start += increment
                 buffer_samples -= 1
         else:
-            # use reductions
-            samples_per_step = 1
-            for n in range(REDUCTION_MAX):
-                samples_per_step_next = samples_per_step * self.reductions[n].samples_per_step
-                if not self.reductions[n].enabled or samples_per_step_next > increment:
-                    break
-                samples_per_step = samples_per_step_next
-            if n < 1:
-                raise RuntimeError('could not find reduction')
-            n = n - 1
-            start = (start // samples_per_step) * samples_per_step
+            # use reductions through stats_get
+            out = np.empty((STATS_FIELDS, STATS_VALUES), dtype=np.float32)
+            out_c = out
             while start + increment <= stop and buffer_samples:
-                length = <uint32_t> ((start + increment) / samples_per_step - start / samples_per_step)
-                idx_start = <uint32_t> ((start % self.length) / samples_per_step)
-                reduction_stats(&self.reductions[n], stats, idx_start, length)
-                memcpy(buffer, stats, sizeof(stats))
+                next_start = start + increment
+                self.stats_get(start, next_start, out)
+                memcpy(buffer, out_c.data, STATS_FLOATS_PER_SAMPLE * sizeof(float))
                 buffer += STATS_FLOATS_PER_SAMPLE
                 start += increment
                 buffer_samples -= 1
