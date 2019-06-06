@@ -121,13 +121,40 @@ class TestStreamBuffer(unittest.TestCase):
         self.assertEqual((1, 3, 4), data.shape)
         np.testing.assert_allclose([-20.0, -4.0, 80.0], data[0, :, 0])
 
-    def test_stats(self):
+    def stream_buffer_01(self):
         b = StreamBuffer(2000, [10, 10])
         frame = usb_packet_factory(0, 1)
         b.insert(frame)
         b.process()
-        data = b.data_get(13, 29, 1)
-        s = b.stats_get(13, 29)
-        np.testing.assert_allclose(np.mean(data[:, 0, 0]), s[0][0])
-        np.testing.assert_allclose(np.var(data[:, 0, 0]), s[0][1])
+        return b
 
+    def test_stats_direct(self):
+        b = self.stream_buffer_01()
+        s = b.stats_get(13, 13)
+        self.assertIsNone(s)
+        np.testing.assert_allclose(b.data_get(13, 14, 1)[0, 0, 0], b.stats_get(13, 14)[0, 0])
+        np.testing.assert_allclose(np.mean(b.data_get(13, 29, 1)[:, 0, 0]), b.stats_get(13, 29)[0, 0])
+
+    def test_stats_over_single_reduction_exact(self):
+        b = self.stream_buffer_01()
+        np.testing.assert_allclose(np.mean(b.data_get(10, 20, 1)[:, 0, 0]), b.stats_get(10, 20)[0, 0])
+
+    def test_stats_over_single_reduction_leading(self):
+        b = self.stream_buffer_01()
+        np.testing.assert_allclose(np.mean(b.data_get(9, 20, 1)[:, 0, 0]), b.stats_get(9, 20)[0, 0])
+        np.testing.assert_allclose(np.mean(b.data_get(8, 20, 1)[:, 0, 0]), b.stats_get(8, 20)[0, 0])
+
+    def test_stats_over_single_reduction_trailing(self):
+        b = self.stream_buffer_01()
+        np.testing.assert_allclose(np.mean(b.data_get(10, 21, 1)[:, 0, 0]), b.stats_get(10, 21)[0, 0])
+        np.testing.assert_allclose(np.mean(b.data_get(10, 22, 1)[:, 0, 0]), b.stats_get(10, 22)[0, 0])
+
+    def test_stats_over_single_reduction_extended(self):
+        b = self.stream_buffer_01()
+        np.testing.assert_allclose(np.mean(b.data_get(9, 21, 1)[:, 0, 0]), b.stats_get(9, 21)[0, 0])
+        np.testing.assert_allclose(np.mean(b.data_get(5, 25, 1)[:, 0, 0]), b.stats_get(5, 25)[0, 0])
+
+    def test_stats_over_single_reductions(self):
+        b = self.stream_buffer_01()
+        np.testing.assert_allclose(np.mean(b.data_get(9, 101, 1)[:, 0, 0]), b.stats_get(9, 101)[0, 0])
+        np.testing.assert_allclose(np.mean(b.data_get(5, 105, 1)[:, 0, 0]), b.stats_get(5, 105)[0, 0])

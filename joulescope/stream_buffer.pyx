@@ -36,7 +36,7 @@ DEF PACKET_PAYLOAD_SIZE = PACKET_TOTAL_SIZE - PACKET_HEADER_SIZE
 DEF PACKET_INDEX_MASK = 0xffff
 DEF PACKET_INDEX_WRAP = PACKET_INDEX_MASK + 1
 
-DEF REDUCTION_MAX = 20
+DEF REDUCTION_MAX = 5
 DEF SAMPLES_PER_PACKET = PACKET_PAYLOAD_SIZE // (2 * 2)
 
 DEF RAW_SAMPLE_SZ = 2 * 2  # sizeof(uint16_t)
@@ -75,6 +75,7 @@ cdef struct js_stream_buffer_calibration_s:
 cdef struct js_stream_buffer_reduction_s:
     int32_t enabled
     uint32_t samples_per_step
+    uint32_t samples_per_reduction_sample
     uint32_t sample_counter
     uint32_t length
     js_stream_buffer_cbk cbk_fn
@@ -168,6 +169,25 @@ cdef uint64_t stats_compute_run(
             idx = 0
     stats_compute_end(stats, data, data_length, sample_id, length, counter)
     return counter
+
+
+cdef uint64_t stats_combine(
+        float stats[STATS_FIELDS][STATS_VALUES],
+        uint64_t stats_sample_count,
+        float stats_merge[STATS_FIELDS][STATS_VALUES],
+        uint64_t stats_merge_sample_count):
+    cdef uint64_t total_count = stats_sample_count + stats_merge_sample_count
+    cdef float f1
+    for i in range(STATS_FIELDS):
+        f1 = stats_sample_count / total_count
+        f2 = 1.0 - f1
+        mean_new = f1 * stats[i][0] + f2 * stats_merge[i][0]
+        stats[i][1] = f1 * (stats[i][1] + (stats[i][0] - mean_new) ** 2) + \
+            f2 * (stats_merge[i][1] + (stats_merge[i][0] - mean_new) ** 2)
+        stats[i][0] = mean_new
+        stats[i][2] = min(stats[i][2], stats_merge[i][2])
+        stats[i][3] = max(stats[i][3], stats_merge[i][3])
+    return stats_sample_count + stats_merge_sample_count
 
 
 cdef uint32_t reduction_stats(js_stream_buffer_reduction_s * r,
@@ -311,6 +331,7 @@ cdef class StreamBuffer:
     cdef float *data_ptr    # data[length][2]  as i, v
     cdef js_stream_buffer_calibration_s cal
     cdef js_stream_buffer_reduction_s reductions[REDUCTION_MAX]
+    cdef uint32_t reduction_count
 
     cdef int32_t suppress_samples  # the total number of samples to suppress after range change
     cdef int32_t suppress_count  # the suppress counter, 1 = replace previous
@@ -334,6 +355,7 @@ cdef class StreamBuffer:
 
 
     def __cinit__(self, length, reductions):
+        cdef uint32_t r_samples = 1
         if length < SAMPLES_PER_PACKET:
             raise ValueError('length to small')
         if len(reductions) > REDUCTION_MAX:
@@ -363,12 +385,15 @@ cdef class StreamBuffer:
         cdef np.ndarray[np.float32_t, ndim=3, mode = 'c'] reduction_data_c
         sz = length
 
+
         for idx, rsamples in enumerate(reductions):
             sz = sz // rsamples
             r = &self.reductions[idx]
             r.enabled = 1
             r.samples_per_step = <uint32_t> rsamples
             r.length = sz
+            r_samples *= rsamples
+            r.samples_per_reduction_sample = r_samples
 
             d = np.empty((sz, STATS_FIELDS, STATS_VALUES), dtype=np.float32)
             d = np.ascontiguousarray(d, dtype=np.float32)
@@ -376,6 +401,7 @@ cdef class StreamBuffer:
             r.data = <float *> reduction_data_c.data
             self.reductions_data.append(d)
 
+        self.reduction_count = len(reductions)
         if len(reductions):
             self.reductions[len(reductions) - 1].cbk_fn = _on_cbk
             self.reductions[len(reductions) - 1].cbk_user_data = <void *> self
@@ -748,21 +774,68 @@ cdef class StreamBuffer:
         """
         cdef uint64_t length
         cdef uint64_t count
-        cdef float stats[STATS_FIELDS][STATS_VALUES]
+        cdef float stats_accum[STATS_FIELDS][STATS_VALUES]
+        cdef float stats_merge[STATS_FIELDS][STATS_VALUES]
+        cdef uint32_t samples_per_step
 
-        # todo optimize for long lengths: use reductions
+        # log.info('stats_get(%r, %r)', start, stop)
         if start < 0 or stop < 0:
             log.warning('sample_id < 0: %d, %d', start, stop)
             return None
         if not self.range_check(start, stop):
             return None
+        if stop <= start:
+            log.warning('stop <= start: %d <= %d', start, stop)
+            return None
+
+        stats_compute_reset(stats_accum)
         length = stop - start
         out = np.empty((STATS_FIELDS, STATS_VALUES), dtype=np.float32)
         cdef np.ndarray[np.float32_t, ndim=2, mode = 'c'] out_c = out
-        count = stats_compute_run(stats, self.data_ptr, self.length, start, length)
-        if count != length:
+
+        ranges = [[start, stop], [None, None]]
+
+        sample_count = 0
+        for n in range(self.reduction_count - 1, -1, -1):
+            samples_per_step = self.reductions[n].samples_per_reduction_sample
+            for idx, [r1, r2] in enumerate(ranges):
+                if r1 is None:
+                    continue
+                k1 = r1 // samples_per_step * samples_per_step
+                if k1 < r1:
+                    k1 += samples_per_step
+                k2 = (r2 // samples_per_step) * samples_per_step
+                if k1 < k2:  # we can use this reduction!
+                    # log.info('reduction %d on %d: %s to %s', n, idx, k1, k2)
+                    r_idx_start = <uint32_t> ((k1 % self.length) // samples_per_step)
+                    r_sample_length = k2 - k1
+                    r_idx_length = r_sample_length // samples_per_step
+                    reduction_stats(&self.reductions[n], stats_merge, r_idx_start, r_idx_length)
+                    sample_count = stats_combine(stats_accum, sample_count, stats_merge, r_sample_length)
+                    if idx == 0:
+                        if r1 == k1:
+                            ranges[idx] = [None, None]
+                        else:
+                            ranges[idx] = [r1, k1]
+                        if ranges[1][0] is None and k2 < r2:
+                            ranges[1] = [k2, r2]
+                    else:
+                        if r2 == k2:
+                            ranges[idx] = [None, None]
+                        else:
+                            ranges[idx] = [k2, r2]
+
+        # log.info('ranges = %r', ranges)
+        for r1, r2 in ranges:
+            if r1 is not None:
+                count = stats_compute_run(stats_merge, self.data_ptr, self.length, r1, r2 - r1)
+                # log.info('direct: %s to %s (%d + %d)', r1, r2, sample_count, count)
+                sample_count = stats_combine(stats_accum, sample_count, stats_merge, count)
+
+        if sample_count != (stop - start):
+            log.warning('internal stats error: %s != (%s - %s)', sample_count, stop, start)
             return None
-        memcpy(out_c.data, stats, sizeof(stats))
+        memcpy(out_c.data, stats_accum, sizeof(stats_accum))
         return out
 
     cdef uint32_t _data_get(self, float * buffer, uint32_t buffer_samples,
