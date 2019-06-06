@@ -831,13 +831,11 @@ cdef class StreamBuffer:
         # log.info('ranges = %r', ranges)
         for r1, r2 in ranges:
             if r1 is not None:
-                count = stats_compute_run(stats_merge, self.data_ptr, self.length, r1, r2 - r1)
+                r_sample_length = r2 - r1
+                count = stats_compute_run(stats_merge, self.data_ptr, self.length, r1, r_sample_length)
                 # log.info('direct: %s to %s (%d + %d)', r1, r2, sample_count, count)
                 sample_count = stats_combine(stats_accum, sample_count, stats_merge, count)
 
-        if sample_count != (stop - start):
-            log.warning('internal stats error: %s != (%s - %s)', sample_count, stop, start)
-            return None
         memcpy(out_c.data, stats_accum, sizeof(stats_accum))
         return out
 
