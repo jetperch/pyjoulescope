@@ -10,7 +10,8 @@ This file contains the list of changes made to pyjoulescope.
 
 *   Added StreamBuffer.stats_get to explicitly compute stats over a range.
 *   Migrated to cython language_level=3.
-*   Fixed error with statistics computation on NaN data.
+*   Fixed error with statistics computation on NaN data, visible in UI as 
+    min/max not being displayed correctly at some zoom levels.
 
 
 ## 0.3.1

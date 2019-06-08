@@ -931,11 +931,13 @@ class View:
         return data_idx_view_end, sample_id_end, delta
 
     def view_time_to_sample_id(self, t):
-        _, sample_id_end, _ = self._view()
-        x_min, x_max = self.x_range
-        if not x_min <= t <= x_max:
+        idx_start, idx_end = self._device.stream_buffer.sample_id_range
+        t_start, t_end = self.span.limits
+        if not t_start <= t <= t_end:
             return None
-        s = sample_id_end - int((x_max - t) * self.sampling_frequency)
+        dx_end = t_end - t
+        dx_idx_end = int(dx_end * self.sampling_frequency)
+        s = idx_end - dx_idx_end
         return s
 
     def update(self):
