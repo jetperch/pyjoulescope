@@ -552,7 +552,7 @@ class WinUsbDevice:
         self._event = None
         self._event_list = (HANDLE * kernel32.MAXIMUM_WAIT_OBJECTS)()
         self._event_callback_fn = None
-        self._control_transfer = ControlTransferAsync(self._winusb)
+        self._control_transfer = None
         self._update_event_list()
 
     def __str__(self):
@@ -568,14 +568,17 @@ class WinUsbDevice:
 
     def _update_event_list(self):
         self.event_list_count = 0
-        for event in [self._event, self._control_transfer.event]:
-            if event:
+
+        def _event_append(event):
+            if event is not None:
                 self._event_list[self.event_list_count] = event
                 self.event_list_count += 1
+
+        _event_append(self._event)
+        if self._control_transfer:
+            _event_append(self._control_transfer.event)
         for endpoint in self._endpoints.values():
-            if endpoint.event is not None:
-                self._event_list[self.event_list_count] = endpoint.event
-                self.event_list_count += 1
+            _event_append(endpoint.event)
 
     @property
     def path(self):
@@ -621,6 +624,7 @@ class WinUsbDevice:
                 raise IOError('%s : open failed %s' % (self, kernel32.get_last_error()))
             log.info('is_high_speed = %s', self._is_high_speed)
             log.info('interface_settings = %s', self._query_interface_settings(0))
+            self._control_transfer = ControlTransferAsync(self._winusb)
             self._control_transfer.open()
             self._update_event_list()
         except Exception:
@@ -632,7 +636,9 @@ class WinUsbDevice:
         for endpoint in self._endpoints.values():
             endpoint.stop()
         self._endpoints.clear()
-        self._control_transfer.close()
+        if self._control_transfer is not None:
+            self._control_transfer.close()
+            self._control_transfer = None
         if self._file is not None:
             WinUsb_Free(self._winusb)
             self._winusb = HANDLE()
