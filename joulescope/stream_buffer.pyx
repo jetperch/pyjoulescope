@@ -178,6 +178,9 @@ cdef uint64_t stats_combine(
         uint64_t stats_merge_sample_count):
     cdef uint64_t total_count = stats_sample_count + stats_merge_sample_count
     cdef float f1
+    if 0 == total_count:
+        stats_compute_reset(stats)
+        return total_count
     for i in range(STATS_FIELDS):
         f1 = stats_sample_count / total_count
         f2 = 1.0 - f1
@@ -296,6 +299,45 @@ def reduction_downsample(reduction, idx_start, idx_stop, increment):
     cdef float * out_ptr = <float *> out_c.data
     _reduction_downsample(&r_inst, out_ptr, idx_start, idx_stop, increment)
     return out
+
+
+
+cdef class Statistics:
+
+    cdef float stats[STATS_FIELDS][STATS_VALUES]
+    cdef uint64_t length
+
+    def __cinit__(self):
+        stats_compute_reset(self.stats)
+        self.length = 0
+
+    def __init__(self, length=None, stats=None):
+        if length is not None and stats is not None:
+            self._init(stats)
+            self.length = length
+
+    def __len__(self):
+        return self.length
+
+    cdef _init(self, stats):
+        cdef np.ndarray[np.float32_t, ndim=2, mode = 'c'] stats_c = stats
+        cdef float * stats_ptr = <float *> stats_c.data
+        memcpy(self.stats, stats_ptr, sizeof(self.stats))
+
+    def combine(self, other: Statistics):
+        self.length = stats_combine(self.stats, self.length, other.stats, other.length)
+        return self
+
+    cdef _value(self):
+        out = np.empty((3, 4), dtype=np.float32)
+        cdef np.ndarray[np.float32_t, ndim=2, mode = 'c'] out_c = out
+        cdef float * out_ptr = <float *> out_c.data
+        memcpy(out_ptr, self.stats, sizeof(self.stats))
+        return out
+
+    @property
+    def value(self):
+        return self._value()
 
 
 cdef void cal_init(js_stream_buffer_calibration_s * self):
@@ -1135,3 +1177,43 @@ cpdef usb_packet_factory_signal(packet_index, count=None, samples_total=None):
             frame[z + 2] = vj & 0xff
             frame[z + 3] = (vj >> 8) & 0xff
     return frame
+
+
+def stats_to_api(stats, t_start, t_stop):
+    data = {
+        'time': {
+            'range': [t_start, t_stop],
+            'delta': t_stop - t_start,
+            'units': 's',  # seconds
+        },
+    }
+    if stats is None:
+        data['signals'] = {}
+    else:
+        data['signals'] = {
+            'current': {
+                'statistics': {},
+                'units': 'A',  # ampere
+                'integral_units': 'C',  # coulomb
+            },
+            'voltage': {
+                'statistics': {},
+                'units': 'V',  # volt
+                'integral_units': None,
+            },
+            'power': {
+                'statistics': {},
+                'units': 'W',  # watt
+                'integral_units': 'J',  # joule
+            },
+        }
+
+        for i, field in enumerate(['current', 'voltage', 'power']):
+            v = data['signals'][field]['statistics']
+            v['μ'] = float(stats[i, 0])
+            v['σ'] = float(np.sqrt(stats[i, 1]))
+            v['min'] = float(stats[i, 2])
+            v['max'] = float(stats[i, 3])
+            v['p2p'] = v['max'] - v['min']
+
+    return data

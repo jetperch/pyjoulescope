@@ -8,11 +8,12 @@ This file contains the list of changes made to pyjoulescope.
 
 2019 June ?? (in development)
 
-*   Create new ControlTransfer instance each time WinUsbDevice is opened.
+*   Create a new ControlTransfer instance each time WinUsbDevice is opened.
 *   Added StreamBuffer.stats_get to explicitly compute stats over a range.
 *   Migrated to cython language_level=3.
 *   Fixed error with statistics computation on NaN data, visible in UI as 
     min/max not being displayed correctly at some zoom levels.
+*   Refactored statistics and added statistics_get to DataReader.
 
 
 ## 0.3.1

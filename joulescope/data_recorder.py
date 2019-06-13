@@ -15,7 +15,7 @@
 from . import datafile
 from joulescope import JOULESCOPE_DIR
 from joulescope.calibration import Calibration
-from joulescope.stream_buffer import reduction_downsample
+from joulescope.stream_buffer import reduction_downsample, Statistics, stats_to_api
 import json
 import numpy as np
 import datetime
@@ -282,7 +282,7 @@ class DataReader:
         idx_end = idx_start + self.footer['size']
         if increment is not None:
             idx_end = ((idx_end + increment - 1) // increment) * increment
-        log.info('[%d, %d] : [%d, %d]', start, stop, idx_start, idx_end)
+        log.debug('[%d, %d] : [%d, %d]', start, stop, idx_start, idx_end)
         if not idx_start <= start < idx_end:
             raise ValueError('start out of range: %d <= %d < %d' % (idx_start, start, idx_end))
         if not idx_start <= stop <= idx_end:
@@ -416,12 +416,67 @@ class DataReader:
             out[out_idx:(out_idx + copy_len), :, :] = data[r_idx_start:r_idx_stop, :, :]
             out_idx += copy_len
             r_idx = r_idx_next
-            if r_idx_next > r_stop:
+            if r_idx_next >= r_stop:
                 break
         if out_idx != length:
             log.warning('DataReader length mismatch: out_idx=%s, length=%s', out_idx, length)
             length = min(out_idx, length)
         return out[:length, :]
+
+    def _get_reduction_stats(self, start, stop):
+        """Get statistics over the reduction
+
+        :param start: The starting sample identifier (inclusive).
+        :param stop: The ending sample identifier (exclusive).
+        :return: The tuple of ((sample_start, sample_stop), :class:`Statistics`).
+        """
+        log.debug('_get_reduction_stats(%s, %s)', start, stop)
+        s = Statistics()
+        sz = self.config['samples_per_reduction']
+        incr = self.config['samples_per_block'] // sz
+        r_start = start // sz
+        if (r_start * sz) < start:
+            r_start += 1
+        r_stop = stop // sz
+        if r_start >= r_stop:  # use the reductions
+            s_start = r_start * sz
+            return (s_start, s_start), s
+        r_idx = 0
+
+        self._fh.seek(self._data_start_position)
+        if self._f.advance() != datafile.TAG_COLLECTION_START:
+            raise ValueError('data section must be single collection')
+        while True:
+            tag, _ = self._f.peek_tag_length()
+            if tag is None or tag == datafile.TAG_COLLECTION_END:
+                break
+            elif tag != datafile.TAG_COLLECTION_START:
+                raise ValueError('invalid file format: not collection start')
+            r_idx_next = r_idx + incr
+            if r_start >= r_idx_next:
+                self._f.skip()
+                r_idx = r_idx_next
+                continue
+            self._f.collection_goto_end()
+            tag, value = next(self._f)
+            if tag != datafile.TAG_COLLECTION_END:
+                raise ValueError('invalid file format: not collection end')
+            data = np.frombuffer(value, dtype=np.float32).reshape((-1, 3, 4))
+            r_idx_start = 0
+            r_idx_stop = incr
+            if r_idx < r_start:
+                r_idx_start = r_start - r_idx
+            if r_idx_next > r_stop:
+                r_idx_stop = r_stop - r_idx
+            if r_idx_stop > len(data):
+                r_idx_stop = len(data)
+            length = r_idx_stop - r_idx_start
+            r = reduction_downsample(data, r_idx_start, r_idx_stop, length)
+            s.combine(Statistics(length=length * sz, stats=r[0, :, :]))
+            r_idx = r_idx_next
+            if r_idx_next >= r_stop:
+                break
+        return (r_start * sz, r_stop * sz), s
 
     def get_calibrated(self, start=None, stop=None):
         """Get the calibrated data (no statistics).
@@ -454,7 +509,7 @@ class DataReader:
             stop = r_stop
         if increment is None:
             increment = 1
-        log.info('DataReader.get(start=%r,stop=%r,increment=%r)', start, stop, increment)
+        log.debug('DataReader.get(start=%r,stop=%r,increment=%r)', start, stop, increment)
         if self._fh is None:
             raise IOError('file not open')
         increment = max(1, int(np.round(increment)))
@@ -479,9 +534,7 @@ class DataReader:
         elif increment > self.config['samples_per_reduction']:
             r_out = self.get_reduction(start, stop)
             increment = int(increment / self.config['samples_per_reduction'])
-            log.info('reduction_downsample(len=%s,increment=%r)', len(r_out), increment)
             out = reduction_downsample(r_out, 0, len(r_out), increment)
-            log.info('reduction_downsample done')
         else:
             z = self.raw(start, stop)
             i, v, _ = self.calibration.transform(z)
@@ -503,7 +556,6 @@ class DataReader:
                                                 np.amin(p_view, axis=0), np.amax(p_view, axis=0))).T
                 else:
                     out[idx, :, :] = np.full((1, 3, 4), np.nan, dtype=np.float32)
-
         return out
 
     def summary_string(self):
@@ -512,3 +564,32 @@ class DataReader:
         for field in config_fields:
             s.append('    %s = %r' % (field, self.config[field]))
         return '\n'.join(s)
+
+    def statistics_get(self, t1, t2):
+        """Get the statistics for the collected sample data over a time range.
+
+        :param t1: The starting time in seconds relative to the streaming start time.
+        :param t2: The ending time in seconds.
+        :return: The statistics data structure.  See :meth:`joulescope.driver.Driver.statistics_get`
+            for details.
+        """
+        log.debug('statistics_get(%s, %s)', t1, t2)
+        s1 = int(t1 * self.sampling_frequency)
+        s2 = int(t2 * self.sampling_frequency)
+        s_min, s_max = self.sample_id_range
+        if s1 < s_min or s2 < s_min or s1 > s_max or s2 > s_max:
+            return None
+
+        (k1, k2), s = self._get_reduction_stats(s1, s2)
+        if s1 < k1:
+            length = k1 - s1
+            s_start = self.get(s1, k1, increment=length)
+            s.combine(Statistics(length=length, stats=s_start[0, :, :]))
+        if s2 > k2:
+            length = s2 - k2
+            s_stop = self.get(k2, s2, increment=length)
+            s.combine(Statistics(length=length, stats=s_stop[0, :, :]))
+
+        t_start = s1 / self.sampling_frequency
+        t_stop = s2 / self.sampling_frequency
+        return stats_to_api(s.value, t_start, t_stop)

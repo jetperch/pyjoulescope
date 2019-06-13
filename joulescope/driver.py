@@ -20,7 +20,7 @@ from .parameters_v1 import PARAMETERS, PARAMETERS_DICT, name_to_value, value_to_
 from . import datafile
 from . import bootloader
 from . data_recorder import DataRecorder, construct_record_filename
-from joulescope.stream_buffer import StreamBuffer
+from joulescope.stream_buffer import StreamBuffer, stats_to_api
 from joulescope.calibration import Calibration
 import struct
 import copy
@@ -724,6 +724,65 @@ class Device:
         for key, value in status.items():
             value['name'] = key
         return status
+
+    def statistics_get(self, t1, t2):
+        """Get the statistics for the collected sample data over a time range.
+
+        :param t1: The starting time in seconds relative to the streaming start time.
+        :param t2: The ending time in seconds.
+        :return: The statistics data structure.  Here is an example:
+
+            {
+              "time": {
+                "range": [4.2224105, 4.7224105],
+                "delta": 0.5,
+                "units": "s"
+              },
+              "signals": {
+                "current": {
+                  "statistics": {
+                    "μ": 1.1410409683776379e-07,
+                    "σ": 3.153094851882088e-08,
+                    "min": 2.4002097531727884e-10,
+                    "max": 2.77493541034346e-07,
+                    "p2p": 2.772535200590287e-07
+                  },
+                  "units": "A",
+                  "integral_units": "C"
+                },
+                "voltage": {
+                  "statistics": {
+                    "μ": 3.2984893321990967,
+                    "σ": 0.0010323672322556376,
+                    "min": 3.293551445007324,
+                    "max": 3.3026282787323,
+                    "p2p": 0.009076833724975586
+                  },
+                  "units": "V",
+                  "integral_units": null
+                },
+                "power": {
+                  "statistics": {
+                    "μ": 3.763720144434046e-07,
+                    "σ": 1.0400773930996365e-07,
+                    "min": 7.916107769290193e-10,
+                    "max": 9.155134534921672e-07,
+                    "p2p": 9.147218427152382e-07
+                  },
+                  "units": "W",
+                  "integral_units": "J"
+                }
+              }
+            }
+        """
+        v = self.view
+        s1 = v.view_time_to_sample_id(t1)
+        s2 = v.view_time_to_sample_id(t2)
+        log.info('buffer %s, %s => %s, %s : %s', t1, t2, s1, s2, v.span)
+        d = self.stream_buffer.stats_get(start=s1, stop=s2)
+        t_start = s1 / self.sampling_frequency
+        t_stop = s2 / self.sampling_frequency
+        return stats_to_api(d, t_start, t_stop)
 
     def sensor_firmware_program(self, data, progress_cbk=None):
         """Program the sensor microcontroller firmware

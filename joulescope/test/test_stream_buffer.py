@@ -19,13 +19,61 @@ Test stream buffer
 import unittest
 import numpy as np
 import pyximport; pyximport.install(setup_args={'include_dirs': np.get_include()})
-from joulescope.stream_buffer import StreamBuffer, usb_packet_factory
+from joulescope.stream_buffer import Statistics, StreamBuffer, usb_packet_factory
 
 import logging
 logging.basicConfig(level=logging.DEBUG)
 
 
 SAMPLES_PER = 126
+
+
+class TestStatistics(unittest.TestCase):
+
+    def test_initialize_empty(self):
+        s = Statistics()
+        self.assertEqual(0, len(s))
+        self.assertEqual((3, 4), s.value.shape)
+        np.testing.assert_allclose(0, s.value[:, 0])
+        np.testing.assert_allclose(0, s.value[:, 1])
+
+    def test_initialize(self):
+        d = np.arange(3*4, dtype=np.float32).reshape((3, 4))
+        s = Statistics(length=10, stats=d)
+        self.assertEqual(10, len(s))
+        np.testing.assert_allclose(d, s.value)
+
+    def test_combine(self):
+        d1 = np.array([[1, 0, 1, 1], [2, 0, 2, 2], [3, 0, 3, 3]], dtype=np.float32)
+        d2 = np.array([[3, 0, 3, 3], [4, 0, 4, 4], [5, 0, 5, 5]], dtype=np.float32)
+        e = np.array([[2, 1, 1, 3], [3, 1, 2, 4], [4, 1, 3, 5]], dtype=np.float32)
+        s1 = Statistics(length=1, stats=d1)
+        s2 = Statistics(length=1, stats=d2)
+        s1.combine(s2)
+        self.assertEqual(2, len(s1))
+        np.testing.assert_allclose(e, s1.value)
+
+    def test_combine_other_empty(self):
+        d = np.array([[1, 0, 1, 1], [2, 0, 2, 2], [3, 0, 3, 3]], dtype=np.float32)
+        s1 = Statistics(length=10, stats=d)
+        s2 = Statistics()
+        s1.combine(s2)
+        self.assertEqual(10, len(s1))
+        np.testing.assert_allclose(d, s1.value)
+
+    def test_combine_self_empty(self):
+        d = np.array([[1, 0, 1, 1], [2, 0, 2, 2], [3, 0, 3, 3]], dtype=np.float32)
+        s1 = Statistics()
+        s2 = Statistics(length=10, stats=d)
+        s1.combine(s2)
+        self.assertEqual(10, len(s1))
+        np.testing.assert_allclose(d, s1.value)
+
+    def test_combine_both_empty(self):
+        s1 = Statistics()
+        s2 = Statistics()
+        s1.combine(s2)
+        self.assertEqual(0, len(s1))
 
 
 class TestStreamBuffer(unittest.TestCase):
