@@ -1032,8 +1032,8 @@ class View:
         start_idx = (data_idx_view_end - length) * self.samples_per
         return buffer.data_get(start_idx, sample_id_end)
 
-    def raw_get(self, *args, **kwargs):
-        return self._device.stream_buffer.raw_get(*args, **kwargs)
+    def raw_get(self, start=None, stop=None):
+        return self._device.stream_buffer.raw_get(start=start, stop=stop)
 
     def samples_get(self, start=None, stop=None):
         data = self._device.stream_buffer.data_get(start=start, stop=stop)

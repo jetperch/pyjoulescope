@@ -4,9 +4,9 @@
 This file contains the list of changes made to pyjoulescope.
 
 
-## 0.3.2
+## 0.4.0
 
-2019 June ?? (in development)
+2019 Jun 20
 
 *   Create a new ControlTransfer instance each time WinUsbDevice is opened.
 *   Added StreamBuffer.stats_get to explicitly compute stats over a range.
@@ -14,11 +14,12 @@ This file contains the list of changes made to pyjoulescope.
 *   Fixed error with statistics computation on NaN data, visible in UI as 
     min/max not being displayed correctly at some zoom levels.
 *   Refactored statistics and added statistics_get to DataReader.
+*   Unified View API for the physical device and recordings for UI.
 
 
 ## 0.3.1
 
-2019 June 3
+2019 Jun 3
 
 *   Added log messages for troubleshooting robustness issues.
 *   Improved device thread error handling.
