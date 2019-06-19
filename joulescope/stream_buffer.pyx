@@ -674,8 +674,21 @@ cdef class StreamBuffer:
             self.device_sample_id = sample_id + SAMPLES_PER_PACKET
             self.packet_index += 1
 
+    cdef _check_stop(self):
+        cdef bint duration_stop = self.device_sample_id >= self._sample_id_max
+        cdef bint contiguous_stop = self.contiguous_count >= self._contiguous_max
+        rv = duration_stop or contiguous_stop
+        if rv:
+            if duration_stop:
+                log.info('insert causing duration stop %d >= %d',
+                         self.device_sample_id, self._sample_id_max)
+            elif duration_stop:
+                log.info('insert causing contiguous stop %d >= %d',
+                         self.contiguous_count, self._contiguous_max)
+        return rv
+
     cpdef insert(self, data):
-        """Insert new data into the buffer.
+        """Insert new device USB data into the buffer.
 
         :param data: The new data to insert.
         :return: False to continue streaming, True to end.
@@ -688,17 +701,35 @@ cdef class StreamBuffer:
             self._insert_usb_bulk(data_ptr, len(data))
         else:
             self._insert_usb_bulk(data, len(data))
-        cdef bint duration_stop = self.device_sample_id >= self._sample_id_max
-        cdef bint contiguous_stop = self.contiguous_count >= self._contiguous_max
-        rv = duration_stop or contiguous_stop
-        if rv:
-            if duration_stop:
-                log.info('insert causing duration stop %d >= %d',
-                         self.device_sample_id, self._sample_id_max)
-            elif duration_stop:
-                log.info('insert causing contiguous stop %d >= %d',
-                         self.contiguous_count, self._contiguous_max)
-        return rv
+        return self._check_stop()
+
+    cpdef insert_raw(self, data):
+        """Insert raw data into the buffer
+        
+        :param data: The np.array of np.uint16 data to insert.
+        :return: False to continue streaming, True to end.
+        """
+        if data.dtype != np.uint16:
+            raise ValueError('raw data must np np.uint16 array')
+        data = data.reshape((-1, ))
+        sample_count = len(data)
+        if sample_count % 2:
+            raise ValueError('raw data must be multiples of 2 16-bit values')
+        sample_count = sample_count // 2
+        log.info('insert_raw %d', sample_count)
+        idx = self.device_sample_id % self.length
+        sample_count_remaining = sample_count
+        while idx + sample_count_remaining > self.length:
+            samples_to_end = self.length - idx
+            self.raw[idx * 2:] = data[:samples_to_end * 2]
+            data = data[samples_to_end * 2:]
+            idx = 0
+            sample_count_remaining -= samples_to_end
+        if sample_count_remaining:
+            self.raw[idx * 2: (idx + sample_count_remaining) * 2] = data
+        self.contiguous_count += sample_count
+        self.device_sample_id += sample_count
+        return self._check_stop()
 
     cdef void _process(self):
         cdef uint32_t idx_start

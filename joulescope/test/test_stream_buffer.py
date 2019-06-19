@@ -206,3 +206,21 @@ class TestStreamBuffer(unittest.TestCase):
         b = self.stream_buffer_01()
         np.testing.assert_allclose(np.mean(b.data_get(9, 101, 1)[:, 0, 0]), b.stats_get(9, 101)[0, 0])
         np.testing.assert_allclose(np.mean(b.data_get(5, 105, 1)[:, 0, 0]), b.stats_get(5, 105)[0, 0])
+
+    def test_insert_raw_simple(self):
+        b = StreamBuffer(1000, [100, 100, 100])
+        expect = np.arange(126 * 2, dtype=np.uint16).reshape((126, 2))
+        b.insert_raw(np.left_shift(expect, 2))
+        b.process()
+        data = b.data_get(0, 126)
+        np.testing.assert_allclose(expect[:, 0], data[:, 0, 0])
+
+    def test_insert_raw_wrap(self):
+        b = StreamBuffer(200, [])
+        expect = np.arange(250 * 2, dtype=np.uint16).reshape((250, 2))
+        b.insert_raw(np.left_shift(expect[:100], 2))
+        b.process()
+        b.insert_raw(np.left_shift(expect[100:], 2))
+        b.process()
+        data = b.data_get(50, 250)
+        np.testing.assert_allclose(expect[50:, 0], data[:, 0, 0])
