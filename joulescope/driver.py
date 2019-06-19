@@ -776,8 +776,8 @@ class Device:
             }
         """
         v = self.view
-        s1 = v.view_time_to_sample_id(t1)
-        s2 = v.view_time_to_sample_id(t2)
+        s1 = v.time_to_sample_id(t1)
+        s2 = v.time_to_sample_id(t2)
         log.info('buffer %s, %s => %s, %s : %s', t1, t2, s1, s2, v.span)
         d = self.stream_buffer.stats_get(start=s1, stop=s2)
         t_start = s1 / self.sampling_frequency
@@ -989,7 +989,7 @@ class View:
         delta = data_idx_view_end - self.data_idx
         return data_idx_view_end, sample_id_end, delta
 
-    def view_time_to_sample_id(self, t):
+    def time_to_sample_id(self, t):
         idx_start, idx_end = self._device.stream_buffer.sample_id_range
         t_start, t_end = self.span.limits
         if not t_start <= t <= t_end:
@@ -1027,6 +1027,22 @@ class View:
         data_idx_view_end, sample_id_end, delta = self._view()
         start_idx = (data_idx_view_end - length) * self.samples_per
         return buffer.data_get(start_idx, sample_id_end)
+
+    def raw_get(self, *args, **kwargs):
+        return self._device.stream_buffer.raw_get(*args, **kwargs)
+
+    def samples_get(self, start=None, stop=None):
+        data = self._device.stream_buffer.data_get(start=start, stop=stop)
+        return {
+            'current': {
+                'value': data[:, 0, 0],
+                'units': 'A',
+            },
+            'voltage': {
+                'value': data[:, 1, 0],
+                'units': 'V',
+            }
+        }
 
 
 def scan(name: str=None) -> List[Device]:

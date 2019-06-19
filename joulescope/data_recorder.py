@@ -565,6 +565,13 @@ class DataReader:
             s.append('    %s = %r' % (field, self.config[field]))
         return '\n'.join(s)
 
+    def time_to_sample_id(self, t):
+        s_min, s_max = self.sample_id_range
+        s = int(t * self.sampling_frequency)
+        if s < s_min or s > s_max:
+            return None
+        return s
+
     def statistics_get(self, t1, t2):
         """Get the statistics for the collected sample data over a time range.
 
@@ -574,10 +581,9 @@ class DataReader:
             for details.
         """
         log.debug('statistics_get(%s, %s)', t1, t2)
-        s1 = int(t1 * self.sampling_frequency)
-        s2 = int(t2 * self.sampling_frequency)
-        s_min, s_max = self.sample_id_range
-        if s1 < s_min or s2 < s_min or s1 > s_max or s2 > s_max:
+        s1 = self.time_to_sample_id(t1)
+        s2 = self.time_to_sample_id(t2)
+        if s1 is None or s2 is None:
             return None
 
         (k1, k2), s = self._get_reduction_stats(s1, s2)
