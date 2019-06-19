@@ -931,6 +931,10 @@ class View:
     def sampling_frequency(self):
         return self._device.sampling_frequency
 
+    @property
+    def calibration(self):
+        return self._device.calibration
+
     def clear(self):
         self.changed = True
         self.data_idx = 0
