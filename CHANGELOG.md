@@ -4,6 +4,13 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 0.4.1
+
+2019 Jun 20
+
+*   Added CREDITS.html file.
+
+
 ## 0.4.0
 
 2019 Jun 20
