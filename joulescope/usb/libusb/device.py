@@ -420,8 +420,11 @@ class ControlTransferAsync:
         else:
             log.info('ControlTransferAsync.close %d', len(commands))
         for cbk_fn, setup_packet, _ in commands:
-            response = usb_core.ControlTransferResponse(setup_packet, TransferStatus.CANCELLED, None)
-            cbk_fn(response)
+            try:
+                response = usb_core.ControlTransferResponse(setup_packet, TransferStatus.CANCELLED, None)
+                cbk_fn(response)
+            except Exception:
+                log.exception('while closing in callback')
 
     def pend(self, cbk_fn, setup_packet: usb_core.SetupPacket, buffer=None):
         """Pend an asynchronous Control Transfer.
@@ -639,7 +642,11 @@ class EndpointIn:
 
 def may_raise_ioerror(rv, msg):
     if 0 != rv:
-        raise IOError(msg + (' [%d]' % (rv, )))
+        s = msg + (' [%d]' % (rv, ))
+        log.warning(s)
+        raise IOError(s)
+    else:
+        log.debug('%s: success', msg.split(' ')[0])
 
 
 class LibUsbDevice:
@@ -658,45 +665,52 @@ class LibUsbDevice:
     def _open(self):
         log.info('open: start %s', self._path)
         self._ctx = _libusb_context_create()
+        descriptor = _libusb_device_descriptor()
+        devices = POINTER(c_void_p)()
+        vid, pid, serial_number = _path_split(self._path)
+        sz = _lib.libusb_get_device_list(self._ctx, pointer(devices))
         try:
-            descriptor = _libusb_device_descriptor()
-            devices = POINTER(c_void_p)()
-            vid, pid, serial_number = _path_split(self._path)
-            sz = _lib.libusb_get_device_list(self._ctx, pointer(devices))
-            try:
-                for idx in range(sz):
-                    device = devices[idx]
-                    if _lib.libusb_get_device_descriptor(device, pointer(descriptor)):
+            for idx in range(sz):
+                device = devices[idx]
+                if _lib.libusb_get_device_descriptor(device, pointer(descriptor)):
+                    continue
+                if vid == descriptor.idVendor and pid == descriptor.idProduct:
+                    dh = c_void_p(None)
+                    rv = _lib.libusb_open(device, dh)
+                    if rv < 0:
+                        log.info('Could not open device: %04x/%04x', vid, pid)
                         continue
-                    if vid == descriptor.idVendor and pid == descriptor.idProduct:
-                        dh = c_void_p(None)
-                        rv = _lib.libusb_open(device, dh)
-                        if rv < 0:
-                            log.info('Could not open device: %04x/%04x', vid, pid)
-                            continue
-                        if serial_number == _get_string_descriptor(dh, descriptor.iSerialNumber):
-                            self._handle = dh
-                            log.info('open: success')
-                            return
-                log.warning('open:failed')
-                raise IOError('open:failed')
-            finally:
-                _lib.libusb_free_device_list(devices, 0)
-        except:
-            self.close()
+                    if serial_number == _get_string_descriptor(dh, descriptor.iSerialNumber):
+                        self._handle = dh
+                        log.info('open: success')
+                        return
+            log.warning('open:failed')
+            raise IOError('open:failed')
+        finally:
+            _lib.libusb_free_device_list(devices, 0)
 
     def open(self, event_callback_fn=None):
         # todo support event_callback_fn on errors
         self.close()
-        self._open()
-        log.info('Configure device')
-        rv = _lib.libusb_set_configuration(self._handle, 1)
-        may_raise_ioerror(rv, 'libusb_set_configuration 1 failed')
-        rv = _lib.libusb_claim_interface(self._handle, 0)
-        may_raise_ioerror(rv, 'libusb_claim_interface 0 failed')
-        rv = _lib.libusb_set_interface_alt_setting(self._handle, 0, 0)
-        may_raise_ioerror(rv, 'libusb_set_interface_alt_setting 0,0 failed')
-        self._control_transfer = ControlTransferAsync(self._handle)
+        try:
+            self._open()
+            log.info('open: configure device')
+            rv = _lib.libusb_set_configuration(self._handle, 1)
+            may_raise_ioerror(rv, 'libusb_set_configuration 1 failed')
+            rv = _lib.libusb_claim_interface(self._handle, 0)
+            may_raise_ioerror(rv, 'libusb_claim_interface 0 failed')
+            rv = _lib.libusb_set_interface_alt_setting(self._handle, 0, 0)
+            may_raise_ioerror(rv, 'libusb_set_interface_alt_setting 0,0 failed')
+            self._control_transfer = ControlTransferAsync(self._handle)
+            log.info('open: done')
+        except IOError:
+            log.exception('open failed: %s', self._path)
+            self.close()
+            raise
+        except Exception as ex:
+            log.exception('open failed: %s', self._path)
+            self.close()
+            raise IOError(ex)
 
     def close(self):
         if self._control_transfer:
@@ -758,7 +772,7 @@ class LibUsbDevice:
         return s
 
     def signal(self):
-        pass  # todo
+        pass  # todo, currently delays in process for up to 25 ms waiting for libusb_handle_events_timeout
 
     def process(self, timeout=None):
         if self._ctx:

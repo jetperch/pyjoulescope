@@ -80,16 +80,26 @@ def run(device, filename, duration=None, contiguous_duration=None):
         sample_id_last = 0
         sample_id_incr = 1000000
         sample_id_next = sample_id_last + sample_id_incr
+        status_failures = 0
         while not quit_:
             time.sleep(0.01)
             time_now = time.time()
             if time_now - time_last > 1.0:
-                logging.getLogger().info(device.status())
+                s = device.status()
+                if s.get('driver', {}).get('return_code', {}).get('value', 1):
+                    status_failures += 1
+                    if status_failures >= 3:
+                        raise RuntimeError(f'status_failures = {status_failures}')
+                logging.getLogger().info(s)
                 time_last = time_now
             while device.stream_buffer.sample_id_range[-1] >= sample_id_next:
                 # todo save
                 sample_id_next += sample_id_incr
         device.stop()
+    except Exception as ex:
+        logging.getLogger().exception('while capturing data')
+        print('Data capture failed')
+        return 1
     finally:
         device.close()
     print('done capturing data: %s' % quit_)

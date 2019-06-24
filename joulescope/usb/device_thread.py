@@ -25,6 +25,7 @@ from joulescope.usb.api import DeviceDriverApi
 log = logging.getLogger(__name__)
 log.setLevel(level=logging.INFO)
 TIMEOUT = 3.0
+TIMEOUT_OPEN = 6.0
 
 
 def default_callback(*args, **kwargs):
@@ -45,8 +46,9 @@ class DeviceThread:
         self._thread = None
         self.counter = 0
 
-    def cmd_process(self, cmd, args, cbk):
-        log.debug('cmd_process %s', cmd)
+    def _cmd_process(self, cmd, args, cbk):
+        # all exceptions handled by _cmd_process_all
+        log.debug('_cmd_process %s', cmd)
         if cmd == 'status':
             cbk(self._device.status())
         elif cmd == 'open':
@@ -54,7 +56,6 @@ class DeviceThread:
             cbk(self._device.open(event_callback_fn))
         elif cmd == 'close':
             cbk(self._device.close())
-            return True
         elif cmd == 'control_transfer_out':
             args, kwargs = args
             self._device.control_transfer_out(cbk, *args, **kwargs)
@@ -71,9 +72,8 @@ class DeviceThread:
             cbk(str(self._device))
         else:
             log.warning('unsupported command %s', cmd)
-        return False
 
-    def cmd_process_all(self):
+    def _cmd_process_all(self):
         _quit = False
         try:
             while not _quit:
@@ -82,15 +82,31 @@ class DeviceThread:
                 if not callable(cbk):
                     cbk = default_callback
                 try:
-                    _quit = self.cmd_process(cmd, args, cbk)
+                    self._cmd_process(cmd, args, cbk)
                 except Exception as ex:
-                    log.exception('DeviceThread.process')
+                    log.exception('DeviceThread._cmd_process_all')
                     cbk(ex)
+                if cmd in ['close']:
+                    log.info('DeviceThread._cmd_process_all close')
+                    _quit = True
         except queue.Empty:
             pass
         except Exception:
-            log.exception('DeviceThread.process unhandled')
+            log.exception('DeviceThread._cmd_process_all unhandled')
         return _quit
+
+    def _cmd_flush(self):
+        while True:
+            try:
+                cmd, args, cbk = self._cmd_queue.get(timeout=0.0)
+                self.counter += 1
+                if not callable(cbk):
+                    continue
+                cbk(ConnectionError('device closed'))
+            except queue.Empty:
+                break
+            except Exception:
+                continue
 
     def run(self):
         _quit = False
@@ -98,9 +114,10 @@ class DeviceThread:
         while not _quit:
             try:
                 self._device.process(timeout=1.0)
-                _quit = self.cmd_process_all()
             except Exception:
                 log.exception('In device thread')
+            _quit = self._cmd_process_all()
+        self._cmd_flush()
         log.info('DeviceThread.run done')
 
     def _post(self, command, args, cbk):
@@ -111,7 +128,8 @@ class DeviceThread:
             self._cmd_queue.put((command, args, cbk))
             self._device.signal()
 
-    def _post_block(self, command, args):
+    def _post_block(self, command, args, timeout=None):
+        timeout = TIMEOUT if timeout is None else float(timeout)
         q = queue.Queue()
         log.debug('_post_block %s start', command)
         self._post(command, args, lambda rv_=None: q.put(rv_))
@@ -119,7 +137,7 @@ class DeviceThread:
             raise IOError('DeviceThread not running')
         else:
             try:
-                rv = q.get(timeout=TIMEOUT)
+                rv = q.get(timeout=timeout)
             except queue.Empty as ex:
                 log.error('device thread hung: %s', command)
                 self.close()
@@ -142,7 +160,7 @@ class DeviceThread:
         log.info('open')
         self._thread = threading.Thread(name='usb_device', target=self.run)
         self._thread.start()
-        return self._post_block('open', event_callback_fn)
+        return self._post_block('open', event_callback_fn, timeout=TIMEOUT_OPEN)
 
     def close(self):
         if self._thread is not None:
