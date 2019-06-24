@@ -8,9 +8,10 @@ This file contains the list of changes made to pyjoulescope.
 
 2019 Jun 24
 
-*   Improved error handling on libusb device open.
+*   Improved error handling on Linux/Mac (libusb) device open.
 *   Increase device open timeout.
 *   Improved "capture" command logging and error handling.
+*   Fixed string descriptor parsing for Linux/Mac (libusb).
 
 
 ## 0.4.1

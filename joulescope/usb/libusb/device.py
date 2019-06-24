@@ -343,7 +343,8 @@ def _get_string_descriptor(device, index):
     if rv < 0:
         raise RuntimeError('control transfer could not get string descriptor: %d' % (rv, ))
     buffer_len = min(rv, byte_buffer[0])
-    return byte_buffer[:buffer_len].decode('UTF-16-LE')
+    # byte 0 is length, byte 1 is string identifier
+    return byte_buffer[2:buffer_len].decode('UTF-16-LE')
 
 
 _transfer_callback_discard_fn = libusb_transfer_cb_fn(lambda x: None)
