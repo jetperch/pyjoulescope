@@ -255,15 +255,25 @@ class Bootloader:
         segment = Segment.CALIBRATION_FACTORY if bool(is_factory) else Segment.CALIBRATION_ACTIVE
         return self.program(segment, data)
         
-    def erase(self, magic):
+    def _erase(self, magic, sector_start=None, sector_end=None):
         """Permanently erase flash on Joulescope.
         
         :param magic: The 32-byte erase key.
+        :param sector_start: The starting sector to erase.
+        :param sector_end: The ending sector to erase.
         
-        WARNING: This will delete the application, bootloader, calibration
-            and personalization.  This renders Joulescope useless!
+        WARNING: This operation renders Joulescope useless and should never be
+        used other than during manufacturing.
         """
-        log.info('%s ERASE', self)
+        if sector_end < sector_start:  # swap
+            sector_start, sector_end = sector_end, sector_start
+        sector_start = 0 if sector_start is None else int(sector_start)
+        sector_end = 15 if sector_end is None else int(sector_end)
+        if not 0 <= sector_start <= 15:
+            raise ValueError('erase sector_start out of range: %s', sector_start)
+        if not 0 <= sector_end <= 15:
+            raise ValueError('erase sector_end out of range: %s', sector_end)
+        log.info('%s ERASE (%d, %d)', self, sector_start, sector_end)
         # arm
         data = struct.pack('<III', 1, 0, 0)
         rv = self._usb.control_transfer_out(
@@ -273,10 +283,25 @@ class Bootloader:
         _ioerror_on_bad_result(rv)
         
         # and do it... hope you meant it!
-        data = struct.pack('<III', 2, 0, 15)
+        data = struct.pack('<III', 2, sector_start, sector_end)
         rv = self._usb.control_transfer_out(
             None, 'device', 'vendor',
             request=UsbdRequest.ERASE,
             value=0, index=0, data=magic + data)        
         _ioerror_on_bad_result(rv)        
         return 0
+
+    def erase(self, magic, operation=None):
+        """Permanently erase flash on a Joulescope.  !!! WARNING: factory use only!!!
+
+        :param magic: The 32-byte erase key.
+        :param operation: The erase operation which is one of:
+            * all: (default) Delete the everything: The application,
+              bootloader, calibration, and personalization.
+            * calibration: Delete all calibration information and storage.
+        """
+        sector_start, sector_end = {
+            'all': (0, 15),
+            'calibration': (13, 15),
+        }.get(operation, (0, 15))
+        return self._erase(magic, sector_start, sector_end)
