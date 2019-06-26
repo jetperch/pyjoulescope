@@ -7,13 +7,27 @@
 # Reload the udev rules
 #    sudo udevadm control --reload-rules
 #
+#
+# This file grants everyone read/write access.  If you want to restrict access,
+# you should modify MODE to "0660".  You can then grant access to specific user
+# accounts by adding them to the plugdev group.  To grant yourself permission:
+#
+#    sudo usermod -a -G plugdev `whoami`
+#
+# You will have to log out and then back in for the group change to take effect.
+# To grant permission to a specific {user}:
+#
+#    sudo usermod -a -G plugdev {user}
+#
+# replacing {user} with the actual username.
+#
+#
 # Also see
 #     http://www.joulescope.com                  : product website
 #     https://github.com/jetperch/pyjoulescope   : source code
 
 # Development Joulescope
-SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTRS{idVendor}=="16d0", ATTRS{idProduct}=="0e88", MODE="0666"
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTRS{idVendor}=="16d0", ATTRS{idProduct}=="0e88", MODE="0666", GROUP="plugdev"
 
 # Development bootloader
-SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTRS{idVendor}=="16d0", ATTRS{idProduct}=="0e87", MODE="0666"
-
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTRS{idVendor}=="16d0", ATTRS{idProduct}=="0e87", MODE="0666", GROUP="plugdev"

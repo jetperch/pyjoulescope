@@ -9,8 +9,8 @@ This file contains the list of changes made to pyjoulescope.
 2019 Jun ?? [in development]
 
 *   Added GPO alias values [0, 1].
-*   Added GPO demo exampe.
-
+*   Added GPO demo example.
+*   Updated udev rules with instructions for improved security.
 
 
 ## 0.4.2
