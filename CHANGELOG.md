@@ -4,6 +4,14 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 0.4.3
+
+2019 Jun ?? [in development]
+
+*   Added GPO alias values [0, 1]
+
+
+
 ## 0.4.2
 
 2019 Jun 24
