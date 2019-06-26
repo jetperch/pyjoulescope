@@ -11,6 +11,7 @@ This file contains the list of changes made to pyjoulescope.
 *   Added GPO alias values [0, 1].
 *   Added GPO demo example.
 *   Updated udev rules with instructions for improved security.
+*   Increased Joulescope open timeout again, now 10.0 seconds from 6.0.
 
 
 ## 0.4.2
