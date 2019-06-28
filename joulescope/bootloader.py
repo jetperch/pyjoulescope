@@ -136,6 +136,14 @@ class Bootloader:
         return dict(zip(names, values))
 
     def chunk_read(self, segment, chunk):
+        """Read a data chunk segment from the device.
+
+        :param segment: The segment number.
+        :param chunk: The chunk number within the segment.
+        :return: The data read from the device.
+        :raise IOError: on any error, including reading segments
+            that do not have read permissions.
+        """
         rv = self._usb.control_transfer_in(
             None, 'device', 'vendor',
             request=UsbdRequest.READ_CHUNK,
@@ -205,18 +213,27 @@ class Bootloader:
         return rv.data[0]
 
     def go(self):
+        """Command the bootloader to run the application.
+
+        :raise IOError: on failure.
+
+        This method will close() the bootloader regardless of success.
+        """
         log.info('%s: go', self)
-        rv = self._usb.control_transfer_out(
-            None, 'device', 'vendor',
-            request=UsbdRequest.GO,
-            value=0, index=0)
-        _ioerror_on_bad_result(rv)
-        self.close()
+        try:
+            rv = self._usb.control_transfer_out(
+                None, 'device', 'vendor',
+                request=UsbdRequest.GO,
+                value=0, index=0)
+            _ioerror_on_bad_result(rv)
+        finally:
+            self.close()
 
     def firmware_program(self, filename, progress_cbk=None):
-        """
+        """Program or update the application firmware.
 
-        :param filename:
+        :param filename: The filename containing the firmware, which must be
+            in Joulescope firmware format and correctly signed.
         :param progress_cbk:  The optional Callable[[float], None] which is called
             with the progress fraction from 0.0 to 1.0
         :return: 0 on success or error code.
@@ -250,6 +267,16 @@ class Bootloader:
         return self.program(Segment.FIRMWARE, data, metadata, progress_cbk)
 
     def calibration_program(self, filename, is_factory=False):
+        """Program the calibration.
+
+        :param filename: The filename containing the Joulescope calibration
+            record for this device.
+        :param is_factory: True to program factory calibration.  False to
+            program the active calibration.  The device only allows
+            factory calibration to be programmed once.  Attempting to
+            overwrite factory calibration will result in an error.
+        :return: 0 on success or error code.
+        """
         log.info('%s: calibration_program', self)
         data = _filename_or_bytes(filename)
         segment = Segment.CALIBRATION_FACTORY if bool(is_factory) else Segment.CALIBRATION_ACTIVE

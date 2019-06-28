@@ -12,6 +12,7 @@ This file contains the list of changes made to pyjoulescope.
 *   Added GPO demo example.
 *   Updated udev rules with instructions for improved security.
 *   Increased Joulescope open timeout again, now 10.0 seconds from 6.0.
+*   Fixed Joulescope Bootloader.go() to always close the bootloader.
 
 
 ## 0.4.2
