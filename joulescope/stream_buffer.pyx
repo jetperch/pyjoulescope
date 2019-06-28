@@ -117,7 +117,7 @@ cdef void stats_compute_one(float stats[STATS_FIELDS][STATS_VALUES],
 cdef void stats_compute_end(float stats[STATS_FIELDS][STATS_VALUES],
                             float * data, uint32_t data_length,
                             uint64_t sample_id,
-                            uint32_t length, uint32_t valid_length):
+                            uint64_t length, uint64_t valid_length):
     cdef uint32_t k
     cdef uint32_t idx = sample_id % data_length
     # compute mean
@@ -154,7 +154,7 @@ cdef void stats_compute_end(float stats[STATS_FIELDS][STATS_VALUES],
 cdef uint64_t stats_compute_run(
         float stats[STATS_FIELDS][STATS_VALUES],
         float * data, uint32_t data_length,
-        uint64_t sample_id, uint32_t length):
+        uint64_t sample_id, uint64_t length):
     cdef uint32_t idx = sample_id % data_length
     cdef uint32_t data_idx
     cdef uint64_t counter = 0
@@ -177,7 +177,8 @@ cdef uint64_t stats_combine(
         float stats_merge[STATS_FIELDS][STATS_VALUES],
         uint64_t stats_merge_sample_count):
     cdef uint64_t total_count = stats_sample_count + stats_merge_sample_count
-    cdef float f1
+    cdef double f1
+    cdef double f2
     if 0 == total_count:
         stats_compute_reset(stats)
         return total_count
@@ -185,9 +186,9 @@ cdef uint64_t stats_combine(
         f1 = stats_sample_count / total_count
         f2 = 1.0 - f1
         mean_new = f1 * stats[i][0] + f2 * stats_merge[i][0]
-        stats[i][1] = f1 * (stats[i][1] + (stats[i][0] - mean_new) ** 2) + \
-            f2 * (stats_merge[i][1] + (stats_merge[i][0] - mean_new) ** 2)
-        stats[i][0] = mean_new
+        stats[i][1] = <float> (f1 * (stats[i][1] + (stats[i][0] - mean_new) ** 2) + \
+            f2 * (stats_merge[i][1] + (stats_merge[i][0] - mean_new) ** 2))
+        stats[i][0] = <float> mean_new
         stats[i][2] = min(stats[i][2], stats_merge[i][2])
         stats[i][3] = max(stats[i][3], stats_merge[i][3])
     return stats_sample_count + stats_merge_sample_count
@@ -288,7 +289,7 @@ def reduction_downsample(reduction, idx_start, idx_stop, increment):
         x = np.arange(idx_start, idx_stop - increment + 1, increment, dtype=np.float64)
     """
     cdef js_stream_buffer_reduction_s r_inst
-    r_inst.length = len(reduction)
+    r_inst.length = <uint32_t> len(reduction)
     length = (idx_stop - idx_start) // increment
     out = np.empty((length, 3, 4), dtype=np.float32)
     cdef np.ndarray[np.float32_t, ndim=3, mode = 'c'] reduction_c = reduction
@@ -443,7 +444,7 @@ cdef class StreamBuffer:
             r.data = <float *> reduction_data_c.data
             self.reductions_data.append(d)
 
-        self.reduction_count = len(reductions)
+        self.reduction_count = <uint32_t> len(reductions)
         if len(reductions):
             self.reductions[len(reductions) - 1].cbk_fn = _on_cbk
             self.reductions[len(reductions) - 1].cbk_user_data = <void *> self
@@ -912,8 +913,8 @@ cdef class StreamBuffer:
         memcpy(out_c.data, stats_accum, sizeof(stats_accum))
         return out
 
-    cdef uint32_t _data_get(self, float * buffer, uint32_t buffer_samples,
-                            int64_t start, int64_t stop, uint32_t increment):
+    cdef uint64_t _data_get(self, float * buffer, uint64_t buffer_samples,
+                            int64_t start, int64_t stop, uint64_t increment):
         """Get the summarized statistics over a range.
         
         :param buffer: The Nx3x4 buffer to populate.
@@ -923,23 +924,23 @@ cdef class StreamBuffer:
         :param increment: The number of raw samples.
         :return: The number of samples placed into buffer.
         """
-        cdef uint32_t buffer_samples_orig = buffer_samples
-        cdef uint32_t idx
-        cdef uint32_t data_offset
+        cdef uint64_t buffer_samples_orig = buffer_samples
+        cdef int64_t idx
+        cdef int64_t data_offset
         cdef float stats[STATS_FIELDS][STATS_VALUES]
         cdef uint64_t count
-        cdef uint32_t fill_count = 0
-        cdef uint32_t fill_count_tmp
-        cdef uint32_t samples_per_step
-        cdef uint32_t samples_per_step_next
-        cdef uint32_t length
-        cdef uint32_t idx_start
+        cdef uint64_t fill_count = 0
+        cdef uint64_t fill_count_tmp
+        cdef uint64_t samples_per_step
+        cdef uint64_t samples_per_step_next
+        cdef uint64_t length
+        cdef int64_t idx_start
         cdef int64_t end_gap
         cdef int64_t start_orig = start
         cdef int n
         cdef np.ndarray[np.float32_t, ndim=2, mode = 'c'] out_c
 
-        if stop + self.length < self.processed_sample_id:
+        if stop + self.length < (<int64_t> self.processed_sample_id):
             fill_count = buffer_samples_orig
         elif start < 0:
             # round to floor, absolute value
@@ -951,7 +952,7 @@ cdef class StreamBuffer:
         if not self.range_check(start, stop):
             return 0
 
-        if (start + self.length) < self.device_sample_id:
+        if (start + self.length) < (<int64_t> self.device_sample_id):
             fill_count_tmp = (self.device_sample_id - (start + self.length)) // increment
             start += fill_count_tmp * increment
             #log.info('_data_get behind < 0: %d [%d] => %d', start_orig, fill_count_tmp, start)
@@ -994,7 +995,7 @@ cdef class StreamBuffer:
                     idx = 0
         elif not self.reductions[0].enabled or (self.reductions[0].samples_per_step > increment):
             # compute over raw data.
-            while start + increment <= stop and buffer_samples:
+            while start + <int64_t> increment <= stop and buffer_samples:
                 count = stats_compute_run(stats, self.data_ptr, self.length, start, increment)
                 memcpy(buffer, stats, sizeof(stats))
                 buffer += STATS_FLOATS_PER_SAMPLE
@@ -1004,7 +1005,7 @@ cdef class StreamBuffer:
             # use reductions through stats_get
             out = np.empty((STATS_FIELDS, STATS_VALUES), dtype=np.float32)
             out_c = out
-            while start + increment <= stop and buffer_samples:
+            while start + <int64_t> increment <= stop and buffer_samples:
                 next_start = start + increment
                 self.stats_get(start, next_start, out)
                 memcpy(buffer, out_c.data, STATS_FLOATS_PER_SAMPLE * sizeof(float))
