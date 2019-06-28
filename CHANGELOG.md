@@ -4,6 +4,14 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 0.4.5
+
+2019 ??? ??  [in progress]
+
+*   Added joulescope.inf to manually force Win 7 machines without WCID update 
+    to recognize Joulescopes.
+
+
 ## 0.4.4
 
 2019 Jun 28
