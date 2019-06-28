@@ -17,6 +17,7 @@ This file contains the list of changes made to pyjoulescope.
 *   Added "bootloaders_run_application".
 *   Improved Device.bootloader error handling.
 *   Removed libusb IOError if platform does not support hotplug.
+*   Added no exception guarantee to scan() and bootloaders_run_application().
 
 
 ## 0.4.2

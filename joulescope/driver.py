@@ -1058,15 +1058,20 @@ def scan(name: str = None) -> List[Device]:
     :return: The list of :class:`Device` instances.  A new instance is created
         for each detected device.  Use :func:`scan_for_changes` to preserved
         existing instances.
+    :raises: None - guaranteed not to raise an exception
     """
     if name is None:
         name = 'joulescope'
-    devices = usb.scan(name)
-    if name == 'bootloader':
-        devices = [bootloader.Bootloader(d) for d in devices]
-    else:
-        devices = [Device(d) for d in devices]
-    return devices
+    try:
+        devices = usb.scan(name)
+        if name == 'bootloader':
+            devices = [bootloader.Bootloader(d) for d in devices]
+        else:
+            devices = [Device(d) for d in devices]
+        return devices
+    except:
+        log.exception('while scanning for devices')
+        return []
 
 
 def scan_require_one(name: str = None) -> Device:
@@ -1124,7 +1129,10 @@ def scan_for_changes(name: str = None, devices=None):
 
 
 def bootloaders_run_application():
-    """Command all connected bootloaders to run the application."""
+    """Command all connected bootloaders to run the application.
+
+    :raises: None - guaranteed not to raise an exception.
+    """
     log.info('Find all Joulescope bootloaders and run the application')
     for d in scan(name='bootloader'):
         try:
