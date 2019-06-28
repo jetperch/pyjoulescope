@@ -19,7 +19,7 @@ from joulescope.usb.device_thread import DeviceThread
 from .parameters_v1 import PARAMETERS, PARAMETERS_DICT, name_to_value, value_to_name
 from . import datafile
 from . import bootloader
-from . data_recorder import DataRecorder, construct_record_filename
+from .data_recorder import DataRecorder, construct_record_filename
 from joulescope.stream_buffer import StreamBuffer, stats_to_api
 from joulescope.calibration import Calibration
 import struct
@@ -32,8 +32,8 @@ import numpy as np
 import binascii
 from typing import List
 import logging
-log = logging.getLogger(__name__)
 
+log = logging.getLogger(__name__)
 
 STATUS_REQUEST_LENGTH = 128
 EXTIO_REQUEST_LENGTH = 128
@@ -85,7 +85,6 @@ class UsbdRequest:
 
 
 class SensorBootloader:
-
     START = 1
     RESUME = 2
     ERASE = 3
@@ -103,8 +102,8 @@ LOOPBACK_BUFFER_SIZE = 132
 """The maximum size of the hardware control loopback buffer for testing."""
 
 SAMPLING_FREQUENCY = 2000000  # samples per second (Hz)
-REDUCTIONS = [200, 100, 50]   # in samples in sample units of the previous reduction
-STREAM_BUFFER_DURATION = 30   # seconds
+REDUCTIONS = [200, 100, 50]  # in samples in sample units of the previous reduction
+STREAM_BUFFER_DURATION = 30  # seconds
 
 
 class Device:
@@ -112,6 +111,7 @@ class Device:
 
     :param usb_device: The backend USB :class:`usb.device` instance.
     """
+
     def __init__(self, usb_device):
         os.makedirs(JOULESCOPE_DIR, exist_ok=True)
         self._usb = DeviceThread(usb_device)
@@ -387,7 +387,7 @@ class Device:
                           streaming,
                           0,  # rsv1_u8
                           0,  # rsv2_u8
-                          0   # rsv3_u8
+                          0  # rsv3_u8
                           )
         rv = self._usb.control_transfer_out(
             'device', 'vendor', request=UsbdRequest.SETTINGS,
@@ -413,7 +413,7 @@ class Device:
                           0,  # rsv1_u8
                           0,  # rsv3_u32, baudrate reserved
                           self._parameters['io_voltage'],
-        )
+                          )
         rv = self._usb.control_transfer_out(
             'device', 'vendor', request=UsbdRequest.EXTIO,
             value=0, index=0, data=msg)
@@ -838,9 +838,9 @@ class Device:
 
     def bootloader(self):
         """Start the bootloader for this device.
-        
+
         :return: (bootloader, existing_devices)  Use the bootloader instance
-            to perform operations.  Use existing_devices to assist in 
+            to perform operations.  Use existing_devices to assist in
             determining when this device returns from bootloader mode.
         """
         _, existing_devices, _ = scan_for_changes(name='Joulescope', devices=[self])
@@ -858,12 +858,12 @@ class Device:
         while not len(b):
             time.sleep(0.1)
             _, b, _ = scan_for_changes(name='bootloader', devices=existing_bootloaders)
-        time.sleep(0.1)
-        _, b, _ = scan_for_changes(name='bootloader', devices=existing_bootloaders)
+        if len(b) != 1:
+            raise IOError('More than one new bootloader found')
         b = b[0]
         b.open()
         return b, existing_devices
-        
+
     def run_from_bootloader(self, fn):
         """Run commands from the bootloader and then return to the app.
 
@@ -919,7 +919,7 @@ class View:
         self.samples_per = 1
         self.data_idx = 0
         self.span = span.Span(limits=[0.0, x_max],
-                              quant=1.0/self.sampling_frequency,
+                              quant=1.0 / self.sampling_frequency,
                               length=100)
         self.changed = True
 
@@ -1050,7 +1050,7 @@ class View:
         }
 
 
-def scan(name: str=None) -> List[Device]:
+def scan(name: str = None) -> List[Device]:
     """Scan for connected devices.
 
     :param name: The case-insensitive device name to scan.
@@ -1069,7 +1069,7 @@ def scan(name: str=None) -> List[Device]:
     return devices
 
 
-def scan_require_one(name: str=None) -> Device:
+def scan_require_one(name: str = None) -> Device:
     """Scan for one and only one device.
 
     :param name: The case-insensitive device name to scan.
@@ -1085,7 +1085,7 @@ def scan_require_one(name: str=None) -> Device:
     return devices[0]
 
 
-def scan_for_changes(name: str=None, devices=None):
+def scan_for_changes(name: str = None, devices=None):
     """Scan for device changes.
 
     :param name: The case-insensitive device name to scan.
@@ -1121,3 +1121,18 @@ def scan_for_changes(name: str=None, devices=None):
     log.info('scan_for_changes %d devices: %d added, %d removed',
              len(devices_now), len(devices_added), len(devices_removed))
     return devices_now, devices_added, devices_removed
+
+
+def bootloaders_run_application():
+    """Command all connected bootloaders to run the application."""
+    log.info('Find all Joulescope bootloaders and run the application')
+    for d in scan(name='bootloader'):
+        try:
+            d.open()
+        except:
+            log.exception('while attempting to open bootloader')
+            continue
+        try:
+            d.go()
+        except:
+            log.exception('while attempting to run the application')

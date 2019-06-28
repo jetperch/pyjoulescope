@@ -14,6 +14,8 @@ This file contains the list of changes made to pyjoulescope.
 *   Increased Joulescope open timeout again, now 10.0 seconds from 6.0.
 *   Fixed Joulescope Bootloader.go() to always close the bootloader.
 *   Refactored so that "import joulescope" is useful.
+*   Added "bootloaders_run_application".
+*   Improved Device.bootloader error handling.
 
 
 ## 0.4.2
