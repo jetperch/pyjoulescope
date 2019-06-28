@@ -1,4 +1,4 @@
-# Copyright 2018 Jetperch LLC
+# Copyright 2018-2019 Jetperch LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,16 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from joulescope.paths import JOULESCOPE_DIR
-from joulescope.driver import scan, scan_for_changes, bootloaders_run_application
 
-try:
-    from .version import VERSION
-except ImportError:
-    VERSION = 'UNRELEASED'
+import os
+import pathlib
 
-__version__ = VERSION
-
-
-__all__ = [scan, scan_for_changes, bootloaders_run_application,
-           JOULESCOPE_DIR, VERSION, __version__]
+MYPATH = os.path.dirname(os.path.abspath(__file__))
+JOULESCOPE_DIR = os.path.join(pathlib.Path.home(), 'joulescope')

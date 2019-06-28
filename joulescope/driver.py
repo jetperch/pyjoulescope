@@ -13,8 +13,8 @@
 # limitations under the License.
 
 from joulescope import usb
-from joulescope import JOULESCOPE_DIR
 from joulescope import span
+from joulescope.paths import JOULESCOPE_DIR
 from joulescope.usb.device_thread import DeviceThread
 from .parameters_v1 import PARAMETERS, PARAMETERS_DICT, name_to_value, value_to_name
 from . import datafile
@@ -33,6 +33,7 @@ import binascii
 from typing import List
 import logging
 log = logging.getLogger(__name__)
+
 
 STATUS_REQUEST_LENGTH = 128
 EXTIO_REQUEST_LENGTH = 128
