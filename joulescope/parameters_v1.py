@@ -43,7 +43,7 @@ PARAMETERS = [
         'off',
         [
             ('off',             0x00),
-            ('raw',             0xC0),
+            ('raw',             0xC0, ['on']),
             ('pattern_usb',     0x09),
             ('pattern_control', 0x0A),
             ('pattern_sensor',  0xAF),

@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from joulescope.paths import JOULESCOPE_DIR
-from joulescope.driver import scan, scan_for_changes, bootloaders_run_application
+from joulescope.driver import scan, scan_require_one, scan_for_changes, bootloaders_run_application
 
 try:
     from .version import VERSION
