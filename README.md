@@ -30,6 +30,40 @@ If you just want to use Joulescope, you can
 [download](https://www.joulescope.com/download) the application.
 
 
+## Quick start
+
+Install this python package from pypi:
+
+    pip3 install joulescope
+
+The Joulescope python package includes command line tools:
+
+    python3 -m joulescope --help
+    
+For example, to capture 1 second of contiguous data:
+
+    python3 -m joulescope capture --contiguous 1.0 mycapture.jls
+    
+You can also import the Joulescope python package in your own programs.
+For example, this script opens the joulescope instrument, reads 1/4 second 
+of data, and then display the averaged values:
+
+    import joulescope
+    import numpy as np
+
+    js = joulescope.scan_require_one()
+    js.open()
+    try:
+        js.parameter_set('source', 'on')
+        js.parameter_set('i_range', 'auto')
+        data = js.read(contiguous_duration=0.25)
+    finally:
+        js.close()
+
+    current, voltage = np.mean(data, axis=0)
+    print(f'{current} A, {voltage} V')
+
+
 ## Developer
 
 Install [Python](https://www.python.org/) 3.6+. 

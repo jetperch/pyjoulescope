@@ -4,6 +4,14 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 0.4.4
+
+2019 Jun 28
+
+*   Added "Quick Start" to README.md.
+*   Added parameter "source" alias "on" for "raw".
+
+
 ## 0.4.3
 
 2019 Jun 28

@@ -26,7 +26,7 @@ import os
 import sys
 import numpy as np
 
-VERSION = '0.4.3'  # CHANGE THIS VERSION!
+VERSION = '0.4.4'  # CHANGE THIS VERSION!
 MYPATH = os.path.abspath(os.path.dirname(__file__))
 
 try:
