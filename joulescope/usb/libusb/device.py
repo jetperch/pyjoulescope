@@ -795,7 +795,8 @@ class DeviceNotify:
         self._window_thread = None
         self._do_quit = True
         if 0 == _lib.libusb_has_capability(Capability.HAS_HOTPLUG):
-            raise IOError('libusb does not support hotplug')
+            log.warning('libusb does not support hotplug')
+            return
         self.open()
 
     def _hotplug_cbk(self, ctx, device, ev, user_data):
@@ -806,6 +807,10 @@ class DeviceNotify:
         return 0
 
     def _run(self):
+        if 0 == _lib.libusb_has_capability(Capability.HAS_HOTPLUG):
+            log.warning('libusb does not support hotplug')
+            # todo revert to polling method?
+            return
         log.debug('_run_window start')
         timeval = TimeVal(tv_sec=0, tv_usec=100000)
         timeval_ptr = pointer(timeval)

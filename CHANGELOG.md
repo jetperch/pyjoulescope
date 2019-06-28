@@ -6,7 +6,7 @@ This file contains the list of changes made to pyjoulescope.
 
 ## 0.4.3
 
-2019 Jun ?? [in development]
+2019 Jun 28
 
 *   Added GPO alias values [0, 1].
 *   Added GPO demo example.
@@ -16,6 +16,7 @@ This file contains the list of changes made to pyjoulescope.
 *   Refactored so that "import joulescope" is useful.
 *   Added "bootloaders_run_application".
 *   Improved Device.bootloader error handling.
+*   Removed libusb IOError if platform does not support hotplug.
 
 
 ## 0.4.2
