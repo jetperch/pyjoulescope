@@ -120,6 +120,8 @@ cdef void stats_compute_end(float stats[STATS_FIELDS][STATS_VALUES],
                             uint64_t length, uint64_t valid_length):
     cdef uint32_t k
     cdef uint32_t idx = sample_id % data_length
+    if valid_length <= 0:
+        return  # no samples so no update required!
     # compute mean
     cdef float scale = (<float> 1.0) / (<float> valid_length)
     stats[0][0] *= scale
