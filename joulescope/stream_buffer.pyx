@@ -279,7 +279,6 @@ cdef _reduction_downsample(js_stream_buffer_reduction_s * r,
 def reduction_downsample(reduction, idx_start, idx_stop, increment):
     """Downsample a data reduction.
 
-    :param x: The sample id or times for each reduction entry.
     :param reduction: The np.float32 (N, 3, 4) array.
     :param idx_start: The starting index (inclusive) in reduction.
     :param idx_stop: The stopping index (exclusive) in reduction.
