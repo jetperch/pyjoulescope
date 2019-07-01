@@ -160,7 +160,11 @@ class DeviceThread:
         log.info('open')
         self._thread = threading.Thread(name='usb_device', target=self.run)
         self._thread.start()
-        return self._post_block('open', event_callback_fn, timeout=TIMEOUT_OPEN)
+        try:
+            return self._post_block('open', event_callback_fn, timeout=TIMEOUT_OPEN)
+        except:
+            self.close()
+            raise
 
     def close(self):
         if self._thread is not None:

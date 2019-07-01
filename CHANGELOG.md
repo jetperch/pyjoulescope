@@ -11,6 +11,7 @@ This file contains the list of changes made to pyjoulescope.
 *   Added joulescope.inf to manually force Win 7 machines without WCID update 
     to recognize Joulescopes.
 *   Fixed divide by zero error in stream_buffer.stats_compute_end.
+*   Correctly close thread on device_thread open error.
 
 
 ## 0.4.4
