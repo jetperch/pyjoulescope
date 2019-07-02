@@ -13,6 +13,7 @@ This file contains the list of changes made to pyjoulescope.
 *   Fixed divide by zero error in stream_buffer.stats_compute_end.
 *   Correctly close thread on device_thread open error.
 *   Fixed potential 32 bit overflow issue in stream_buffer.
+*   Fixed unchecked None data when not streaming in driver.View.
 
 
 ## 0.4.4

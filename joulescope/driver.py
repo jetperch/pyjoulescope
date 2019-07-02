@@ -1009,9 +1009,11 @@ class View:
         length = len(self)
         data_idx_view_end, sample_id_end, delta = self._view()
 
-        if not self.changed and 0 == delta:
+        if self.data is None:
+            return False, (None, None)
+        elif not self.changed and 0 == delta:
             return False, (self.x, self.data)
-        if self.changed or delta >= length:
+        elif self.changed or delta >= length:
             self.data[:, :, :] = np.nan
             if data_idx_view_end > 0:
                 start_idx = (data_idx_view_end - length) * self.samples_per
