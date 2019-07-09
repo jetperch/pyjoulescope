@@ -10,6 +10,7 @@ This file contains the list of changes made to pyjoulescope.
 
 *   Added optional application-specific metadata to datafile collection start.
 *   Added support for voltage range to datafile: save/load/process correctly.
+*   Improved missing sample (NaN) handling robustness.
 
 
 ## 0.4.5

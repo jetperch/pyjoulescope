@@ -605,6 +605,7 @@ cdef class StreamBuffer:
             return
         cdef uint32_t idx = self.reduction_index(r, 1)
         memcpy(r.data + idx * sizeof(self.stats) // sizeof(float), self.stats, sizeof(self.stats))
+        # note: samples_per_step is not statistically correct on missing samples.
         self.reduction_update_n(1, self.reductions[0].samples_per_step)
 
     cdef void stats_finalize(self):
@@ -804,6 +805,7 @@ cdef class StreamBuffer:
                             suppress_idx = 0
                         self._process_stats(cal_i, cal_v)
                 else:
+                    # temporarily write NaN, reprocess at end, above
                     self.data_ptr[idx + 0] = NAN
                     self.data_ptr[idx + 1] = NAN
                 self.suppress_count -= 1
@@ -814,17 +816,23 @@ cdef class StreamBuffer:
             if idx_start >= self.length:
                 idx_start = 0
 
-
     cdef void _process_stats(self, cal_i, cal_v):
-        self.stats_counter += 1
-        stats_compute_one(self.stats, cal_i, cal_v)
-        if self.stats_remaining > 1:
+        if 0 == self.reductions[0].enabled:
+            return
+        if isfinite(cal_i):
+            self.stats_counter += 1
+            stats_compute_one(self.stats, cal_i, cal_v)
+        if self.stats_remaining > self.reductions[0].samples_per_step:
+            log.warning('Internal error stats_remaining: %d > %d',
+                        self.stats_remaining,
+                        self.reductions[0].samples_per_step)
+            self._stats_reset()
+        elif self.stats_remaining > 1:
             self.stats_remaining -= 1
-        elif self.stats_remaining == 1:
+        elif self.stats_remaining <= 1:
             self.stats_finalize()
             self.reduction_update_0()
             self._stats_reset()
-
 
     def process(self):
         self._process()

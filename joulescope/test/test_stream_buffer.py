@@ -159,6 +159,26 @@ class TestStreamBuffer(unittest.TestCase):
         np.testing.assert_allclose([20.0, 133.0, 1.0, 39.0], data[0, 1, :])
         np.testing.assert_allclose([59.0, 133.0, 40.0, 78.0], data[1, 0, :])
 
+    def test_get_over_reduction_direct_with_raw_nan(self):
+        b = StreamBuffer(2000, [10, 10])
+        frame = usb_packet_factory(0, 1)
+        frame[8+11*4:8+15*4:] = 0xff
+        b.insert(frame)
+        b.process()
+        r = b.get_reduction(0, 0, 126)
+        self.assertTrue(all(np.isfinite(r[:, 0, 0])))
+
+    def test_get_over_reduction_direct_with_reduction0_nan(self):
+        b = StreamBuffer(2000, [10, 10])
+        frame = usb_packet_factory(0, 1)
+        frame[8+10*4:8+22*4:] = 0xff
+        b.insert(frame)
+        b.process()
+        r0 = b.get_reduction(0, 0, 126)
+        self.assertFalse(np.isfinite(r0[1, 0, 0]))
+        r1 = b.get_reduction(1, 0, 126)
+        self.assertTrue(np.isfinite(r0[0, 0, 0]))
+
     def test_calibration(self):
         b = StreamBuffer(2000, [10, 10])
         b.calibration_set([-10.0] * 7, [2.0] * 7, [-2.0, 1.0], [4.0, 1.0])
