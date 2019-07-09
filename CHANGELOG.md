@@ -4,6 +4,14 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 0.4.6
+
+2019 Jul ??
+
+*   Added optional application-specific metadata to datafile collection start.
+
+
+
 ## 0.4.5
 
 2019 Jul 2

@@ -99,6 +99,7 @@ The supported tags include:
   * 2 byte file-specific collection identifier
   * 1 byte collection type: 0=unstructured, 1=list, 2=map
   * 1 byte reserved (0)
+  * N bytes: optional application specific data.
 * b'CLE': collection end.  May contain application-specific data
   such as indices to increase access performance.
 * b'SUB': A subfile, which is often used for storing the calibration
@@ -216,20 +217,29 @@ class Header:
 class Collection:
     FORMAT = '<QHBB'
 
-    def __init__(self, id_=None, type_=None, end_position=None, start_position=None):
+    def __init__(self, id_=None, type_=None, end_position=None, start_position=None, data=None):
         self.id_ = 0 if id_ is None else id_
         self.type_ = 0 if type_ is None else type_
         self.end_position = 0 if end_position is None else end_position
         self.start_position = 0 if start_position is None else start_position
+        self.data = data
         self.metadata = {}  # application-defined metadata
 
     def encode(self):
-        return struct.pack(self.FORMAT, self.end_position, self.id_, self.type_, 0)
+        contents = struct.pack(self.FORMAT, self.end_position, self.id_, self.type_, 0)
+        if self.data is not None:
+            print("%r, %r" % (contents, self.data))
+            contents = contents + self.data
+        return contents
 
     @staticmethod
     def decode(data):
-        end_position, id_, type_, _ = struct.unpack(Collection.FORMAT, data)
-        return Collection(id_=id_, type_=type_, end_position=end_position)
+        end_position, id_, type_, _ = struct.unpack(Collection.FORMAT, data[:12])
+        if len(data) > 12:
+            collection_data = data[12:]
+        else:
+            collection_data = None
+        return Collection(id_=id_, type_=type_, end_position=end_position, data=collection_data)
 
     def __repr__(self):
         parts = ['%s=%r' % (x, getattr(self, x)) for x in ['id_', 'type_', 'end_position', 'start_position']]
@@ -398,8 +408,8 @@ class DataFileWriter:
                    serial_number=serial_number)
         return self.append(TAG_HEADER, h.encode())
 
-    def collection_start(self, id_=None, type_=None):
-        c = Collection(id_, type_)
+    def collection_start(self, id_=None, type_=None, data=None):
+        c = Collection(id_, type_, data=data)
         c.start_position = self.append(TAG_COLLECTION_START, c.encode())
         self.collections.append(c)
         return c

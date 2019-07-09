@@ -153,11 +153,11 @@ class TestDataFile(unittest.TestCase):
         with self.assertRaises(ValueError):
             fr.decrypt(d['signing_key_pub'], d['encryption_key'], d['nonce'])
 
-    def _construct_collection(self):
+    def _construct_collection(self, collection_data=None):
         data = [bytes(range(00, 10)), bytes(range(10, 20)), bytes(range(20, 30))]
         fh = io.BytesIO()
         fw = datafile.DataFileWriter(fh)
-        c = fw.collection_start(id_=0, type_=1)
+        c = fw.collection_start(id_=0, type_=1, data=collection_data)
         for d in data:
             fw.append(b'TAG', d)
         fw.collection_end(c)
@@ -172,6 +172,25 @@ class TestDataFile(unittest.TestCase):
         tag, collection_bytes = next(fr)
         c = datafile.Collection.decode(collection_bytes)
         self.assertEqual(datafile.TAG_COLLECTION_START, tag)
+        self.assertIsNone(c.data)
+        for d in data:
+            tag, value = next(fr)
+            self.assertEqual(b'TAG', tag)
+            self.assertEqual(d, value)
+        self.assertEqual(c.end_position, fh.tell())
+        tag, value = next(fr)
+        self.assertEqual(datafile.TAG_COLLECTION_END, tag)
+        with self.assertRaises(StopIteration):
+            next(fr)
+
+    def test_collection_with_data(self):
+        data, fh = self._construct_collection(collection_data=b'hello world')
+
+        fr = datafile.DataFileReader(fh)
+        tag, collection_bytes = next(fr)
+        c = datafile.Collection.decode(collection_bytes)
+        self.assertEqual(datafile.TAG_COLLECTION_START, tag)
+        self.assertEqual(c.data, b'hello world')
         for d in data:
             tag, value = next(fr)
             self.assertEqual(b'TAG', tag)
