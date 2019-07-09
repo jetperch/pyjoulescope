@@ -558,7 +558,6 @@ class Device:
             filename,
             calibration=self.calibration.data,
             sampling_frequency=self._sampling_frequency)
-        # todo save voltage gain to _data_recorder
         return True
 
     def recording_stop(self):

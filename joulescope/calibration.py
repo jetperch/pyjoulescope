@@ -207,20 +207,21 @@ class Calibration:
         self.voltage_gain = np.array(cal['voltage']['gain'], dtype=np.float32)
         return self
 
-    def transform(self, data):
+    def transform(self, data, v_range=None):
         """Apply the calibration to transform raw data.
 
         :param data: The (N, 2) or (N x 2, ) np.ndarray with dtype np.uint16.
             Either way, the current and voltage samples are interleaved as
             they arrive from Joulescope over USB.
             The least significant 2 bits as indicators.
+        :param v_range: The selected voltage ranged for the conversion.
         :return: (current, voltage, missing_sample_count) where missing samples
             is detected by the per-sample bit toggle.
         """
+        v_range = 0 if v_range is None else int(v_range)
         if len(data.shape) == 2:
             data = data.reshape((np.prod(data.shape), ))
 
-        v_range = 0
         i, v, i_range, missing_sample_count = raw_split(data)
         idx = np.logical_and(np.logical_and(i_range == 7, i == 0x3fff), v == 0x3fff)
         i_range[idx] += 1

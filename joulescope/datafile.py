@@ -228,7 +228,6 @@ class Collection:
     def encode(self):
         contents = struct.pack(self.FORMAT, self.end_position, self.id_, self.type_, 0)
         if self.data is not None:
-            print("%r, %r" % (contents, self.data))
             contents = contents + self.data
         return contents
 

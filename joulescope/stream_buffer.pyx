@@ -512,6 +512,10 @@ cdef class StreamBuffer:
     def callback(self, value):
         self._callback = value
 
+    @property
+    def voltage_range(self):
+        return self.voltage_range
+
     def status(self):
         return {
             'device_sample_id': {'value': self.device_sample_id, 'units': 'samples'},

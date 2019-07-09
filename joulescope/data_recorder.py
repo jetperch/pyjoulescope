@@ -96,9 +96,9 @@ class DataRecorder:
         cfg_data = json.dumps(config).encode('utf-8')
         self._writer.append(datafile.TAG_META_JSON, cfg_data)
 
-    def _collection_start(self):
+    def _collection_start(self, data=None):
         log.debug('_collection_start()')
-        c = self._writer.collection_start(1, 0)
+        c = self._writer.collection_start(1, 0, data=data)
         c.metadata = {'start_sample_id': self._sample_id_tlv}
         c.on_end = self._collection_end
         self._sample_id_block = self._sample_id_tlv
@@ -115,7 +115,8 @@ class DataRecorder:
         """Process data from a stream buffer.
 
         :param stream_buffer: The stream_buffer instance which has a
-            "sample_id_range" member, raw(start_sample_id, stop_sample_id) and
+            "sample_id_range" member, "voltage_range" member,
+            raw(start_sample_id, stop_sample_id) and
             get_reduction(reduction_idx, start_sample_id, stop_sample_id).
         """
         sb_start, sb_stop = stream_buffer.sample_id_range
@@ -133,7 +134,12 @@ class DataRecorder:
                                  (self._samples_per_tlv, len(stream_buffer)))
 
             if self._sample_id_block is None:
-                self._collection_start()
+                collection_data = {
+                    'v_range': stream_buffer.voltage_range,
+                    'sample_id': sample_id_next,
+                }
+                collection_data = json.dumps(collection_data).encode('utf-8')
+                self._collection_start(data=collection_data)
 
             log.debug('_process() add tlv %d', self._sample_id_tlv)
             b = stream_buffer.raw_get(self._sample_id_tlv, sample_id_next)
@@ -244,7 +250,7 @@ class DataReader:
             self._f.skip()
         if self._data_start_position == 0 or self.config is None or self.footer is None:
             raise ValueError('could not read file')
-        log.info('DataReader with %d samples', self.footer['size'])
+        log.info('DataReader with %d samples:\n%s', self.footer['size'], json.dumps(self.config, indent=2))
         if self.config['data_recorder_format_version'] != DATA_RECORDER_FORMAT_VERSION:
             raise ValueError('Invalid file format')
         return self
@@ -289,12 +295,14 @@ class DataReader:
             raise ValueError('stop out of range: %d <= %d <= %d: %s' %
                              (idx_start, stop, idx_end, increment))
 
-    def raw(self, start=None, stop=None, out=None):
+    def raw(self, start=None, stop=None, calibrated=None, out=None):
         """Get the raw data.
 
         :param start: The starting sample identifier.
         :param stop: The ending sample identifier.
-        :param out: The optional output Nx2 np.uint16 output array.
+        :param calibrated: When true, return calibrated np.float32 data.
+            When false, return raw np.uint16 data.
+        :param out: The optional output Nx2 output array.
             N must be >= (stop - start).
         :return: The output which is either a new array or (when provided) out.
         """
@@ -309,7 +317,10 @@ class DataReader:
         if length <= 0:
             return np.empty((0, 2), dtype=np.uint16)
         if out is None:
-            out = np.empty((length, 2), dtype=np.uint16)
+            if calibrated:
+                out = np.empty((length, 2), dtype=np.float32)
+            else:
+                out = np.empty((length, 2), dtype=np.uint16)
 
         sample_idx = 0
         samples_per_tlv = self.config['samples_per_tlv']
@@ -328,7 +339,13 @@ class DataReader:
                     self._f.skip()
                     block_counter += 1
                 else:
-                    self._f.advance()
+                    tag, collection_bytes = next(self._f)
+                    c = datafile.Collection.decode(collection_bytes)
+                    if c.data is None:
+                        v_range = 0
+                    else:
+                        collection_start_meta = json.loads(c.data)
+                        v_range = collection_start_meta.get('v_range', 0)
                     sample_idx = block_counter * samples_per_block
             elif tag == datafile.TAG_COLLECTION_END:
                 block_counter += 1
@@ -345,7 +362,13 @@ class DataReader:
                     if stop < tlv_stop:
                         idx_stop = stop - sample_idx
                     length = idx_stop - idx_start
-                    out[out_idx:(out_idx + length), :] = data[idx_start:idx_stop, :]
+                    if calibrated:
+                        v, i, _ = self.calibration.transform(data[idx_start:idx_stop, :],
+                                                             v_range=v_range)
+                        out[out_idx:(out_idx + length), 0] = v
+                        out[out_idx:(out_idx + length), 1] = i
+                    else:
+                        out[out_idx:(out_idx + length), :] = data[idx_start:idx_stop, :]
                     out_idx += length
                 else:
                     self._f.advance()
@@ -490,8 +513,8 @@ class DataReader:
             start = self.sample_id_range[0]
         if stop is None:
             stop = self.sample_id_range[1]
-        d = self.raw(start, stop)
-        i, v, _ = self.calibration.transform(d)
+        d = self.raw(start, stop, calibrated=True)
+        i, v = d[:, 0], d[:, 1]
         return i, v
 
     def get(self, start=None, stop=None, increment=None):
@@ -521,8 +544,8 @@ class DataReader:
         out = np.empty((out_len, 3, 4), dtype=np.float32)
 
         if increment == 1:
-            d = self.raw(start, stop)
-            i, v, _ = self.calibration.transform(d)
+            d = self.raw(start, stop, calibrated=True)
+            i, v = d[:, 0], d[:, 1]
             out[:, 0, 0] = i
             out[:, 1, 0] = v
             out[:, 2, 0] = i * v
@@ -536,8 +559,8 @@ class DataReader:
             increment = int(increment / self.config['samples_per_reduction'])
             out = reduction_downsample(r_out, 0, len(r_out), increment)
         else:
-            z = self.raw(start, stop)
-            i, v, _ = self.calibration.transform(z)
+            z = self.raw(start, stop, calibrated=True)
+            i, v = z[:, 0], z[:, 1]
             p = i * v
             for idx in range(out_len):
                 idx_start = idx * increment

@@ -9,7 +9,7 @@ This file contains the list of changes made to pyjoulescope.
 2019 Jul ??
 
 *   Added optional application-specific metadata to datafile collection start.
-
+*   Added support for voltage range to datafile: save/load/process correctly.
 
 
 ## 0.4.5
