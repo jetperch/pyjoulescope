@@ -153,9 +153,8 @@ class Device:
     def statistics_callback(self, cbk):
         """Set the statistics callback.
 
-        :param cbk: The callable(stats, energy) where stats is
-            a np.array((3, 4)) of [current, voltage, power]
-            [mean, variance, min, max].
+        :param cbk: The callable(data) where data is a statistics data
+            structure.  See :meth:`statistics_get` for details.
         """
         idx = len(self._reductions)
         if idx:
@@ -774,6 +773,8 @@ class Device:
                 }
               }
             }
+
+        Note: this same format is used by the :meth:`statistics_callback`.
         """
         v = self.view
         s1 = v.time_to_sample_id(t1)

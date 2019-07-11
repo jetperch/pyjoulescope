@@ -395,6 +395,7 @@ cdef class StreamBuffer:
     cdef uint64_t _sample_id_max  # used to automatically stop streaming
     cdef uint64_t _contiguous_max  # used to automatically stop streaming
     cdef object _callback  # fn(np.array [3][4] of statistics, energy)
+    cdef object _charge_picocoulomb  # python integer for infinite precision
     cdef object _energy_picojoules  # python integer for infinite precision
 
 
@@ -405,6 +406,7 @@ cdef class StreamBuffer:
         if len(reductions) > REDUCTION_MAX:
             raise ValueError('too many reductions')
 
+        self._charge_picocoulomb = 0
         self._energy_picojoules = 0
         memset(self.reductions, 0, sizeof(self.reductions))
 
@@ -453,6 +455,7 @@ cdef class StreamBuffer:
         self._sample_id_max = 0  # used to automatically stop streaming
         self._contiguous_max = 0  # used to automatically stop streaming
         self._callback = None  # fn(np.array [3][4] of statistics, energy)
+        self._charge_picocoulomb = 0
         self._energy_picojoules = 0  # integer for infinite precision
 
         self.suppress_samples = SUPPRESS_SAMPLES_DEFAULT
@@ -558,6 +561,7 @@ cdef class StreamBuffer:
         self.voltage_range = 0
         self._sample_id_max = 1 << 63  # big enough
         self._contiguous_max = 1 << 63  # big enough
+        self._charge_picocoulomb = 0
         self._energy_picojoules = 0
         self.stats_counter = 0
         self.suppress_count = 0
@@ -1126,12 +1130,59 @@ cdef class StreamBuffer:
             b = b.reshape((3, 4))
             # todo handle variable sampling frequencies and reductions
             time_interval = 0.5  # seconds
-            power_picowatts = b[2][0] * 1e12
-            energy_picojoules = power_picowatts * time_interval
-            if isfinite(energy_picojoules):
+            charge_picocoulomb = (b[0][0] * 1e12)  * time_interval
+            energy_picojoules = (b[2][0] * 1e12) * time_interval
+            if isfinite(charge_picocoulomb) and isfinite(energy_picojoules):
+                self._charge_picocoulomb += int(charge_picocoulomb)
                 self._energy_picojoules += int(energy_picojoules)
+            charge = self._charge_picocoulomb * 1e-12
             energy = self._energy_picojoules * 1e-12
-            self._callback(b, energy)
+            statistic_names = ['mean', 'variance', 'min', 'max']
+            data = {
+                'time': {
+                    'range': [0, time_interval],  # todo
+                    'delta': time_interval,
+                    'units': 's',
+                },
+                'signals': {
+                    'current' : {
+                        'statistics': _to_statistics(b[0, :]),
+                        'units': 'A',
+                        'integral_units': 'C',
+                    },
+                    'voltage' : {
+                        'statistics': _to_statistics(b[1, :]),
+                        'units': 'V',
+                        'integral_units': '',
+                    },
+                    'power' : {
+                        'statistics': _to_statistics(b[2, :]),
+                        'units': 'W',
+                        'integral_units': 'J',
+                    },
+                },
+                'accumulators': {
+                    'charge' : {
+                        'units': 'C',
+                        'value': charge,
+                    },
+                    'energy' : {
+                        'value': energy,
+                        'units': 'J',
+                    },
+                },
+            }
+            self._callback(data)
+
+
+def _to_statistics(b):
+    return {
+        'μ': b[0],
+        'σ2': b[1],
+        'min': b[2],
+        'max': b[3],
+        'p2p': b[3] - b[2],
+    }
 
 
 cdef void _on_cbk(void * user_data, float * stats):
