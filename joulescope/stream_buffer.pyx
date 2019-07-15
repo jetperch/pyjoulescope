@@ -954,7 +954,7 @@ cdef class StreamBuffer:
         cdef int64_t idx_start
         cdef int64_t end_gap
         cdef int64_t start_orig = start
-        cdef int n
+        cdef uint64_t n
         cdef np.ndarray[np.float32_t, ndim=2, mode = 'c'] out_c
 
         if stop + self.length < (<int64_t> self.processed_sample_id):

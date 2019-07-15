@@ -6,13 +6,14 @@ This file contains the list of changes made to pyjoulescope.
 
 ## 0.4.6
 
-2019 Jul ??
+2019 Jul 15
 
 *   Added optional application-specific metadata to datafile collection start.
 *   Added support for voltage range to datafile: save/load/process correctly.
 *   Improved missing sample (NaN) handling robustness.
 *   Modified Driver.statistics_callback to match statistics_get format.
 *   Compute total charge in addition to energy.
+*   Fixed stream_buffer int/uint comparison warning.
 
 
 ## 0.4.5
