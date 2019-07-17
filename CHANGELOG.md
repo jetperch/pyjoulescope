@@ -4,6 +4,13 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 0.4.7
+
+2019 Jul ??
+
+*   Added file_replace module.
+
+
 ## 0.4.6
 
 2019 Jul 15
