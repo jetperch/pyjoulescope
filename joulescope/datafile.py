@@ -665,5 +665,7 @@ class DataFileReader:
                 c = Collection.decode(value)
                 print("%s%s id=%d, type=%d, end=%d" % (indent_str * indent, tag_str, c.id_, c.type_, c.end_position))
                 indent += 1
+            elif tag == TAG_SIGNATURE_END:
+                print("%s%s %s" % (indent_str * indent, tag_str, value))
             else:
                 print("%s%s %d" % (indent_str * indent, tag_str, len(value)))
