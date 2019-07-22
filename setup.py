@@ -102,6 +102,9 @@ setuptools.setup(
     packages=setuptools.find_packages(exclude=['native', 'docs', 'test', 'dist', 'build']),
     ext_modules=extensions,
     include_dirs=[np.get_include()],
+    
+    # See https://packaging.python.org/guides/distributing-packages-using-setuptools/#python-requires
+    python_requires='~=3.6',
 
     # See https://packaging.python.org/en/latest/requirements.html
     install_requires=[
