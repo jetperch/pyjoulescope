@@ -32,6 +32,11 @@ If you just want to use Joulescope, you can
 
 ## Quick start
 
+Install [Python](https://www.python.org/) 3.6+ 64-bit.  If you already have
+Python installed, verify 3.6+ and 64-bit:
+
+    python3 -V
+
 Install this python package from pypi:
 
     pip3 install joulescope
@@ -66,7 +71,7 @@ of data, and then display the averaged values:
 
 ## Developer
 
-Install [Python](https://www.python.org/) 3.6+. 
+Install [Python](https://www.python.org/) 3.6+ 64-bit. 
 
 
 ### Configure virtualenv
