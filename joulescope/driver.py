@@ -16,7 +16,7 @@ from joulescope import usb
 from joulescope import span
 from joulescope.paths import JOULESCOPE_DIR
 from joulescope.usb.device_thread import DeviceThread
-from .parameters_v1 import PARAMETERS, PARAMETERS_DICT, name_to_value, value_to_name
+from .parameters_v1 import PARAMETERS, PARAMETERS_DICT, PARAMETERS_DEFAULTS, name_to_value, value_to_name
 from . import datafile
 from . import bootloader
 from .data_recorder import DataRecorder, construct_record_filename
@@ -110,11 +110,18 @@ class Device:
     """The device implementation for use by applications.
 
     :param usb_device: The backend USB :class:`usb.device` instance.
+    :param config: The initial default configuration following device open.
+        Choices are ['auto', 'off', 'ignore', None].
+        * 'auto': enable the sensor and start collecting data with
+          current sensor autoranging.
+        * 'ignore' or None: Leave the device in its existing state.
+        * 'off': Turn the sensor off and disable data collection.
     """
 
-    def __init__(self, usb_device):
+    def __init__(self, usb_device, config=None):
         os.makedirs(JOULESCOPE_DIR, exist_ok=True)
         self._usb = DeviceThread(usb_device)
+        self._config = config
         self._parameters = {}
         self._reductions = REDUCTIONS
         self._sampling_frequency = SAMPLING_FREQUENCY
@@ -125,6 +132,7 @@ class Device:
         self._data_recorder = None
         self.calibration = None
         self._statistics_callback = None
+        self._parameters_defaults = PARAMETERS_DEFAULTS
         for p in PARAMETERS:
             if p.permission == 'rw':
                 self._parameters[p.name] = name_to_value(p.name, p.default)
@@ -245,6 +253,9 @@ class Device:
             log.warning('could not fetch info record')
         self.calibration = self._calibration_read()
         self.view = View(self)
+        cfg = self._parameters_defaults.get(self._config, {})
+        for key, value in cfg.items():
+            self.parameter_set(key, value)
 
     def info(self):
         """Get the device information structure.
@@ -907,6 +918,15 @@ class Device:
             value=value)
         _ioerror_on_bad_result(rv)
 
+    def __enter__(self):
+        """Device context manager, automatically open."""
+        self.open()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Device context manaager, automatically close."""
+        self.close()
+
 
 class View:
 
@@ -1052,11 +1072,12 @@ class View:
         }
 
 
-def scan(name: str = None) -> List[Device]:
+def scan(name: str = None, config=None) -> List[Device]:
     """Scan for connected devices.
 
     :param name: The case-insensitive device name to scan.
         None (default) is equivalent to 'Joulescope'.
+    :param config: The configuration for the :class:`Device`.
     :return: The list of :class:`Device` instances.  A new instance is created
         for each detected device.  Use :func:`scan_for_changes` to preserved
         existing instances.
@@ -1069,22 +1090,23 @@ def scan(name: str = None) -> List[Device]:
         if name == 'bootloader':
             devices = [bootloader.Bootloader(d) for d in devices]
         else:
-            devices = [Device(d) for d in devices]
+            devices = [Device(d, config=config) for d in devices]
         return devices
     except:
         log.exception('while scanning for devices')
         return []
 
 
-def scan_require_one(name: str = None) -> Device:
+def scan_require_one(name: str = None, config=None) -> Device:
     """Scan for one and only one device.
 
     :param name: The case-insensitive device name to scan.
         None (default) is equivalent to 'Joulescope'.
+    :param config: The configuration for the :class:`Device`.
     :return: The :class:`Device` found.
     :raise RuntimeError: If no devices or more than one device was found.
     """
-    devices = scan(name)
+    devices = scan(name, config=config)
     if not len(devices):
         raise RuntimeError("no devices found")
     if len(devices) > 1:
@@ -1092,13 +1114,14 @@ def scan_require_one(name: str = None) -> Device:
     return devices[0]
 
 
-def scan_for_changes(name: str = None, devices=None):
+def scan_for_changes(name: str = None, devices=None, config=None):
     """Scan for device changes.
 
     :param name: The case-insensitive device name to scan.
         None (default) is equivalent to 'Joulescope'.
     :param devices: The list of existing :class:`Device` instances returned
         by a previous scan.  Pass None or [] if no scan has yet been performed.
+    :param config: The configuration for the :class:`Device`.
     :return: The tuple of lists (devices_now, devices_added, devices_removed).
         "devices_now" is the list of all currently connected devices.  If the
         device was in "devices", then return the :class:`Device` instance from
@@ -1107,7 +1130,7 @@ def scan_for_changes(name: str = None, devices=None):
         "devices_removed" is the list of devices in "devices" but not "devices_now".
     """
     devices_prev = [] if devices is None else devices
-    devices_next = scan(name)
+    devices_next = scan(name, config=config)
     devices_added = []
     devices_removed = []
     devices_now = []

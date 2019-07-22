@@ -213,3 +213,16 @@ def name_to_value(param_name, value_name):
 
 def value_to_name(param_name, value):
     return _TO_NAME[param_name][value]
+
+
+PARAMETERS_DEFAULTS = {
+    'auto': {
+        'source': 'on',
+        'i_range': 'auto',
+        'v_range': '15V',
+    },
+    'off': {
+        'source': 'off',
+    },
+    'ignore': {},
+}

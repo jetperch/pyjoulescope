@@ -4,11 +4,14 @@
 This file contains the list of changes made to pyjoulescope.
 
 
-## 0.4.7
+## 0.5.0
 
 2019 Jul ??
 
+*   Added "config" option to Device initialization.
+*   Added context manager to Device class.
 *   Added file_replace module.
+*   Added runtime check for Python 3.6+ and Python bits matching OS bits.
 
 
 ## 0.4.6
