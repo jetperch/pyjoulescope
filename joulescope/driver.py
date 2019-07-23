@@ -245,17 +245,23 @@ class Device:
         self._usb.open(event_callback_fn)
         sb_len = self._sampling_frequency * STREAM_BUFFER_DURATION
         self.stream_buffer = StreamBuffer(sb_len, self._reductions)
+        self.view = View(self)
         try:
             info = self.info()
             if info is not None:
                 log.info('info:\n%s', json.dumps(info, indent=2))
         except Exception:
             log.warning('could not fetch info record')
-        self.calibration = self._calibration_read()
-        self.view = View(self)
-        cfg = self._parameters_defaults.get(self._config, {})
-        for key, value in cfg.items():
-            self.parameter_set(key, value)
+        try:
+            self.calibration = self._calibration_read()
+        except Exception:
+            log.warning('could not fetch calibration')
+        try:
+            cfg = self._parameters_defaults.get(self._config, {})
+            for key, value in cfg.items():
+                self.parameter_set(key, value)
+        except Exception:
+            log.warning('could not set defaults')
 
     def info(self):
         """Get the device information structure.
@@ -924,7 +930,7 @@ class Device:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """Device context manaager, automatically close."""
+        """Device context manager, automatically close."""
         self.close()
 
 
