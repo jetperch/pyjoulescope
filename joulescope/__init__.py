@@ -25,7 +25,7 @@ except ImportError:
 __version__ = VERSION
 
 
-__all__ = [scan, scan_for_changes, bootloaders_run_application,
+__all__ = [scan, scan_require_one, scan_for_changes, bootloaders_run_application,
            JOULESCOPE_DIR, VERSION, __version__]
 
 if sys.hexversion < 0x030600:
