@@ -43,12 +43,14 @@ class DeviceThread:
         self._device = usb_device
         self._cmd_queue = queue.Queue()  # tuples of (command, args, callback)
         self._signal_queue = queue.Queue()
+        self._response_queue = queue.Queue()
         self._thread = None
+        self._str = None
         self.counter = 0
 
     def _cmd_process(self, cmd, args, cbk):
         # all exceptions handled by _cmd_process_all
-        log.debug('_cmd_process %s', cmd)
+        log.debug('_cmd_process %s - start', cmd)
         if cmd == 'status':
             cbk(self._device.status())
         elif cmd == 'open':
@@ -72,6 +74,7 @@ class DeviceThread:
             cbk(str(self._device))
         else:
             log.warning('unsupported command %s', cmd)
+        log.debug('_cmd_process %s - done', cmd)
 
     def _cmd_process_all(self):
         _quit = False
@@ -106,7 +109,7 @@ class DeviceThread:
             except queue.Empty:
                 break
             except Exception:
-                continue
+                log.exception('_cmd_flush')
 
     def run(self):
         _quit = False
@@ -117,6 +120,7 @@ class DeviceThread:
             except Exception:
                 log.exception('In device thread')
             _quit = self._cmd_process_all()
+        log.info('DeviceThread.run flush')
         self._cmd_flush()
         log.info('DeviceThread.run done')
 
@@ -130,17 +134,24 @@ class DeviceThread:
 
     def _post_block(self, command, args, timeout=None):
         timeout = TIMEOUT if timeout is None else float(timeout)
-        q = queue.Queue()
         log.debug('_post_block %s start', command)
-        self._post(command, args, lambda rv_=None: q.put(rv_))
+        while not self._response_queue.empty():
+            log.warning('response queue not empty')
+            try:
+                self._response_queue.get(timeout=0.0)
+            except queue.Empty:
+                pass
+        self._post(command, args, lambda rv_=None: self._response_queue.put(rv_))
         if self._thread is None:
             raise IOError('DeviceThread not running')
         else:
             try:
-                rv = q.get(timeout=timeout)
+                rv = self._response_queue.get(timeout=timeout)
             except queue.Empty as ex:
-                log.error('device thread hung: %s', command)
-                self.close()
+                log.error('device thread hung: %s - FORCE CLOSE', command)
+                self._post('close', None, None)
+                self._thread.join(timeout=TIMEOUT)
+                self._thread = None
                 rv = ex
             except Exception as ex:
                 rv = ex
@@ -150,10 +161,13 @@ class DeviceThread:
         return rv
 
     def __str__(self):
-        if self._thread is not None:
-            return self._post_block('__str__', None)
+        if self._str is not None:
+            pass
+        elif self._thread is not None:
+            self._str = self._post_block('__str__', None)
         else:
-            return str(self._device)
+            self._str = str(self._device)
+        return self._str
 
     def open(self, event_callback_fn=None):
         self.close()
