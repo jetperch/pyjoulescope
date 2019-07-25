@@ -27,6 +27,7 @@ import copy
 import time
 import json
 import os
+import io
 import queue
 import numpy as np
 import binascii
@@ -276,21 +277,25 @@ class Device:
             value=0, index=0, length=1024)
         if 0 != rv.result:  # firmware prior to 0.3
             return None
-        if len(rv.data) < 8:
-            log.warning('info record too short')
-            return None
-        version, hdr_length, pdu_type = struct.unpack('<BBB', rv.data[:3])
-        if version != HOST_API_VERSION:
-            log.warning('info msg API version mismatch: %d != %d' % (version, HOST_API_VERSION))
-            return None
-        if pdu_type != PacketType.INFO:
-            log.warning('info msg pdu_type mismatch: %d != %d' % (pdu_type, PacketType.INFO))
-            return None
-        if hdr_length != len(rv.data):
-            log.warning('info msg length mismatch: %d != %d' % (hdr_length, len(rv.data)))
-            return None
+        if rv.data[0] != b'{'[0]:  # has header (firmware prior to 1.1.0)
+            if len(rv.data) < 8:
+                log.warning('info record too short')
+                return None
+            version, hdr_length, pdu_type = struct.unpack('<BBB', rv.data[:3])
+            if version != HOST_API_VERSION:
+                log.warning('info msg API version mismatch: %d != %d' % (version, HOST_API_VERSION))
+                return None
+            if pdu_type != PacketType.INFO:
+                log.warning('info msg pdu_type mismatch: %d != %d' % (pdu_type, PacketType.INFO))
+                return None
+            if hdr_length != len(rv.data):
+                log.warning('info msg length mismatch: %d != %d' % (hdr_length, len(rv.data)))
+                return None
+            json_bytes = rv.data[8:]
+        else:  # just JSON string
+            json_bytes = rv.data
         try:
-            return json.loads(rv.data[8:].decode('utf-8'))
+            return json.loads(json_bytes.decode('utf-8'))
         except UnicodeDecodeError:
             log.exception('INFO has invalid unicode: %s', binascii.hexlify(rv.data[8:]))
         except json.decoder.JSONDecodeError:
@@ -816,11 +821,38 @@ class Device:
         self.stop()
 
         log.info('sensor bootloader: start')
+        data = datafile.filename_or_bytes(data)
+        fh = io.BytesIO(data)
+        dr = datafile.DataFileReader(fh)
+        # todo: check distribution signature
+        tag, hdr_value = next(dr)
+        if tag != datafile.TAG_HEADER:
+            raise ValueError('incorrect format: expected header, received %r' % tag)
+        tag, data = next(dr)
+        if tag != datafile.TAG_DATA_BINARY:
+            raise ValueError('incorrect format: expected data, received %r' % tag)
+        tag, enc = next(dr)
+        if tag != datafile.TAG_ENCRYPTION:
+            raise ValueError('incorrect format: expected encryption, received %r' % tag)
+        metadata = {
+            'size': len(data),
+            'encryption': 1,
+            'header': hdr_value[:24],
+            'mac': enc[:16],
+            'signature': enc[16:],
+        }
+        log.info('header    = %r', binascii.hexlify(metadata['header']))
+        log.info('mac       = %r', binascii.hexlify(metadata['mac']))
+        log.info('signature = %r', binascii.hexlify(metadata['signature']))
+        msg = struct.pack('<II', metadata['size'], metadata['encryption'])
+        msg = msg + metadata['header'] + metadata['mac'] + metadata['signature']
+
         rv = self._usb.control_transfer_out(
             'device', 'vendor', request=UsbdRequest.SENSOR_BOOTLOADER,
-            value=SensorBootloader.START)
+            value=SensorBootloader.START, data=msg)
         _ioerror_on_bad_result(rv)
         self._sensor_status_check()
+        time.sleep(1.0)
 
         log.info('sensor bootloader: erase all flash')
         rv = self._usb.control_transfer_out(
@@ -1175,3 +1207,26 @@ def bootloaders_run_application():
             d.go()
         except:
             log.exception('while attempting to run the application')
+
+
+def bootloader_go(bootloader, device_name=None, timeout=None, config=None):
+    """Command the bootloader to run the application and return the matching device.
+
+    :param bootloader: The target bootloader, which is already open.
+    :param device_name: The case-insensitive device name to scan.
+        None (default) is equivalent to 'Joulescope'.
+    :param timeout: The timeout in seconds while waiting for the application.
+    :param config: The configuration for the device.
+    :return: The matching device, not yet opened.
+    :raise IOError: on failure.
+    """
+    timeout = 10.0 if timeout is None else float(timeout)
+    existing_devices = scan(device_name)
+    bootloader.go()
+    time_start = time.time()
+    while time.time() - time_start < timeout:
+        _, devices, _ = scan_for_changes(device_name, existing_devices, config)
+        if len(devices):
+            return devices[0]
+        time.sleep(0.25)
+    raise IOError('could not find device')

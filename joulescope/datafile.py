@@ -178,6 +178,16 @@ SIGNATURE_FLAG_KEY_INCLUDE = 1
 SIGNATURE_FLAG_PAYLOAD_ONLY = 2
 
 
+def filename_or_bytes(x):
+    if x is None:
+        return b''
+    elif isinstance(x, str):
+        with open(x, 'rb') as f:
+            return f.read()
+    else:
+        return x
+
+
 def default(value, d):
     if value is None:
         return d

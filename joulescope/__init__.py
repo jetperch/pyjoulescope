@@ -13,7 +13,8 @@
 # limitations under the License.
 
 from joulescope.paths import JOULESCOPE_DIR
-from joulescope.driver import scan, scan_require_one, scan_for_changes, bootloaders_run_application
+from joulescope.driver import scan, scan_require_one, scan_for_changes, \
+    bootloaders_run_application, bootloader_go
 import sys
 import platform
 
@@ -26,6 +27,7 @@ __version__ = VERSION
 
 
 __all__ = [scan, scan_require_one, scan_for_changes, bootloaders_run_application,
+           bootloader_go,
            JOULESCOPE_DIR, VERSION, __version__]
 
 if sys.hexversion < 0x030600:

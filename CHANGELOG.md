@@ -8,6 +8,8 @@ This file contains the list of changes made to pyjoulescope.
 
 2019 Jul ??
 
+*   Added bootloader_go to get matching device.
+*   Added support for FW 1.1.0 JSON-only info format.
 *   Added "config" option to Device initialization.
 *   Added context manager to Device class.
 *   Added file_replace module.

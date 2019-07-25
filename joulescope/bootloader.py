@@ -65,16 +65,6 @@ for segments_value in list(SEGMENTS.values()):
     SEGMENTS[segments_value] = segments_value
 
 
-def _filename_or_bytes(x):
-    if x is None:
-        return b''
-    elif isinstance(x, str):
-        with open(x, 'rb') as f:
-            return f.read()
-    else:
-        return x
-
-
 class Bootloader:
     """The bootloader API and implementation for use by applications.
 
@@ -165,7 +155,7 @@ class Bootloader:
         This function erases the existing application, even on failure.
         """
         log.info('%s: program', self)
-        data = _filename_or_bytes(data)
+        data = datafile.filename_or_bytes(data)
         segment = SEGMENTS[segment]
         if metadata is None:
             metadata = {
@@ -239,7 +229,7 @@ class Bootloader:
         :return: 0 on success or error code.
         """
         log.info('%s: firmware_program', self)
-        data = _filename_or_bytes(filename)
+        data = datafile.filename_or_bytes(filename)
         if len(data):
             fh = io.BytesIO(data)
             dr = datafile.DataFileReader(fh)
@@ -278,7 +268,7 @@ class Bootloader:
         :return: 0 on success or error code.
         """
         log.info('%s: calibration_program', self)
-        data = _filename_or_bytes(filename)
+        data = datafile.filename_or_bytes(filename)
         segment = Segment.CALIBRATION_FACTORY if bool(is_factory) else Segment.CALIBRATION_ACTIVE
         return self.program(segment, data)
         
