@@ -52,6 +52,7 @@ class TestDataRecorder(unittest.TestCase):
 
     def _create_file(self, packet_index, count=None):
         stream_buffer = StreamBuffer(2000, [10])
+        stream_buffer.suppress_mode = 'off'
         if packet_index > 0:
             data = usb_packet_factory(0, packet_index - 1)
             stream_buffer.insert(data)

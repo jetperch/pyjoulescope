@@ -14,6 +14,7 @@ This file contains the list of changes made to pyjoulescope.
 *   Added context manager to Device class.
 *   Added file_replace module.
 *   Added runtime check for Python 3.6+ and Python bits matching OS bits.
+*   Moved current range change glitch suppression from FPGA to stream_buffer.
 
 
 ## 0.4.6
