@@ -470,7 +470,7 @@ cdef class StreamBuffer:
         self._suppress_mode = SUPPRESS_MODE_NORMAL
 
         for idx in range(I_RANGE_D_LENGTH):
-            self.i_range_d[idx] = 0xff
+            self.i_range_d[idx] = 7
 
     def __init__(self, length, reductions):
         self.reset()
@@ -596,7 +596,7 @@ cdef class StreamBuffer:
         self.stats_counter = 0
         self.suppress_count = 0
         for idx in range(I_RANGE_D_LENGTH):
-            self.i_range_d[idx] = 0xff
+            self.i_range_d[idx] = 7
         for idx in range(REDUCTION_MAX):
             self.reductions[idx].sample_counter = 0
         self._stats_reset()
@@ -822,6 +822,10 @@ cdef class StreamBuffer:
                     self.suppress_count = self.suppress_samples + 1
             else:
                 i_range = self.i_range_d[0]
+
+            if not 0 < i_range <= 7:  # should never happen
+                log.warning('i_range out of range: %s', i_range)
+                i_range = 7
 
             sample_toggle_current = (raw_v >> 1) & 0x1
             raw_i = raw_i >> 2

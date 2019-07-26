@@ -4,9 +4,9 @@
 This file contains the list of changes made to pyjoulescope.
 
 
-## 0.5.0
+## 0.5.0-dev
 
-2019 Jul ??
+2019 Jul 26
 
 *   Added bootloader_go to get matching device.
 *   Added support for FW 1.1.0 JSON-only info format.
@@ -15,6 +15,11 @@ This file contains the list of changes made to pyjoulescope.
 *   Added file_replace module.
 *   Added runtime check for Python 3.6+ and Python bits matching OS bits.
 *   Moved current range change glitch suppression from FPGA to stream_buffer.
+*   Improved macOS & Linux USB reliability, also be nice to libusb on removal.
+*   Improved USB device error handling.
+*   Removed NaN injection source.
+*   Corrected invalid data possible on first 2 samples.
+
 
 
 ## 0.4.6
