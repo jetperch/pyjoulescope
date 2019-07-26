@@ -688,6 +688,10 @@ class LibUsbDevice:
     def __str__(self):
         return f'Joulescope {self._path}'
 
+    @property
+    def serial_number(self):
+        return self._path.split('/')[-1]
+
     def on_removed(self):
         log.info('Device removal signaled')
         self._removed = True
