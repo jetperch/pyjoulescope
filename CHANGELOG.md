@@ -19,7 +19,8 @@ This file contains the list of changes made to pyjoulescope.
 *   Improved USB device error handling.
 *   Removed NaN injection source.
 *   Corrected invalid data possible on first 2 samples.
-
+*   Added firmware_manager for more controller firmware update.
+*   Made Device and Bootloader safe to open() when already open.
 
 
 ## 0.4.6

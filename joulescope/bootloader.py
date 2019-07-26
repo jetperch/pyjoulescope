@@ -72,6 +72,7 @@ class Bootloader:
     """
     def __init__(self, usb_device):
         self._usb = usb_device
+        self._is_open = False
 
     def __str__(self):
         return self._usb.serial_number
@@ -90,10 +91,14 @@ class Bootloader:
 
         :raise IOError: on failure.
         """
+        if self._is_open:
+            self.close()
+        self._is_open = True
         self._usb.open()
 
     def close(self):
         """Close the device and release resources"""
+        self._is_open = False
         try:
             self._usb.close()
         except:
