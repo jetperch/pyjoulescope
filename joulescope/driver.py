@@ -42,6 +42,7 @@ SERIAL_NUMBER_LENGTH = 16
 HOST_API_VERSION = 1
 CALIBRATION_SIZE_MAX = 0x8000
 PACKET_VERION = 1
+USB_RECONNECT_TIMEOUT_SECONDS = 15.0
 
 
 def _ioerror_on_bad_result(rv):
@@ -243,6 +244,8 @@ class Device:
         The event_callback_fn may be called asynchronous and from other
         threads.  The event_callback_fn must implement any thread safety.
         """
+        if self.view:
+            self.close()
         self._usb.open(event_callback_fn)
         sb_len = self._sampling_frequency * STREAM_BUFFER_DURATION
         self.stream_buffer = StreamBuffer(sb_len, self._reductions)
@@ -263,6 +266,7 @@ class Device:
                 self.parameter_set(key, value)
         except Exception:
             log.warning('could not set defaults')
+        return self
 
     def info(self):
         """Get the device information structure.
@@ -811,7 +815,7 @@ class Device:
         """Program the sensor microcontroller firmware
 
         :param data: The firmware to program as a raw binary file.
-        :param progress_cbk:  The optional Callable[[float], None] which is called
+        :param progress_cbk:  The optional Callable[float] which is called
             with the progress fraction from 0.0 to 1.0
         :raise: on error.
         """
@@ -885,13 +889,17 @@ class Device:
         progress_cbk(1.0)
         _ioerror_on_bad_result(rv)
 
-    def bootloader(self):
+    def bootloader(self, progress_cbk=None):
         """Start the bootloader for this device.
 
+        :param progress_cbk:  The optional Callable[float] which is called
+            with the progress fraction from 0.0 to 1.0
         :return: (bootloader, existing_devices)  Use the bootloader instance
             to perform operations.  Use existing_devices to assist in
             determining when this device returns from bootloader mode.
         """
+        if progress_cbk is None:
+            progress_cbk = lambda x: None
         _, existing_devices, _ = scan_for_changes(name='Joulescope', devices=[self])
         existing_bootloaders = scan(name='bootloader')
         log.info('my_device = %s', str(self))
@@ -904,8 +912,13 @@ class Device:
         _ioerror_on_bad_result(rv)
         self.close()
         b = []
+        time_start = time.time()
         while not len(b):
-            time.sleep(0.1)
+            time_elapsed = time.time() - time_start
+            if time_elapsed > USB_RECONNECT_TIMEOUT_SECONDS:
+                raise IOError('Timed out waiting for bootloader to connect')
+            progress_cbk(time_elapsed / USB_RECONNECT_TIMEOUT_SECONDS)
+            time.sleep(0.25)
             _, b, _ = scan_for_changes(name='bootloader', devices=existing_bootloaders)
         if len(b) != 1:
             raise IOError('More than one new bootloader found')
@@ -924,8 +937,11 @@ class Device:
         finally:
             b.go()  # go closes bootloader automatically
             d = []
+            time_start = time.time()
             while not len(d):
-                time.sleep(0.1)
+                if (time.time() - time_start) > USB_RECONNECT_TIMEOUT_SECONDS:
+                    raise IOError('Timed out waiting for application to connect')
+                time.sleep(0.25)
                 _, d, _ = scan_for_changes(name='Joulescope', devices=existing_devices)
             time.sleep(0.5)
             self._usb = d[0]._usb
@@ -1209,7 +1225,7 @@ def bootloaders_run_application():
             log.exception('while attempting to run the application')
 
 
-def bootloader_go(bootloader, device_name=None, timeout=None, config=None):
+def bootloader_go(bootloader, device_name=None, timeout=None, config=None, progress_cbk=None):
     """Command the bootloader to run the application and return the matching device.
 
     :param bootloader: The target bootloader, which is already open.
@@ -1217,16 +1233,23 @@ def bootloader_go(bootloader, device_name=None, timeout=None, config=None):
         None (default) is equivalent to 'Joulescope'.
     :param timeout: The timeout in seconds while waiting for the application.
     :param config: The configuration for the device.
+    :param progress_cbk:  The optional Callable[float] which is called
+        with the progress fraction from 0.0 to 1.0
     :return: The matching device, not yet opened.
     :raise IOError: on failure.
     """
-    timeout = 10.0 if timeout is None else float(timeout)
+    timeout = USB_RECONNECT_TIMEOUT_SECONDS if timeout is None else float(timeout)
+    if progress_cbk is None:
+        progress_cbk = lambda x: None
     existing_devices = scan(device_name)
     bootloader.go()
     time_start = time.time()
-    while time.time() - time_start < timeout:
+    while True:
+        time_elapsed = time.time() - time_start
+        if time_elapsed > timeout:
+            raise IOError('could not find device')
+        progress_cbk(time_elapsed / timeout)
         _, devices, _ = scan_for_changes(device_name, existing_devices, config)
         if len(devices):
             return devices[0]
         time.sleep(0.25)
-    raise IOError('could not find device')
