@@ -686,7 +686,7 @@ class LibUsbDevice:
         self._removed = False
 
     def __str__(self):
-        return f'Joulescope {self._path}'
+        return f'Joulescope {self.serial_number}'
 
     @property
     def serial_number(self):
