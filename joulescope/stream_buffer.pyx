@@ -823,7 +823,7 @@ cdef class StreamBuffer:
             else:
                 i_range = self.i_range_d[0]
 
-            if not 0 < i_range <= 7:  # should never happen
+            if not 0 <= i_range <= 7:  # should never happen
                 log.warning('i_range out of range: %s', i_range)
                 i_range = 7
 
