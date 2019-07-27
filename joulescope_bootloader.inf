@@ -1,0 +1,62 @@
+;
+; Installs WinUsb for Joulescope Bootloader
+;
+
+; =================== Strings ===================
+
+[Strings]
+DeviceName = "Joulescope Bootloader"
+ManufacturerName="Jetperch LLC"
+ClassName="Universal Serial Bus devices"
+REG_MULTI_SZ = 0x00010000
+DeviceGUID = "{09f5f2f2-9725-4bce-9079-5e8184f9d587}"
+
+[Version]
+Signature = "$Windows NT$"
+Class     = USBDevice
+ClassGUID = {88BAE032-5A81-49f0-BC3D-A4FF138216D6}
+Provider  = %ManufacturerName%
+CatalogFile = WinUSBInstallation.cat
+DriverVer=09/04/2012,13.54.20.543
+
+; ========== Manufacturer/Models sections ===========
+
+[Manufacturer]
+%ManufacturerName% = Standard,NTamd64
+
+[Standard.NTamd64]
+%DeviceName% =USB_Install, USB\VID_16D0&PID_0E87
+
+; ========== Class definition (for Windows 8 and earlier versions)===========
+
+[ClassInstall32]
+AddReg = ClassInstall_AddReg
+
+[ClassInstall_AddReg]
+HKR,,,,%ClassName%
+HKR,,NoInstallClass,,1
+HKR,,IconPath,%REG_MULTI_SZ%,"%systemroot%\system32\setupapi.dll,-20"
+HKR,,LowerLogoVersion,,5.2
+
+; =================== Installation ===================
+
+[USB_Install]
+Include = winusb.inf
+Needs   = WINUSB.NT
+
+[USB_Install.Services]
+Include =winusb.inf
+Needs   = WINUSB.NT.Services
+
+[USB_Install.HW]
+AddReg=Dev_AddReg
+
+[USB_Install.Wdf]
+KmdfService=WINUSB, WinUsb_Install
+
+[WinUsb_Install]
+KmdfLibraryVersion=1.11
+
+[Dev_AddReg]
+HKR,,DeviceInterfaceGUIDs,%REG_MULTI_SZ%,%DeviceGUID%
+
