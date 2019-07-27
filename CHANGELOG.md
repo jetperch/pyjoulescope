@@ -4,6 +4,13 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 0.5.1-dev
+
+2019 ??? ??
+
+*   Added INF for joulescope_bootloader for old Win7 support.
+
+
 ## 0.5.0
 
 2019 Jul 26
