@@ -10,6 +10,7 @@ This file contains the list of changes made to pyjoulescope.
 
 *   Added INF for joulescope_bootloader for old Win7 support.
 *   Immediately use calibrated data during "off" to "on" transitions.
+*   Added "raw" field to View samples_get return value.
 
 
 ## 0.5.0

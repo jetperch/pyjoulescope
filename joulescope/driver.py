@@ -1122,7 +1122,10 @@ class View:
             'voltage': {
                 'value': data[:, 1, 0],
                 'units': 'V',
-            }
+            },
+            'raw': {
+                'value': self._device.stream_buffer.raw_get(start=start, stop=stop),
+            },
         }
 
 
