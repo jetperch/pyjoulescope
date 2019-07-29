@@ -812,7 +812,7 @@ cdef class StreamBuffer:
                     # use old select one more sample
                     # moving to less sensitive range (smaller value resistor)
                     i_range = self.i_range_d[2]
-                    if self.i_range_d[1] < self.i_range_d[2]:
+                    if self.i_range_d[1] < self.i_range_d[2] != 0x07:
                         # delay suppress by one sample
                         self.suppress_count = self.suppress_samples + 1
                 else:

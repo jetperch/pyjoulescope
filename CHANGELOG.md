@@ -9,6 +9,7 @@ This file contains the list of changes made to pyjoulescope.
 2019 ??? ??
 
 *   Added INF for joulescope_bootloader for old Win7 support.
+*   Immediately use calibrated data during "off" to "on" transitions.
 
 
 ## 0.5.0
