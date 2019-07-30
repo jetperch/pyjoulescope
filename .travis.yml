@@ -13,11 +13,11 @@ matrix:
         brew install libusb
         if ! brew list --versions python@3 >/dev/null; then
           brew install python@3
-        elif ! brew outdated "$BREW_PYTHON_PACKAGE"; then
+        elif ! brew outdated python@3; then
           brew upgrade python@3
         fi
     - os: windows
-      language: generic  # 'language: python' is not yet supported on windows    
+      language: shell  # 'language: python' is not yet supported on windows    
       env: >-
         PATH=/c/Python37:/c/Python37/Scripts:$PATH      
       before_install:
