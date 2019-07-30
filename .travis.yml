@@ -6,15 +6,26 @@ matrix:
       python: 3.7
     - os: osx
       osx_image: xcode11
-      python: 3.6
-#    - os: windows   # python not yet supported :(
+      language: generic
+      before_install:
+      - |
+        brew update
+        brew install libusb
+        if ! brew list --versions python@3 >/dev/null; then
+          brew install python@3
+        elif ! brew outdated "$BREW_PYTHON_PACKAGE"; then
+          brew upgrade python@3
+        fi
+    - os: windows
+      language: generic  # 'language: python' is not yet supported on windows    
+      env: >-
+        PATH=/c/Python37:/c/Python37/Scripts:$PATH      
+      before_install:
+        - choco install python
 addons:
   apt:
     pacakges:
       - libusb
-before_install:
-  - if [ "$TRAVIS_OS_NAME" = "osx" ]; then brew update        ; fi
-  - if [ "$TRAVIS_OS_NAME" = "osx" ]; then brew install libusb; fi
 install:
   - pip3 install numpy
   - pip3 install -r requirements.txt
