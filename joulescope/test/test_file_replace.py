@@ -15,6 +15,7 @@
 import unittest
 import tempfile
 import os
+import sys
 from joulescope.file_replace import FileReplace
 
 
@@ -61,10 +62,12 @@ class TestFileReplace(unittest.TestCase):
         self.confirm('original')
 
     def test_file_open(self):
-        with self.assertRaises(PermissionError):
-            with open(self._path, 'wt', encoding='utf-8') as f:
-                f.write('original')
-                with FileReplace(self._path, mode='wt') as f:
-                    f.write('hello')
-        self.confirm('original')
+        if sys.platform.startswith('win'):
+            # windows has file locking by default
+            with self.assertRaises(PermissionError):
+                with open(self._path, 'wt', encoding='utf-8') as f1:
+                    f1.write('original')
+                    with FileReplace(self._path, mode='wt') as f2:
+                        f2.write('hello')
+            self.confirm('original')
 
