@@ -22,7 +22,7 @@ matrix:
         PATH=/c/Python37:/c/Python37/Scripts:$PATH      
       before_install:
         - choco install python
-        - copy c:\Python37\python.exe c:\Python37\python3.exe
+        - cp /c/Python37/python.exe /c/Python37/python3.exe
 addons:
   apt:
     pacakges:
