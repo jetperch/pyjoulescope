@@ -34,4 +34,4 @@ install:
 script:
   - python3 -m unittest
   - python3 setup.py sdist
-  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then python3 setup.py bdist-wheel; fi
+  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then python3 setup.py bdist_wheel; fi
