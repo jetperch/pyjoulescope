@@ -22,9 +22,9 @@ https://github.com/pypa/sampleproject
 
 # Always prefer setuptools over distutils
 import setuptools
+from distutils.command.build import build as build_orig
 import os
 import sys
-import numpy as np
 
 VERSION = '0.5.1'  # CHANGE THIS VERSION!
 MYPATH = os.path.abspath(os.path.dirname(__file__))
@@ -47,7 +47,7 @@ ext = '.pyx' if USE_CYTHON else '.c'
 extensions = [
     setuptools.Extension('joulescope.stream_buffer',
         sources=['joulescope/stream_buffer' + ext],
-        include_dirs=[np.get_include()],
+        include_dirs=[],
     ),
 ]
 
@@ -67,6 +67,20 @@ else:
     PLATFORM_INSTALL_REQUIRES = []
 
 
+# Hack to install numpy before numpy.get_include()
+# https://stackoverflow.com/questions/54117786/add-numpy-get-include-argument-to-setuptools-without-preinstalled-numpy
+class Build(build_orig):
+
+    def finalize_options(self):
+        super().finalize_options()
+        # I stole this line from ead's answer:
+        __builtins__.__NUMPY_SETUP__ = False
+        import numpy
+        for extension in self.distribution.ext_modules:
+            extension.include_dirs.append(numpy.get_include())
+        self.distribution.include_dirs.append(numpy.get_include())
+
+
 setuptools.setup(
     name='joulescope',
     version=VERSION,
@@ -82,7 +96,7 @@ setuptools.setup(
     #
     # For a list of valid classifiers, see https://pypi.org/classifiers/
     classifiers=[  # Optional
-        'Development Status :: 3 - Alpha',
+        'Development Status :: 4 - Beta',
 
         # Indicate who your project is intended for
         'Intended Audience :: Developers',
@@ -101,10 +115,18 @@ setuptools.setup(
 
     packages=setuptools.find_packages(exclude=['native', 'docs', 'test', 'dist', 'build']),
     ext_modules=extensions,
-    include_dirs=[np.get_include()],
+    cmdclass={
+        'build': Build,
+    },
+    include_dirs=[],
     
     # See https://packaging.python.org/guides/distributing-packages-using-setuptools/#python-requires
     python_requires='~=3.6',
+
+    setup_requires=[
+        'numpy>=1.15.2',
+        'Cython>=0.29.3',
+    ],
 
     # See https://packaging.python.org/en/latest/requirements.html
     install_requires=[

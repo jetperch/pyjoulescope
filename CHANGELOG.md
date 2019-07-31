@@ -12,6 +12,7 @@ This file contains the list of changes made to pyjoulescope.
 *   Immediately use calibrated data during "off" to "on" transitions.
 *   Added "raw" field to View samples_get return value.
 *   Added Travis-CI integration.
+*   Fixed issue #6: setup.py imports numpy.
 
 
 ## 0.5.0

@@ -28,7 +28,6 @@ addons:
     pacakges:
       - libusb
 install:
-  - pip3 install numpy
   - pip3 install -r requirements.txt
   - python3 setup.py build_ext --inplace
 script:
