@@ -757,7 +757,10 @@ class WinUsbDevice:
                 endpoint = self._endpoints.pop(pipe_id, None)
                 if endpoint.stop_code and self._event_callback_fn:
                     msg = 'Endpoint pipe_id %d halted: %s' % (pipe_id, kernel32.get_error_str(endpoint.stop_code))
-                    self._event_callback_fn(1, msg)
+                    try:
+                        self._event_callback_fn(1, msg)
+                    except:
+                        log.exception('while in _event_callback_fn')
                 self.read_stream_stop(pipe_id)
             self._control_transfer.process()
 
