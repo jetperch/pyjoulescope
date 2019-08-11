@@ -163,7 +163,6 @@ def upgrade(device, image, progress_cbk=None, stage_cbk=None, done_cbk=None):
         next_stage()
         d.open()
         try:
-            d.parameter_set('sensor_power', 'on')
             d.sensor_firmware_program(image['data']['sensor']['image'], progress_cbk=cbk)
         finally:
             d.close()

@@ -4,15 +4,19 @@
 This file contains the list of changes made to pyjoulescope.
 
 
-## 0.5.1-dev
+## 0.5.1
 
-2019 ??? ??
+2019 Aug 11
 
 *   Added INF for joulescope_bootloader for old Win7 support.
 *   Immediately use calibrated data during "off" to "on" transitions.
 *   Added "raw" field to View samples_get return value.
 *   Added Travis-CI integration.
 *   Fixed issue #6: setup.py imports numpy.
+*   Caught event_callback_fn exceptions in WinUSB implementation.
+*   Fixed sensor programming when unprogrammed.
+    *   Increased sensor timeout.
+    *   Removed unnecessary normal mode power on.
 
 
 ## 0.5.0

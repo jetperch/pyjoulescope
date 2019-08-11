@@ -43,6 +43,7 @@ HOST_API_VERSION = 1
 CALIBRATION_SIZE_MAX = 0x8000
 PACKET_VERION = 1
 USB_RECONNECT_TIMEOUT_SECONDS = 15.0
+SENSOR_COMMAND_TIMEOUT_SECONDS = 3.0
 
 
 def _ioerror_on_bad_result(rv):
@@ -375,7 +376,7 @@ class Device:
         self.stream_buffer = None
 
     def _wait_for_sensor_command(self, timeout=None):
-        timeout = 1.0 if timeout is None else float(timeout)
+        timeout = SENSOR_COMMAND_TIMEOUT_SECONDS if timeout is None else float(timeout)
         time_start = time.time()
         while True:
             dt = time.time() - time_start
@@ -513,7 +514,7 @@ class Device:
         This method is always safe to call, even after the device has been
         stopped or removed.
         """
-        log.info('stop')
+        log.info('stop : streaming=%s', self._streaming)
         if self._streaming:
             self._usb.read_stream_stop(2)
             self._streaming = False
@@ -826,25 +827,35 @@ class Device:
 
         log.info('sensor bootloader: start')
         data = datafile.filename_or_bytes(data)
-        fh = io.BytesIO(data)
-        dr = datafile.DataFileReader(fh)
-        # todo: check distribution signature
-        tag, hdr_value = next(dr)
-        if tag != datafile.TAG_HEADER:
-            raise ValueError('incorrect format: expected header, received %r' % tag)
-        tag, data = next(dr)
-        if tag != datafile.TAG_DATA_BINARY:
-            raise ValueError('incorrect format: expected data, received %r' % tag)
-        tag, enc = next(dr)
-        if tag != datafile.TAG_ENCRYPTION:
-            raise ValueError('incorrect format: expected encryption, received %r' % tag)
-        metadata = {
-            'size': len(data),
-            'encryption': 1,
-            'header': hdr_value[:24],
-            'mac': enc[:16],
-            'signature': enc[16:],
-        }
+        if not len(data):
+            # erase without programming
+            metadata = {
+                'size': 0,
+                'encryption': 1,
+                'header': bytes([0] * 24),
+                'mac': bytes([0] * 16),
+                'signature': bytes([0] * 64),
+            }
+        else:
+            fh = io.BytesIO(data)
+            dr = datafile.DataFileReader(fh)
+            # todo: check distribution signature
+            tag, hdr_value = next(dr)
+            if tag != datafile.TAG_HEADER:
+                raise ValueError('incorrect format: expected header, received %r' % tag)
+            tag, data = next(dr)
+            if tag != datafile.TAG_DATA_BINARY:
+                raise ValueError('incorrect format: expected data, received %r' % tag)
+            tag, enc = next(dr)
+            if tag != datafile.TAG_ENCRYPTION:
+                raise ValueError('incorrect format: expected encryption, received %r' % tag)
+            metadata = {
+                'size': len(data),
+                'encryption': 1,
+                'header': hdr_value[:24],
+                'mac': enc[:16],
+                'signature': enc[16:],
+            }
         log.info('header    = %r', binascii.hexlify(metadata['header']))
         log.info('mac       = %r', binascii.hexlify(metadata['mac']))
         log.info('signature = %r', binascii.hexlify(metadata['signature']))
@@ -854,14 +865,16 @@ class Device:
         rv = self._usb.control_transfer_out(
             'device', 'vendor', request=UsbdRequest.SENSOR_BOOTLOADER,
             value=SensorBootloader.START, data=msg)
+        # firmware holds of control transaction complete until done
         _ioerror_on_bad_result(rv)
         self._sensor_status_check()
-        time.sleep(1.0)
+        time.sleep(1.0)  # give sensor extra time to power up
 
         log.info('sensor bootloader: erase all flash')
         rv = self._usb.control_transfer_out(
             'device', 'vendor', request=UsbdRequest.SENSOR_BOOTLOADER,
             value=SensorBootloader.ERASE)
+        # firmware holds of control transaction complete until done
         _ioerror_on_bad_result(rv)
         self._sensor_status_check()
 
@@ -878,6 +891,7 @@ class Device:
             rv = self._usb.control_transfer_out(
                 'device', 'vendor', request=UsbdRequest.SENSOR_BOOTLOADER,
                 value=SensorBootloader.WRITE, index=index, data=data[:sz])
+            # firmware holds of control transaction complete until done
             _ioerror_on_bad_result(rv)
             self._sensor_status_check()
             data = data[sz:]
