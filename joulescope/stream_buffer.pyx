@@ -719,15 +719,16 @@ cdef class StreamBuffer:
     cdef _check_stop(self):
         cdef bint duration_stop = self.device_sample_id >= self._sample_id_max
         cdef bint contiguous_stop = self.contiguous_count >= self._contiguous_max
-        rv = duration_stop or contiguous_stop
-        if rv:
-            if duration_stop:
-                log.info('insert causing duration stop %d >= %d',
-                         self.device_sample_id, self._sample_id_max)
-            elif duration_stop:
-                log.info('insert causing contiguous stop %d >= %d',
-                         self.contiguous_count, self._contiguous_max)
-        return rv
+        if duration_stop:
+            log.info('insert causing duration stop %d >= %d',
+                     self.device_sample_id, self._sample_id_max)
+            return True
+        elif contiguous_stop:
+            log.info('insert causing contiguous stop %d >= %d',
+                     self.contiguous_count, self._contiguous_max)
+            return True
+        else:
+            return False
 
     cpdef insert(self, data):
         """Insert new device USB data into the buffer.

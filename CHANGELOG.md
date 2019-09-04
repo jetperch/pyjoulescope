@@ -4,6 +4,13 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 0.5.2-dev01
+
+2019 Sep ??
+
+*   Fixed contiguous_stop log message, which was not correctly displayed.
+
+
 ## 0.5.1
 
 2019 Aug 11
