@@ -35,7 +35,7 @@ def parser_config(p):
 
 
 def on_cmd(args):
-    device = scan_require_one(name='Joulescope')
+    device = scan_require_one(name='Joulescope', config='auto')
     f = lambda: run(device, filename=args.filename,
                     duration=args.duration,
                     contiguous_duration=args.contiguous)
@@ -72,8 +72,7 @@ def run(device, filename, duration=None, contiguous_duration=None):
     signal.signal(signal.SIGINT, do_quit)
     try:
         device.open()
-        device.parameter_set('source', 'raw')
-        device.start(stop_fn=on_stop, duration=duration, 
+        device.start(stop_fn=on_stop, duration=duration,
                      contiguous_duration=contiguous_duration)
         device.recording_start(filename)
         time_last = time.time()
