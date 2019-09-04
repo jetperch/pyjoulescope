@@ -207,8 +207,8 @@ class Span:
             are the number of quantized samples per resulting samples.  The axis
             is the np.ndarray of quantized values for use as a plotting axis.
         """
-        log.info('conform_discrete(span=%r, incr=%r, gain=%r, pivot=%r)',
-                 span, incr, gain, pivot)
+        log.debug('conform_discrete(span=%r, incr=%r, gain=%r, pivot=%r)',
+                  span, incr, gain, pivot)
         steps_per = 1
         s = self._slide_or_truncate(span)
 
@@ -222,6 +222,6 @@ class Span:
             a = np.arange(self.length, dtype=np.float)
             a *= self.quant * steps_per
             a += s[0]
-            log.info('conform_discrete: span=%s, steps_per=%s', s, steps_per)
+            log.debug('conform_discrete: span=%s, steps_per=%s', s, steps_per)
         return s, steps_per, a
 

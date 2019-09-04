@@ -10,6 +10,7 @@ This file contains the list of changes made to pyjoulescope.
 
 *   Fixed contiguous_stop log message, which was not correctly displayed.
 *   Modified capture command to use config='auto'.
+*   Reduced span.conform_discrete log level from info to debug.
 
 
 ## 0.5.1
