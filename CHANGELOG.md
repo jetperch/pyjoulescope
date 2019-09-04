@@ -11,6 +11,7 @@ This file contains the list of changes made to pyjoulescope.
 *   Fixed contiguous_stop log message, which was not correctly displayed.
 *   Modified capture command to use config='auto'.
 *   Reduced span.conform_discrete log level from info to debug.
+*   Fixed macOS crash on Joulescope removal (Issue #5).
 
 
 ## 0.5.1

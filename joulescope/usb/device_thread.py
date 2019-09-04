@@ -28,10 +28,6 @@ TIMEOUT = 3.0
 TIMEOUT_OPEN = 10.0
 
 
-def default_callback(*args, **kwargs):
-    return None
-
-
 class DeviceThread:
     """Wrap a :class:`Device` in a thread.
 
@@ -49,31 +45,42 @@ class DeviceThread:
         self.counter = 0
 
     def _cmd_process(self, cmd, args, cbk):
-        # all exceptions handled by _cmd_process_all
-        log.debug('_cmd_process %s - start', cmd)
-        if cmd == 'status':
-            cbk(self._device.status())
-        elif cmd == 'open':
-            event_callback_fn = args
-            cbk(self._device.open(event_callback_fn))
-        elif cmd == 'close':
-            cbk(self._device.close())
-        elif cmd == 'control_transfer_out':
-            args, kwargs = args
-            self._device.control_transfer_out(cbk, *args, **kwargs)
-        elif cmd == 'control_transfer_in':
-            args, kwargs = args
-            self._device.control_transfer_in(cbk, *args, **kwargs)
-        elif cmd == 'read_stream_start':
-            args, kwargs = args
-            cbk(self._device.read_stream_start(*args, **kwargs))
-        elif cmd == 'read_stream_stop':
-            args, kwargs = args
-            cbk(self._device.read_stream_stop(*args, **kwargs))
-        elif cmd == '__str__':
-            cbk(str(self._device))
-        else:
-            log.warning('unsupported command %s', cmd)
+        delegate_cbk = False
+        rv = None
+        try:
+            log.debug('_cmd_process %s - start', cmd)
+            if cmd == 'status':
+                rv = self._device.status()
+            elif cmd == 'open':
+                event_callback_fn = args
+                rv = self._device.open(event_callback_fn)
+            elif cmd == 'close':
+                rv = self._device.close()
+            elif cmd == 'control_transfer_out':
+                delegate_cbk = True
+                args, kwargs = args
+                self._device.control_transfer_out(cbk, *args, **kwargs)
+            elif cmd == 'control_transfer_in':
+                delegate_cbk = True
+                args, kwargs = args
+                self._device.control_transfer_in(cbk, *args, **kwargs)
+            elif cmd == 'read_stream_start':
+                args, kwargs = args
+                rv = self._device.read_stream_start(*args, **kwargs)
+            elif cmd == 'read_stream_stop':
+                args, kwargs = args
+                rv = self._device.read_stream_stop(*args, **kwargs)
+            elif cmd == '__str__':
+                rv = str(self._device)
+            else:
+                log.warning('unsupported command %s', cmd)
+        except:
+            log.exception('While running command')
+        if not delegate_cbk and callable(cbk):
+            try:
+                cbk(rv)
+            except:
+                log.exception('in callback')
         log.debug('_cmd_process %s - done', cmd)
 
     def _cmd_process_all(self):
@@ -82,13 +89,7 @@ class DeviceThread:
             while not _quit:
                 cmd, args, cbk = self._cmd_queue.get(timeout=0.0)
                 self.counter += 1
-                if not callable(cbk):
-                    cbk = default_callback
-                try:
-                    self._cmd_process(cmd, args, cbk)
-                except Exception as ex:
-                    log.exception('DeviceThread._cmd_process_all')
-                    cbk(ex)
+                self._cmd_process(cmd, args, cbk)
                 if cmd in ['close']:
                     log.info('DeviceThread._cmd_process_all close')
                     _quit = True

@@ -412,22 +412,26 @@ class ControlTransferAsync:
             log.warning('Transfer callback when no commands')
         self._issue()
 
-    def close(self):
+    def _abort_all(self):
         commands, self._commands = self._commands, []
-        if self._transfer_pending:
-            log.info('ControlTransferAsync.close cancel pending transfer, %d', len(commands))
-            transfer, self._transfer_pending = self._transfer_pending, None
-            transfer.transfer[0].callback = _transfer_callback_discard_fn
-            _lib.libusb_cancel_transfer(transfer.transfer)
-            # callback function will be invoked later
-        else:
-            log.info('ControlTransferAsync.close %d', len(commands))
         for cbk_fn, setup_packet, _ in commands:
             try:
                 response = usb_core.ControlTransferResponse(setup_packet, TransferStatus.CANCELLED, None)
                 cbk_fn(response)
             except Exception:
-                log.exception('while closing in callback')
+                log.exception('in callback while aborting')
+
+    def close(self):
+        if self._handle and self._transfer_pending:
+            log.info('ControlTransferAsync.close cancel pending transfer, %d', len(self._commands))
+            transfer, self._transfer_pending = self._transfer_pending, None
+            transfer.transfer[0].callback = _transfer_callback_discard_fn
+            _lib.libusb_cancel_transfer(transfer.transfer)
+            # callback function will be invoked later
+        else:
+            log.info('ControlTransferAsync.close %d', len(self._commands))
+        self._handle = None
+        self._abort_all()
 
     def pend(self, cbk_fn, setup_packet: usb_core.SetupPacket, buffer=None):
         """Pend an asynchronous Control Transfer.
@@ -436,6 +440,7 @@ class ControlTransferAsync:
             A :class:`usb_core.ControlTransferResponse` is the sole argument.
         :param setup_packet:
         :param buffer: The buffer (if length > 0) for write transactions.
+        :return: True if pending, False on error.
         """
         command = [cbk_fn, setup_packet, buffer]
         was_empty = not bool(self._commands)
@@ -447,6 +452,10 @@ class ControlTransferAsync:
     def _issue(self):
         if not self._commands:
             return True
+        if not self._handle:
+            log.info('_issue but handle not valid')
+            self._abort_all()
+            return False
         log.debug('preparing')
         _, setup_packet, buffer = self._commands[0]
         hdr = struct.pack('<BBHHH', setup_packet.request_type, setup_packet.request,
@@ -470,8 +479,8 @@ class ControlTransferAsync:
             log.warning('libusb_submit_transfer [control] => %d', rv)
             if t.status == 0:
                 if rv == ReturnCodes.ERROR_NO_DEVICE:
+                    log.info('control transfer but no device')
                     t.status = TransferStatus.NO_DEVICE
-                    self._remove_fn()
                 else:
                     t.status = TransferStatus.ERROR
             self._transfer_callback(transfer.addr)
@@ -695,6 +704,7 @@ class LibUsbDevice:
     def on_removed(self):
         log.info('Device removal signaled')
         self._removed = True
+        self._control_transfer.close()
 
     def _open(self):
         log.info('open: start %s', self._path)
@@ -751,7 +761,7 @@ class LibUsbDevice:
         if self._control_transfer:
             self._control_transfer.close()
             self._control_transfer = None
-        if self._handle:
+        if self._handle and not self._removed:
             _lib.libusb_close(self._handle)
             self._handle = c_void_p(None)
         if self._ctx:
@@ -821,7 +831,7 @@ class LibUsbDevice:
             for pipe_id in endpoints_stop:
                 self.read_stream_stop(pipe_id)
         else:
-            pass  # time.sleep(0.001)
+            time.sleep(0.025)
 
 
 class DeviceNotify:
@@ -908,7 +918,7 @@ def scan(name: str) -> List[LibUsbDevice]:
                     if vid == descriptor.idVendor and pid == descriptor.idProduct:
                         dh = c_void_p(None)
                         rv = _lib.libusb_open(device, pointer(dh))
-                        if rv < 0:
+                        if rv < 0 or not dh:
                             log.info('Could not open device: %04x/%04x', vid, pid)
                             continue
                         try:
