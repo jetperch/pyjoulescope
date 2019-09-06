@@ -13,6 +13,7 @@ This file contains the list of changes made to pyjoulescope.
 *   Reduced span.conform_discrete log level from info to debug.
 *   Fixed macOS crash on Joulescope removal (Issue #5).
 *   Added digital data path pattern test.  Was intentionally broken long ago.
+*   Modified View.samples_get() to have 'signals' like Driver.statistics_get().
 
 
 ## 0.5.1

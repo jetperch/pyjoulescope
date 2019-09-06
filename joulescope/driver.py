@@ -1129,16 +1129,19 @@ class View:
     def samples_get(self, start=None, stop=None):
         data = self._device.stream_buffer.data_get(start=start, stop=stop)
         return {
-            'current': {
-                'value': data[:, 0, 0],
-                'units': 'A',
-            },
-            'voltage': {
-                'value': data[:, 1, 0],
-                'units': 'V',
-            },
-            'raw': {
-                'value': self._device.stream_buffer.raw_get(start=start, stop=stop),
+            'signals': {
+                'current': {
+                    'value': data[:, 0, 0],
+                    'units': 'A',
+                },
+                'voltage': {
+                    'value': data[:, 1, 0],
+                    'units': 'V',
+                },
+                'raw': {
+                    'value': self._device.stream_buffer.raw_get(start=start, stop=stop),
+                    'units': 'LSBs',
+                },
             },
         }
 
