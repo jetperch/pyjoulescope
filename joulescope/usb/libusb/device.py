@@ -573,7 +573,12 @@ class EndpointIn:
                     self.byte_count_total += t.actual_length
                     self.transfers_processed += 1
                     buffer = transfer.buffer[:t.actual_length]
-                    if self._data_fn(buffer):
+                    try:
+                        rv = bool(self._data_fn(buffer))
+                    except Exception:
+                        log.exception('data_fn exception: stop streaming')
+                        rv = True
+                    if rv:
                         log.info('%s terminated by data_fn', self)
                         self._cancel()
                 elif t.status == TransferStatus.NO_DEVICE:
@@ -587,7 +592,10 @@ class EndpointIn:
         self._pend()
         if self._state in [self.ST_STOPPING, self.ST_ABORT]:
             if 0 == len(self._transfers_pending):
-                self._data_fn(None)  # indicate done with None
+                try:
+                    self._data_fn(None)  # indicate done with None
+                except Exception:
+                    log.exception('data_fn(None) exception on done')
                 self._state = self.ST_IDLE
                 log.info('%s stop => idle', self)
             else:
@@ -628,13 +636,19 @@ class EndpointIn:
             _lib.libusb_cancel_transfer(transfer.transfer)
 
     def process_signal(self):
+        rv = False
         if self.transfer_count and self._state == self.ST_RUNNING:
             self.transfer_count = 0
-            if self._process_fn():
+            try:
+                if callable(self._process_fn):
+                    rv = bool(self._process_fn())
+            except Exception:
+                log.exception('_process_fn exception: stop streaming')
+                rv = True  # force stop
+            if rv:
                 log.info('%s terminated by process_fn', self)
                 self._cancel()
-                return True
-        return False
+        return rv
 
     def start(self):
         log.info("%s start transfer size = %d bytes" % (self, self._config['transfer_size_bytes']))

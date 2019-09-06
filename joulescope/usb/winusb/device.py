@@ -291,9 +291,14 @@ class EndpointIn:
                 length = length_transferred.value
                 self.byte_count_this += length
                 count += 1
-                if self._data_fn(ov.data[:length]):
-                    log.info('EndpointIn %d terminated by data_fn', self.pipe_id)
+                try:
+                    rv = self._data_fn(ov.data[:length])
+                    rv = bool(rv)
+                except Exception:
+                    log.exception('data_fn exception: stop streaming')
                     rv = True
+                if rv:
+                    log.info('EndpointIn %d terminated by data_fn', self.pipe_id)
                     self._halt(0)
                     self._overlapped_free.append(ov)
                 else:
@@ -347,11 +352,15 @@ class EndpointIn:
             rv = self._pend()
         return rv
 
-    def process_signal(self):
+    def process_signal(self):  #: NoRaise
         if self._process_transfers:
             self._process_transfers = 0
-            if callable(self._process_fn):
-                return self._process_fn()
+            try:
+                if callable(self._process_fn):
+                    return self._process_fn()
+            except:
+                log.exception('_process_fn exception: stop streaming')
+                return True  # force stop
         return False
 
     def start(self):
@@ -368,7 +377,10 @@ class EndpointIn:
             self._cancel()
             self.process_signal()  # ensure that all received data is processed
             self._close()
-            self._data_fn(None)  # indicate done with None
+            try:
+                self._data_fn(None)  # indicate done with None
+            except Exception:
+                log.exception('data_fn(None) exception on done')
             self._state = self.ST_IDLE
 
     def status(self):
