@@ -35,12 +35,10 @@ class TestPattern(unittest.TestCase):
             print("multiple devices found")
         self.device = self.devices[0]
         self.device.open()
-        self.device_buffer = self.device.stream_buffer
 
     def tearDown(self):
         if self.device is not None:
             self.device.close()
-            self.device.stream_buffer = self.device_buffer
 
     def test_control_loopback_wvalue(self):
         usb = self.device.usb_device
