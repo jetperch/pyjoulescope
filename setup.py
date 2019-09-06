@@ -49,6 +49,10 @@ extensions = [
         sources=['joulescope/stream_buffer' + ext],
         include_dirs=[],
     ),
+    setuptools.Extension('joulescope.pattern_buffer',
+        sources=['joulescope/pattern_buffer' + ext],
+        include_dirs=[],
+    ),
 ]
 
 if USE_CYTHON:

@@ -13,6 +13,7 @@ joulescope.egg-info
 # Ignore Python compiled modules
 joulescope/stream_buffer.c
 joulescope/stream_buffer.html
+joulescope/pattern_buffer.c
 joulescope/libjoulescope.dll
 joulescope/version.py
 

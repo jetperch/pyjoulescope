@@ -19,27 +19,18 @@ development tool and is not intended for customer use.
 """
 
 import signal
-import struct
 import time
+from joulescope.pattern_buffer import PatternBuffer
 import logging
-from joulescope.usb import scan
-from joulescope.usb.device_thread import DeviceThread
+from joulescope import scan
 
 
 def parser_config(p):
-    """Capture raw USB data  from Joulescope"""
+    """Capture raw USB data from Joulescope."""
     p.add_argument('--duration',
                    type=float,
                    help='The capture duration.')
-    p.add_argument('--endpoint_id',
-                   type=int,
-                   default=2,
-                   help='The endpoint identifier.')
-    p.add_argument('--threaded', '-t',
-                   default=0,
-                   action='count',
-                   help='Use the threaded wrapper')
-    p.add_argument('filename',
+    p.add_argument('--filename',
                    help='The filename for output data.')
     return on_cmd
 
@@ -53,88 +44,80 @@ def on_cmd(args):
         print('More than on device found)')
         return 2
     device = d[0]
-    return run(device, filename=args.filename, 
-               duration=args.duration,
-               endpoint_id=args.endpoint_id,
-               threaded=args.threaded)
+    return run(device, filename=args.filename, duration=args.duration)
 
 
-def stream_settings(device):
-    """Configure the Joulescope stream settings
+class RecordingBuffer:
 
-    :param device: The USB device instance.
-    """
-    version = 1
-    length = 16
-    msg = struct.pack('<BBBBIBBBBBBBB',
-                      version,
-                      length,
-                      0x01,  # PktType settings
-                      0x00,  # reserved
-                      0x00,  # reserved
-                      0x01,  # sensor_power,
-                      0x00,  # i_range,
-                      0xC0,  # source raw,
-                      0x00,  # options
-                      0x03,  # streaming normal
-                      0, 0, 0)
-    rv = device.control_transfer_out(
-        'device', 'vendor', request=3,
-        value=0, index=0, data=msg)
-    return rv
+    def __init__(self, filename):
+        self.fh = open(filename, 'wb')
+        self._sample_id_count = 0
+        self.sample_id_max = None
+        self.contiguous_max = None
+
+    def close(self):
+        if self.fh is not None:
+            self.fh.close()
+            self.fh is None
+
+    def status(self):
+        return {}
+
+    def reset(self):
+        self._sample_id_count = 0
+
+    def calibration_set(self, *args, **kwargs):
+        pass
+
+    def insert(self, data):
+        if self.sample_id_max is not None and self._sample_id_count >= self.sample_id_max or data is None:
+            if self.fh is not None:
+                self.fh.close()
+            return True
+        elif self.fh is not None:
+            self.fh.write(data)
+        self._sample_id_count += (len(data) // 512) * 126
+        return False
+
+    def process(self):
+        return False
 
 
-def run(device, filename, duration, endpoint_id, threaded):
+def run(device, filename, duration):
     logging.basicConfig(level=logging.DEBUG)
-    quit_ = False
-    d = device
-    for _ in range(threaded):
-        d = DeviceThread(d)
-    time_start = time.time()
-    time_last = time_start
+    time_last = time.time()
+    quit = False
+    if filename:
+        buffer = RecordingBuffer(filename=filename)
+    else:
+        buffer = PatternBuffer()
 
-    with open(filename, 'wb') as fh:
-        def do_quit(*args, **kwargs):
-            nonlocal quit_
-            quit_ = 'quit from SIGINT'
+    def do_quit(*args, **kwargs):
+        nonlocal quit
+        quit = 'quit from SIGINT'
 
-        def on_data(data, length=None):
-            nonlocal quit_
-            if data is None:
-                if not quit_:
-                    quit_ = 'quit for on_data'
-            else:
-                fh.write(bytes(data)[:length])
-            if duration is not None:
-                if time.time() - time_start > duration:
-                    return True
-            return False
+    def do_stop(*args, **kwargs):
+        nonlocal quit
+        quit = 'quit from done'
 
-        def on_process():
-            return False
-            
-        signal.signal(signal.SIGINT, do_quit)
+    signal.signal(signal.SIGINT, do_quit)
+    device.open()
+    try:
+        device.stream_buffer = buffer
+        device.parameter_set('sensor_power', 'on')
+        # device.parameter_set('control_test_mode', 'normal')
+        device.parameter_set('source', 'pattern_sensor')
+        device.start(stop_fn=do_stop, duration=duration)
         print('Press CTRL-C to stop data collection')
-        try:
-            d.open()
-            rv = stream_settings(d)
-            if 0 != rv.result:
-                print('warning: %s', rv)
-            d.read_stream_start(
-                endpoint_id=endpoint_id,
-                transfers=8,
-                block_size=256 * 512,
-                data_fn=on_data,
-                process_fn=on_process)
-            while not quit_:
-                d.process(timeout=0.01)
-                time_now = time.time()
-                if time_now - time_last > 1.0:
-                    print(d.status())
-                    time_last = time_now
-            d.read_stream_stop(endpoint_id)
-        finally:
-            d.close()
-        print('done capturing data: %s' % quit_)
+        while not quit:
+            time.sleep(0.01)
+            time_now = time.time()
+            if time_now - time_last > 1.0:
+                print(device.status())
+                time_last = time_now
+        print(device.status())
+    finally:
+        device.close()
+    print('done capturing data: %s' % quit)
 
     return 0

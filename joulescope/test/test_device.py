@@ -21,6 +21,7 @@ This test requires that JouleScope hardware be attached to this PC!
 import unittest
 from joulescope.driver import scan, UsbdRequest, LOOPBACK_BUFFER_SIZE
 from joulescope.usb import hw_tests
+from joulescope.pattern_buffer import PatternBuffer
 
 
 class TestPattern(unittest.TestCase):
@@ -34,10 +35,12 @@ class TestPattern(unittest.TestCase):
             print("multiple devices found")
         self.device = self.devices[0]
         self.device.open()
+        self.device_buffer = self.device.stream_buffer
 
     def tearDown(self):
         if self.device is not None:
             self.device.close()
+            self.device.stream_buffer = self.device_buffer
 
     def test_control_loopback_wvalue(self):
         usb = self.device.usb_device
@@ -49,26 +52,24 @@ class TestPattern(unittest.TestCase):
 
     def _pattern(self, duration=None):
         duration = int(duration) if duration is not None else 1.0
-        # data = self.device.read(duration=duration, data_format='usb')
-        # parser = PacketParser()
-        # self.assertGreater(parser.packet_count, 0)
-        # self.assertGreater(parser.byte_count, 0)
-        # self.assertEqual(parser.rx_pattern.receive_count, parser.packet_count * 126)
-        # self.assertEqual(0, parser.rx_pattern.error_count)
-        # self.assertEqual(0, parser.rx_pattern.missing_count)
-        # self.assertEqual(0, parser.rx_pattern.resync_count)
+        buffer = PatternBuffer()
+        self.device.stream_buffer = buffer
+        self.device.read(duration=duration, out_format='raw')
+        s = buffer.status()
+        self.assertGreater(s['sample_id'], 1000000)
+        self.assertEqual(s['header_error'], 0)
+        self.assertLessEqual(s['pkt_index_error'], 1)
+        self.assertLessEqual(s['pattern_error'], 1)
 
-    @unittest.skip('Not currently supported')  # todo
     def test_datapath_usb(self):
         self.device.parameter_set('control_test_mode', 'usb')
         self.device.parameter_set('source', 'pattern_usb')
-        self._pattern(1)
+        self._pattern(1.0)
 
-    @unittest.skip('Not currently supported')  # todo
     def test_datapath_sensor(self):
         self.device.parameter_set('control_test_mode', 'normal')
         self.device.parameter_set('source', 'pattern_sensor')
-        self._pattern(1)
+        self._pattern(1.0)
 
     def test_read(self):
         self.device.parameter_set('source', 'raw')

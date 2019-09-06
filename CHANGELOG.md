@@ -12,6 +12,7 @@ This file contains the list of changes made to pyjoulescope.
 *   Modified capture command to use config='auto'.
 *   Reduced span.conform_discrete log level from info to debug.
 *   Fixed macOS crash on Joulescope removal (Issue #5).
+*   Added digital data path pattern test.  Was intentionally broken long ago.
 
 
 ## 0.5.1
