@@ -806,7 +806,7 @@ class Device:
         v = self.view
         s1 = v.time_to_sample_id(t1)
         s2 = v.time_to_sample_id(t2)
-        log.info('buffer %s, %s => %s, %s : %s', t1, t2, s1, s2, v.span)
+        log.info('buffer %s, %s => %s, %s', t1, t2, s1, s2)
         d = self.stream_buffer.stats_get(start=s1, stop=s2)
         t_start = s1 / self.sampling_frequency
         t_stop = s2 / self.sampling_frequency
@@ -1006,9 +1006,9 @@ class View:
         self.x_range = [x_max - 1.0, x_max]  # the current range
         self.samples_per = 1
         self.data_idx = 0
-        self.span = span.Span(limits=[0.0, x_max],
-                              quant=1.0 / self.sampling_frequency,
-                              length=100)
+        self._span = span.Span(limits=[0.0, x_max],
+                               quant=1.0 / self.sampling_frequency,
+                               length=100)
         self.changed = True
 
     def __len__(self):
@@ -1024,6 +1024,11 @@ class View:
     def calibration(self):
         return self._device.calibration
 
+    @property
+    def limits(self):
+        """Get the (x_min, x_max) limits for the view."""
+        return self._span.limits
+
     def clear(self):
         self.changed = True
         self.data_idx = 0
@@ -1036,19 +1041,19 @@ class View:
             length = kwargs['pixels']
             if length is not None and length != len(self):
                 log.info('resize %s', length)
-                self.span.length = length
+                self._span.length = length
                 self.data = np.full((length, 3, 4), np.nan, dtype=np.float32)
                 self.changed = True  # invalidate
-            x_range, self.samples_per, self.x = self.span.conform_discrete(x_range)
+            x_range, self.samples_per, self.x = self._span.conform_discrete(x_range)
         elif cmd == 'span_absolute':  # {range: (start: float, stop: float)}]
-            x_range, self.samples_per, self.x = self.span.conform_discrete(kwargs.get('range'))
+            x_range, self.samples_per, self.x = self._span.conform_discrete(kwargs.get('range'))
         elif cmd == 'span_relative':  # {center: float, gain: float}]
-            x_range, self.samples_per, self.x = self.span.conform_discrete(
+            x_range, self.samples_per, self.x = self._span.conform_discrete(
                 x_range, gain=kwargs.get('gain'), pivot=kwargs.get('pivot'))
         elif cmd == 'span_pan':
             delta = kwargs.get('delta', 0.0)
             x_range = [x_range[0] + delta, x_range[-1] + delta]
-            x_range, self.samples_per, self.x = self.span.conform_discrete(x_range)
+            x_range, self.samples_per, self.x = self._span.conform_discrete(x_range)
         elif cmd == 'refresh':
             log.warning('on_x_change(refresh)')
             self.changed = True
@@ -1058,11 +1063,11 @@ class View:
             return
 
         if self._device.is_streaming:
-            x_max = self.span.limits[1]
+            x_max = self._span.limits[1]
             if x_range[1] < x_max:
                 x_shift = x_max - x_range[1]
                 x_range = [x_range[0] + x_shift, x_max]
-            x_range, self.samples_per, self.x = self.span.conform_discrete(x_range)
+            x_range, self.samples_per, self.x = self._span.conform_discrete(x_range)
 
         self.changed |= (self.x_range != x_range)
         self.clear()
@@ -1074,7 +1079,7 @@ class View:
     def _view(self):
         buffer = self._device.stream_buffer
         _, sample_id_end = buffer.sample_id_range
-        lag_time = self.span.limits[1] - self.x_range[1]
+        lag_time = self._span.limits[1] - self.x_range[1]
         lag_samples = int(lag_time * self.sampling_frequency) // self.samples_per
         data_idx_stream_end = sample_id_end // self.samples_per
         data_idx_view_end = data_idx_stream_end - lag_samples
@@ -1084,7 +1089,7 @@ class View:
 
     def time_to_sample_id(self, t):
         idx_start, idx_end = self._device.stream_buffer.sample_id_range
-        t_start, t_end = self.span.limits
+        t_start, t_end = self._span.limits
         if not t_start <= t <= t_end:
             return None
         dx_end = t_end - t
@@ -1101,17 +1106,19 @@ class View:
             return False, (None, None)
         elif not self.changed and 0 == delta:
             return False, (self.x, self.data)
-        elif self.changed or delta >= length:
+        elif self.changed or delta >= length:  # perform full recompute
             self.data[:, :, :] = np.nan
             if data_idx_view_end > 0:
                 start_idx = (data_idx_view_end - length) * self.samples_per
-                # log.info('recompute(start=%s, stop=%s, increment=%s)', start_idx, sample_id_end, self.samples_per)
+                # log.debug('recompute(start=%s, stop=%s, increment=%s)', start_idx, sample_id_end, self.samples_per)
                 buffer.data_get(start_idx, sample_id_end, self.samples_per, self.data)
         elif data_idx_view_end > 0:
             start_idx = self.data_idx * self.samples_per
             # log.debug('update(start=%s, stop=%s, increment=%s)', start_idx, sample_id_end, self.samples_per)
             self.data = np.roll(self.data, -delta, axis=0)
             buffer.data_get(start_idx, sample_id_end, self.samples_per, self.data[-delta:, :, :])
+        else:
+            self.data[:, :, :] = np.nan
         self.data_idx = data_idx_view_end
         self.changed = False
         return True, (self.x, self.data)
