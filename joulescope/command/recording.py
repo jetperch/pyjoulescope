@@ -20,10 +20,14 @@ import numpy as np
 def parser_config(p):
     """Inspect recordings"""
     p.add_argument('filename',
-                   help='The capture duration in seconds.')
+                   help='The JLS filename to process.')
     p.add_argument('--plot',
                    action='store_true',
                    help='Plot the captured data (data reduction preview only).')
+    p.add_argument('--plot-raw',
+                   help='Plot the raw data with list of plots.'
+                        "'i'=current, 'v'=voltage, 'r'=current range. "
+                        'Time range must < 2,000,000 samples')
     p.add_argument('--export',
                    help='Filename for export data.  ".csv" and ".npy" supported.')
     p.add_argument('--start',
@@ -66,6 +70,55 @@ def on_cmd(args):
 
         plt.show()
         plt.close(f)
+
+    if args.plot_raw:
+        import matplotlib.pyplot as plt
+        if stop - start > 2000000:
+            print('Time range too long, cannot --plot-raw')
+        else:
+            plot_idx_total = len(args.plot_raw)
+            link_axis = None
+            plot_idx = 1
+            d = r.raw(start=start, stop=stop, calibrated=False)
+            i_raw = np.right_shift(d[:, 0], 2)
+            v_raw = np.right_shift(d[:, 1], 2)
+            x = np.arange(len(i_raw)) * (1.0 / r.config['sampling_frequency'])
+
+            i_sel = np.bitwise_and(d[:, 0], 0x0003)
+            i_sel_tmp = np.bitwise_and(d[:, 1], 0x0001)
+            np.left_shift(i_sel_tmp, 2, out=i_sel_tmp)
+            np.bitwise_or(i_sel, i_sel_tmp, out=i_sel)
+            del i_sel_tmp
+            i_sel = i_sel.astype(np.uint8)
+
+            f = plt.figure()
+            f.suptitle('Joulescope Raw Data')
+
+            for c in args.plot_raw:
+                if c == 'i':
+                    ax = f.add_subplot(plot_idx_total, 1, plot_idx, sharex=link_axis)
+                    ax.plot(x, i_raw)
+                    ax.set_ylabel('Current (LSBs)')
+                elif c == 'v':
+                    ax = f.add_subplot(plot_idx_total, 1, plot_idx, sharex=link_axis)
+                    ax.plot(x, v_raw)
+                    ax.set_ylabel('Voltage (LSBs)')
+                elif c == 'r':
+                    ax = f.add_subplot(plot_idx_total, 1, plot_idx, sharex=link_axis)
+                    ax.plot(x, i_sel)
+                    ax.set_ylabel('Current Range')
+                else:
+                    raise ValueError('unsupported plot: %s' % c)
+
+                ax.grid(True)
+                if link_axis is None:
+                    link_axis = ax
+                plot_idx += 1
+
+            # plt.tight_layout()
+            ax.set_xlabel('Time (s)')
+            plt.show()
+            plt.close(f)
 
     r.close()
     return 0
