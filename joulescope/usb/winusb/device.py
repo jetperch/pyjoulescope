@@ -356,7 +356,7 @@ class EndpointIn:
         :return: True to stop process, False to continue processing.
         """
         if self._state != self.ST_RUNNING:
-            return
+            return self.stop_code > 0
         rv = self._expire()
         if not rv:
             rv = self._pend()
@@ -766,6 +766,20 @@ class WinUsbDevice:
     def signal(self):
         kernel32.SetEvent(self._event)
 
+    def _abort(self, stop_code, msg):
+        for endpoint in self._endpoints.values():
+            endpoint.stop()
+        self._endpoints.clear()
+        if self._control_transfer.stop_code is None:
+            self._control_transfer.stop_code = DeviceEvent.ENDPOINT_CALLBACK_STOP
+        self._update_event_list()
+        event_callback_fn, self._event_callback_fn = self._event_callback_fn, None
+        if callable(event_callback_fn):
+            try:
+                event_callback_fn(stop_code, msg)
+            except:
+                log.exception('while in _event_callback_fn')
+
     def process(self, timeout):
         timeout_ms = int(timeout * 1000)
         rv = kernel32.WaitForMultipleObjects(self.event_list_count, self._event_list, False, timeout_ms)
@@ -784,16 +798,15 @@ class WinUsbDevice:
                     continue  # duplicate
                 endpoint.stop()
                 self._update_event_list()
-                if endpoint.stop_code and self._event_callback_fn:
-                    msg = 'Endpoint pipe_id %d halted: %s' % (pipe_id, endpoint.stop_code)
-                    log.info(msg)
-                    try:
-                        self._event_callback_fn(1, msg)
-                    except:
-                        log.exception('while in _event_callback_fn')
-                else:
-                    log.info('Endpoint pipe_id %d stopped: %s', pipe_id, endpoint.stop_code)
+                msg = 'Endpoint pipe_id %d stopped: %s' % (pipe_id, endpoint.stop_code)
+                log.info(msg)
+                if endpoint.stop_code > 0:
+                    self._abort(endpoint.stop_code, msg)
             self._control_transfer.process()
+            if self._control_transfer.stop_code is not None and self._control_transfer.stop_code > 0:
+                msg = 'Control pipe %d stopped: %s' % (pipe_id, self._control_transfer.stop_code)
+                log.info(msg)
+                self._abort(self._control_transfer.stop_code, msg)
 
 
 def scan(name: str) -> List[WinUsbDevice]:
