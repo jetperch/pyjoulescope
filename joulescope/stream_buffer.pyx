@@ -377,7 +377,7 @@ cdef class StreamBuffer:
 
     cdef uint16_t sample_toggle_last
     cdef uint16_t sample_toggle_mask
-    cdef uint8_t voltage_range
+    cdef uint8_t _voltage_range
 
     cdef object raw
     cdef object data
@@ -519,7 +519,16 @@ cdef class StreamBuffer:
 
     @property
     def voltage_range(self):
-        return self.voltage_range
+        return self._voltage_range
+
+    @voltage_range.setter
+    def voltage_range(self, value):
+        """Set the voltage range for applying calibration.
+
+        Note that the Joulescope device normally conveys the voltage range in
+        along with the sample data.
+        """
+        self._voltage_range = value
 
     @property
     def suppress_mode(self):
@@ -580,7 +589,7 @@ cdef class StreamBuffer:
         self.contiguous_count = 0
         self.sample_toggle_last = 0
         self.sample_toggle_mask = 0
-        self.voltage_range = 0
+        self._voltage_range = 0
         self._sample_id_max = 1 << 63  # big enough
         self._contiguous_max = 1 << 63  # big enough
         self._charge_picocoulomb = 0
@@ -661,7 +670,7 @@ cdef class StreamBuffer:
             buffer_type = data[0]
             status = data[1]
             pkt_length = (data[2] | ((<uint16_t> data[3] & 0x7f) << 8)) & 0x7fff
-            self.voltage_range = <uint8_t> ((data[3] >> 7) & 0x01)
+            self._voltage_range = <uint8_t> ((data[3] >> 7) & 0x01)
             pkt_index = <uint64_t> (data[4] | ((<uint16_t> data[5]) << 8))
             # uint16_t usb_frame_index = data[6] | ((<uint16_t> data[7]) << 8)
             length -= PACKET_TOTAL_SIZE
@@ -843,8 +852,8 @@ cdef class StreamBuffer:
                     cal_i *= self.cal.current_gain[i_range]
 
                 cal_v = <float> raw_v
-                cal_v += self.cal.voltage_offset[self.voltage_range]
-                cal_v *= self.cal.voltage_gain[self.voltage_range]
+                cal_v += self.cal.voltage_offset[self._voltage_range]
+                cal_v *= self.cal.voltage_gain[self._voltage_range]
 
             self.data_ptr[idx + 0] = cal_i
             self.data_ptr[idx + 1] = cal_v
