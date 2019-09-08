@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from joulescope.usb import core as usb_core
+from joulescope.usb.api import DeviceEvent
 from joulescope.usb.impl_tools import RunUntilDone
 from joulescope.usb.scan_info import INFO
 from .setupapi import device_interface_guid_to_paths
@@ -198,7 +199,7 @@ class TransferOverlapped:
 
 class EndpointIn:
 
-    def __init__(self, winusb, pipe_id, transfers, block_size, data_fn, process_fn):
+    def __init__(self, winusb, pipe_id, transfers, block_size, data_fn, process_fn, stop_fn):
         """Manage an in endpoint.
 
         :param winusb: The underlying winusb handle.
@@ -206,11 +207,14 @@ class EndpointIn:
         :param transfers: The number of outstanding transfers to pend.
         :param block_size: The size of each transfer in bytes.
         :param data_fn: The function to call with the received endpoint IN data.
-            After the last block, data_fn is called with None to indicate the
-            last transfer.  The data_fn should normally return True, but can
-            return False to stop the endpoint streaming.
+            The data_fn should normally return False, but can return True to
+            stop the endpoint streaming.
         :param process_fn: The function() called after data_fn was called.
             This function can have more latency than data_fn.
+            The process_fn should normally return False, but can return True to
+            stop the endpoint streaming.
+        :param stop_fn: The function(event, message) called when this endpoint
+            stops streaming data.
         """
         self._winusb = winusb
         self.pipe_id = pipe_id  # (endpoint_id & 0x7f) | 0x80
@@ -220,11 +224,13 @@ class EndpointIn:
         self._transfer_size = (block_size + 511 // 512)
         self._data_fn = data_fn
         self._process_fn = process_fn
+        self._stop_fn = stop_fn
         self._process_transfers = 0
         self._time_last = 0.0
 
         self._state = self.ST_IDLE
-        self.stop_code = 0
+        self.stop_code = None
+        self.stop_message = ''
         self.byte_count_this = 0
         self.byte_count_total = 0
         self.transfer_count = 0
@@ -239,7 +245,7 @@ class EndpointIn:
     ST_STOPPING = 2
 
     def _open(self):
-        self.stop_code = 0
+        self.stop_code = None
         self.event = kernel32.CreateEvent(
             None,   # default security
             True,   # manual reset
@@ -255,7 +261,6 @@ class EndpointIn:
 
     def _close(self):
         if self.event is not None:
-            self._cancel()
             kernel32.CloseHandle(self.event)
         self.event = None
 
@@ -265,9 +270,8 @@ class EndpointIn:
         ec = kernel32.GetLastError()
         if not result and (ec != kernel32.ERROR_IO_PENDING):
             msg = 'EndpointIn %d issue failed: %s' % (self.pipe_id, kernel32.get_error_str(ec))
-            log.info(msg)
             self._overlapped_free.append(ov)
-            self._halt(ec)
+            self._halt(DeviceEvent.COMMUNICATION_ERROR, msg)
             return True
         self._overlapped_pending.append(ov)
         return False
@@ -298,8 +302,8 @@ class EndpointIn:
                     log.exception('data_fn exception: stop streaming')
                     rv = True
                 if rv:
-                    log.info('EndpointIn %d terminated by data_fn', self.pipe_id)
-                    self._halt(0)
+                    msg = f'EndpointIn {self.pipe_id} terminated by data_fn'
+                    self._halt(DeviceEvent.ENDPOINT_CALLBACK_STOP, msg)
                     self._overlapped_free.append(ov)
                 else:
                     rv = self._issue(ov)
@@ -309,9 +313,9 @@ class EndpointIn:
                     break
                 ov = self._overlapped_pending.pop(0)
                 self._overlapped_free.append(ov)
-                log.warning('EndpointIn WinUsb_GetOverlappedResult fatal: %s', kernel32.get_error_str(ec))
+                msg = 'EndpointIn WinUsb_GetOverlappedResult fatal: %s' % (kernel32.get_error_str(ec), )
                 rv = True
-                self._halt(ec)
+                self._halt(DeviceEvent.COMMUNICATION_ERROR, msg)
         if count > self.transfer_expire_max:
             self.transfer_expire_max = count
         self._process_transfers += count
@@ -333,12 +337,18 @@ class EndpointIn:
                     log.warning('cancel overlapped: %s', kernel32.get_last_error())
             self._overlapped_free.append(ov)
 
-    def _halt(self, stop_code):
+    def _halt(self, stop_code, msg=None):
         if self._state != self.ST_STOPPING:
             self._state = self.ST_STOPPING
             self._cancel()
-        if stop_code and 0 == self.stop_code:
-            self.stop_code = stop_code
+        if stop_code:
+            lvl = logging.INFO if stop_code <= 0 else logging.ERROR
+            if self.stop_code is None:
+                self.stop_code = stop_code
+                self.stop_message = '' if msg is None else str(msg)
+                log.log(lvl, 'endpoint halt %d: %s', stop_code, msg)
+            else:
+                log.log(lvl, 'endpoint halt %d duplicate: %s', stop_code, msg)
 
     def process(self):
         """Process pending data.
@@ -374,13 +384,16 @@ class EndpointIn:
     def stop(self):
         if self._state != self.ST_IDLE:
             log.info("endpoint stop")
-            self._cancel()
-            self.process_signal()  # ensure that all received data is processed
+            if self._state != self.ST_STOPPING:
+                self._cancel()  # was already called in halt
+            if self.stop_code is None:
+                self.stop_code = 0
+                self.process_signal()  # ensure that all received data is processed
             self._close()
             try:
-                self._data_fn(None)  # indicate done with None
+                self._stop_fn(self.stop_code, self.stop_message)
             except Exception:
-                log.exception('data_fn(None) exception on done')
+                log.exception('_stop_fn exception')
             self._state = self.ST_IDLE
 
     def status(self):
@@ -418,14 +431,14 @@ class ControlTransferAsync:
         self._event = None
         self._commands = []  # list of pending control transfer commands
         self._time_start = None
-        self.stop_code = 0
+        self.stop_code = None
 
     @property
     def event(self):
         return self._event
 
     def open(self):
-        self.stop_code = 0
+        self.stop_code = None
         self._event = kernel32.CreateEvent(
             None,   # default security
             True,   # manual reset
@@ -471,7 +484,7 @@ class ControlTransferAsync:
         :param buffer: The buffer (if length > 0) for write transactions.
         :return: True on pending, False on error.
         """
-        if self.stop_code:
+        if self.stop_code is not None:
             response = usb_core.ControlTransferResponse(setup_packet, self.stop_code, None)
             cbk_fn(response)
             return False
@@ -502,8 +515,8 @@ class ControlTransferAsync:
         result = sanitize_boolean_return_code(result)
         self._time_start = time.time()
         if result != kernel32.ERROR_IO_PENDING:
-            if 0 == self.stop_code:
-                self.stop_code = result
+            if self.stop_code is None:
+                self.stop_code = DeviceEvent.COMMUNICATION_ERROR
             log.warning('ControlTransferAsync._issue %s', kernel32.get_error_str(result))
             response = usb_core.ControlTransferResponse(setup_packet, result, None)
             cbk_fn(response)
@@ -546,7 +559,7 @@ class ControlTransferAsync:
         else:  # transfer is done!
             command = self._commands.pop(0)
             self._finish(command)
-            if 0 == self.stop_code:
+            if self.stop_code is None:
                 self._issue()
             else:
                 self._close_event()
@@ -722,7 +735,7 @@ class WinUsbDevice:
         pkt = usb_core.SetupPacket(request_type, request, value, index, length)
         return self._control_transfer.pend(cbk_fn, pkt)
 
-    def read_stream_start(self, endpoint_id, transfers, block_size, data_fn, process_fn):
+    def read_stream_start(self, endpoint_id, transfers, block_size, data_fn, process_fn, stop_fn):
         log.info('read_stream_start %d', endpoint_id)
         pipe_id = (endpoint_id & 0x7f) | 0x80
         endpoint = self._endpoints.pop(pipe_id, None)
@@ -730,7 +743,7 @@ class WinUsbDevice:
             log.warning('repeated start')
             endpoint.stop()
         endpoint = EndpointIn(self._winusb, pipe_id, transfers,
-                              block_size, data_fn, process_fn)
+                              block_size, data_fn, process_fn, stop_fn)
         self._endpoints[endpoint.pipe_id] = endpoint
         endpoint.start()
         self._update_event_list()
@@ -763,17 +776,23 @@ class WinUsbDevice:
                 if endpoint.process():
                     stop_endpoint_ids.append(endpoint.pipe_id)
             for endpoint in self._endpoints.values():
-                if endpoint.process_signal():
+                if endpoint.process_signal() or endpoint.stop_code is not None:
                     stop_endpoint_ids.append(endpoint.pipe_id)
             for pipe_id in stop_endpoint_ids:
                 endpoint = self._endpoints.pop(pipe_id, None)
+                if endpoint is None:
+                    continue  # duplicate
+                endpoint.stop()
+                self._update_event_list()
                 if endpoint.stop_code and self._event_callback_fn:
-                    msg = 'Endpoint pipe_id %d halted: %s' % (pipe_id, kernel32.get_error_str(endpoint.stop_code))
+                    msg = 'Endpoint pipe_id %d halted: %s' % (pipe_id, endpoint.stop_code)
+                    log.info(msg)
                     try:
                         self._event_callback_fn(1, msg)
                     except:
                         log.exception('while in _event_callback_fn')
-                self.read_stream_stop(pipe_id)
+                else:
+                    log.info('Endpoint pipe_id %d stopped: %s', pipe_id, endpoint.stop_code)
             self._control_transfer.process()
 
 

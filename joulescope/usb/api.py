@@ -20,12 +20,12 @@ This module defines the USB backend.  Each target platform
 to this API.
 """
 
-from enum import Enum
 
-
-class DeviceEvent(Enum):
+class DeviceEvent:
+    ENDPOINT_CALLBACK_STOP = -1  # a callback indicated that streaming should stop
     UNDEFINED = 0
-    ERROR = 1  # an error that prevents this device from functioning, such as device removal
+    COMMUNICATION_ERROR = 1  # an communicate error that prevents this device from functioning, such as device removal
+    ENDPOINT_CALLBACK_EXCEPTION = 2  # a callback threw an exception
 
 
 class DeviceDriverApi:
@@ -94,7 +94,7 @@ class DeviceDriverApi:
         """
         raise NotImplementedError()
 
-    def read_stream_start(self, endpoint_id, transfers, block_size, data_fn, process_fn):
+    def read_stream_start(self, endpoint_id, transfers, block_size, data_fn, process_fn, stop_fn):
         """Read a stream of data using non-blocking (overlapped) IO.
 
         :param endpoint_id: The target endpoint address.
@@ -129,6 +129,9 @@ class DeviceDriverApi:
             USB endpoints have been recently serviced and data_fn was
             called at least once.  The function should still be quick,
             but it can have more latency than data_fn.
+        :param stop_fn: The function(event, message) called when this endpoint
+            stops streaming data. See :class:`DeviceEvent` for allowed event
+            values.
 
         Use :meth:`read_stream_stop` to stop.
         """

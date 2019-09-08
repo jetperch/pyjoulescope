@@ -19,7 +19,6 @@ from joulescope.usb.device_thread import DeviceThread
 from .parameters_v1 import PARAMETERS, PARAMETERS_DICT, PARAMETERS_DEFAULTS, name_to_value, value_to_name
 from . import datafile
 from . import bootloader
-from .data_recorder import DataRecorder, construct_record_filename
 from joulescope.stream_buffer import StreamBuffer, stats_to_api
 from joulescope.calibration import Calibration
 import struct
@@ -109,6 +108,37 @@ REDUCTIONS = [200, 100, 50]  # in samples in sample units of the previous reduct
 STREAM_BUFFER_DURATION = 30  # seconds
 
 
+class StreamProcessApi:
+    """This API is used to chain multiple processing callbacks that are called
+    when new data is received from the Joulescope.
+
+    The Joulescope driver will call notify() when new data is available.  It
+    will call close() when streaming is stopped.
+    """
+
+    def stream_notify(self, stream_buffer: StreamBuffer):
+        """Notify that new data is available from the Joulescope.
+
+        :param stream_buffer: The :class:`StreamBuffer` instance which contains
+            the new data from the Joulescope.
+        :return: False to continue streaming.  True to stop streaming.
+
+        This method will be called from the USB thread.  The processing
+        duration must be very short to prevent dropping samples.  You
+        should post any significant processing to a separate thread.
+        """
+        raise NotImplementedError()
+
+    def close(self):
+        """Close the processing instance.
+
+        This method will be called from the USB thread.  The processing
+        duration must be very short to prevent dropping samples.  You
+        should post any significant processing to a separate thread.
+        """
+        raise NotImplementedError()
+
+
 class Device:
     """The device implementation for use by applications.
 
@@ -132,7 +162,8 @@ class Device:
         self.view = None  #
         self._streaming = False
         self._stop_fn = None
-        self._data_recorder = None
+        self._process_objs = []
+        self._process_objs_add = []
         self.calibration = None
         self._statistics_callback = None
         self._parameters_defaults = PARAMETERS_DEFAULTS
@@ -233,7 +264,7 @@ class Device:
         return serial_number
 
     def open(self, event_callback_fn=None):
-        """Open the device for use
+        """Open the device for use.
 
         :param event_callback_fn: The function(event, message) to call on
             asynchronous events, mostly to allow robust handling of device
@@ -447,14 +478,7 @@ class Device:
 
     def _on_data(self, data):
         # invoked from USB thread
-        is_done = True
-        if data is not None:
-            is_done = self.stream_buffer.insert(data)
-        if is_done:
-            stop_fn, self._stop_fn = self._stop_fn, None
-            if callable(stop_fn):
-                stop_fn()
-        return is_done
+        return self.stream_buffer.insert(data)
 
     def _on_process(self):
         """Perform data processing.
@@ -462,16 +486,39 @@ class Device:
         WARNING: called from USB thread!
         Return True to stop streaming.
         """
-        self.stream_buffer.process()
-        if self._data_recorder is not None:
-            self._data_recorder.process(self.stream_buffer)
-        return False
+        rv = False
+        try:
+            self.stream_buffer.process()
+        except Exception:
+            log.exception('stream_buffer.process exception: stop streaming')
+            return True
+
+        objs = self._process_objs + self._process_objs_add
+        self._process_objs = []
+        self._process_objs_add = []
+        for obj in objs:
+            if obj.driver_active:
+                try:
+                    rv |= bool(obj.stream_notify())
+                except Exception:
+                    log.exception('on_process exception: stop streaming')
+                    rv = True
+                self._process_objs.append(obj)
+            else:
+                obj.close()
+        return rv
+
+    def _on_stop(self, status, message):
+        log.info('streaming done(%d, %s)', status, message)
+        stop_fn, self._stop_fn = self._stop_fn, None
+        if callable(stop_fn):
+            stop_fn(status, message)
 
     def start(self, stop_fn=None, duration=None, contiguous_duration=None):
-        """Start data streaming
+        """Start data streaming.
 
-        :param stop_fn: The function() called when the device stops.  The
-            device can stop "automatically" on errors.
+        :param stop_fn: The function(event, message) called when the device stops.
+            The device can stop "automatically" on errors.
             Call :meth:`read_stream_stop` to stop from
             the caller.  This function will be called from the USB
             processing thread.  Any calls back into self MUST BE
@@ -503,7 +550,8 @@ class Device:
             transfers=self._parameters['transfer_outstanding'],
             block_size=self._parameters['transfer_length'] * usb.BULK_IN_LENGTH,
             data_fn=self._on_data,
-            process_fn=self._on_process)
+            process_fn=self._on_process,
+            stop_fn=self._on_stop)
         return True
 
     def stop(self):
@@ -522,15 +570,11 @@ class Device:
                 self._stream_settings_send()
             except:
                 log.warning('Device.stop() while attempting _stream_settings_send')
-            try:
-                self.recording_stop()
-            except:
-                log.warning('Device.stop() while attempting recording_stop')
             return True
         return False
 
     def read(self, duration=None, contiguous_duration=None, out_format=None):
-        """Read data from the device
+        """Read data from the device.
 
         :param duration: The duration in seconds for the capture.
         :param contiguous_duration: The contiguous duration in seconds for
@@ -547,7 +591,7 @@ class Device:
                  duration, contiguous_duration, out_format)
         q = queue.Queue()
 
-        def on_stop():
+        def on_stop(*args, **kwargs):
             log.info('received stop callback: pending stop')
             q.put(None)
 
@@ -569,35 +613,6 @@ class Device:
             v = r[:, 1, 0].reshape((-1, 1))
             return np.hstack((i, v))
 
-    def recording_start(self, filename=None):
-        """Begin recording to a file.
-
-        :param filename: The target filename or file-like object for the
-            recording.  None (default) constructs a filename in the
-            default path.
-        """
-        self.recording_stop()
-        log.info('recording_start(%s)', filename)
-        if filename is None:
-            filename = construct_record_filename()
-        self._data_recorder = DataRecorder(
-            filename,
-            calibration=self.calibration.data,
-            sampling_frequency=self._sampling_frequency)
-        return True
-
-    def recording_stop(self):
-        """Stop recording to a file."""
-        if self._data_recorder is not None:
-            log.info('recording_stop')
-            self._data_recorder.close()
-            self._data_recorder = None
-
-    @property
-    def is_recording(self):
-        """Check if the device is recording"""
-        return self._streaming and self._data_recorder is not None
-
     @property
     def is_streaming(self):
         """Check if the device is streaming.
@@ -605,6 +620,26 @@ class Device:
         :return: True if streaming.  False if not streaming.
         """
         return self._streaming
+
+    def stream_process_register(self, obj):
+        """Register a stream process object.
+
+        :param obj: The instance compatible with :class:`StreamProcessApi`.
+            The instance must remain valid until its :meth:`close` is
+            called.
+
+        Call :meth:`stream_process_unregister` to disconnect the instance.
+        """
+        obj.driver_active = True
+        self._process_objs_add.append(obj)
+
+    def stream_process_unregister(self, obj):
+        """Unregister a stream process object.
+
+        :param obj: The instance compatible with :class:`StreamProcessApi` that was
+            previously registered using :meth:`stream_process_register`.
+        """
+        obj.driver_active = False
 
     def _status(self):
         def _status_error(ec, msg_str):
