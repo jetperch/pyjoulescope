@@ -378,51 +378,6 @@ class View:
         """Get the statistics for the collected sample data over a time range.
 
         :return: The statistics data structure.  Here is an example:
-
-            {
-              "time": {
-                "range": [4.2224105, 4.7224105],
-                "delta": 0.5,
-                "units": "s"
-              },
-              "signals": {
-                "current": {
-                  "statistics": {
-                    "μ": 1.1410409683776379e-07,
-                    "σ": 3.153094851882088e-08,
-                    "min": 2.4002097531727884e-10,
-                    "max": 2.77493541034346e-07,
-                    "p2p": 2.772535200590287e-07
-                  },
-                  "units": "A",
-                  "integral_units": "C"
-                },
-                "voltage": {
-                  "statistics": {
-                    "μ": 3.2984893321990967,
-                    "σ": 0.0010323672322556376,
-                    "min": 3.293551445007324,
-                    "max": 3.3026282787323,
-                    "p2p": 0.009076833724975586
-                  },
-                  "units": "V",
-                  "integral_units": null
-                },
-                "power": {
-                  "statistics": {
-                    "μ": 3.763720144434046e-07,
-                    "σ": 1.0400773930996365e-07,
-                    "min": 7.916107769290193e-10,
-                    "max": 9.155134534921672e-07,
-                    "p2p": 9.147218427152382e-07
-                  },
-                  "units": "W",
-                  "integral_units": "J"
-                }
-              }
-            }
-
-        Note: this same format is used by the :meth:`statistics_callback`.
         """
         s1, s2 = self._convert_time_range_to_samples(start, stop, units)
         # self._log.debug('buffer %s, %s, %s => %s, %s', start, stop, units, s1, s2)
@@ -492,8 +447,52 @@ class View:
         :param units: The units for start and stop.
             'seconds' is in floating point seconds relative to the view.
             'samples' or None is in stream buffer sample indices.
-        :return: The statistics data structure.  See :meth:`joulescope.driver.Driver.statistics_get`
-            for details.
+        :return: The statistics data structure.
+
+            {
+              "time": {
+                "range": [4.2224105, 4.7224105],
+                "delta": 0.5,
+                "units": "s"
+              },
+              "signals": {
+                "current": {
+                  "statistics": {
+                    "μ": 1.1410409683776379e-07,
+                    "σ": 3.153094851882088e-08,
+                    "min": 2.4002097531727884e-10,
+                    "max": 2.77493541034346e-07,
+                    "p2p": 2.772535200590287e-07
+                  },
+                  "units": "A",
+                  "integral_units": "C"
+                },
+                "voltage": {
+                  "statistics": {
+                    "μ": 3.2984893321990967,
+                    "σ": 0.0010323672322556376,
+                    "min": 3.293551445007324,
+                    "max": 3.3026282787323,
+                    "p2p": 0.009076833724975586
+                  },
+                  "units": "V",
+                  "integral_units": null
+                },
+                "power": {
+                  "statistics": {
+                    "μ": 3.763720144434046e-07,
+                    "σ": 1.0400773930996365e-07,
+                    "min": 7.916107769290193e-10,
+                    "max": 9.155134534921672e-07,
+                    "p2p": 9.147218427152382e-07
+                  },
+                  "units": "W",
+                  "integral_units": "J"
+                }
+              }
+            }
+
+        Note: this same format is used by the :meth:`Driver.statistics_callback`.
         """
         args = {'start': start, 'stop': stop, 'units': units}
         return self._post_block('statistics_get', args)

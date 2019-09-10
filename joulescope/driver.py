@@ -213,7 +213,7 @@ class Device:
         """Set the statistics callback.
 
         :param cbk: The callable(data) where data is a statistics data
-            structure.  See :meth:`statistics_get` for details.
+            structure.  See :meth:`joulescope.View.statistics_get` for details.
         """
         idx = len(self._reductions)
         if idx:
