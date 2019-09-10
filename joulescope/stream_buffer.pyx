@@ -355,8 +355,8 @@ cdef class StreamBuffer:
     cdef uint32_t length # in samples
     cdef uint64_t packet_index
     cdef uint64_t packet_index_offset
-    cdef uint64_t device_sample_id
-    cdef uint64_t processed_sample_id
+    cdef uint64_t device_sample_id      # exclusive (last received is processed_sample_id - 1)
+    cdef uint64_t processed_sample_id   # exclusive (last processed is processed_sample_id - 1)
     cdef uint64_t sample_missing_count  # based upon sample_id
     cdef uint64_t skip_count            # number of sample skips
     cdef uint64_t sample_sync_count     # based upon alternating 0/1 pattern
@@ -366,6 +366,7 @@ cdef class StreamBuffer:
     cdef js_stream_buffer_calibration_s cal
     cdef js_stream_buffer_reduction_s reductions[REDUCTION_MAX]
     cdef uint32_t reduction_count
+    cdef double _sampling_frequency
 
     cdef uint8_t i_range_d[I_RANGE_D_LENGTH]  # the i_range delay for processing
     cdef int32_t suppress_samples  # the total number of samples to suppress after range change
@@ -391,8 +392,9 @@ cdef class StreamBuffer:
     cdef object _energy_picojoules  # python integer for infinite precision
 
 
-    def __cinit__(self, length, reductions):
+    def __cinit__(self, length, reductions, sampling_frequency):
         cdef uint32_t r_samples = 1
+        self._sampling_frequency = sampling_frequency
         if length < SAMPLES_PER_PACKET:
             raise ValueError('length to small')
         if len(reductions) > REDUCTION_MAX:
@@ -465,7 +467,7 @@ cdef class StreamBuffer:
         for idx in range(I_RANGE_D_LENGTH):
             self.i_range_d[idx] = 7
 
-    def __init__(self, length, reductions):
+    def __init__(self, length, reductions, sampling_frequency):
         self.reset()
 
     def __len__(self):
@@ -483,6 +485,8 @@ cdef class StreamBuffer:
         """Get the range of sample ids currently available in the buffer.
 
         :return: Tuple of sample_id start, sample_id end.
+            Start and stop follow normal python indexing:
+            start is inclusive, end is exclusive
         """
         s_end = int(self.processed_sample_id)
         s_start = s_end - self.length
@@ -492,6 +496,10 @@ cdef class StreamBuffer:
 
     @property
     def data_buffer(self):
+        """Get the underlying data buffer.
+
+        WARNING: Don't use this!  It  should only be used for unit testing.
+        """
         return self.data  # the cdef np.ndarray
 
     @property
@@ -500,7 +508,7 @@ cdef class StreamBuffer:
 
     @sample_id_max.setter
     def sample_id_max(self, value):
-        self._sample_id_max = value
+        self._sample_id_max = value  # stop streaming when reach this sample
 
     @property
     def contiguous_max(self):
@@ -550,6 +558,42 @@ cdef class StreamBuffer:
             self._suppress_mode = SUPPRESS_MODE_NORMAL
         else:
             raise ValueError('unsupported mode: %s' % (value, ))
+
+    @property
+    def sampling_frequency(self):
+        return self._sampling_frequency
+
+    @property
+    def limits_time(self):
+        """Get the time limits.
+
+        :return: (start, stop).  Stop corresponds to the exclusive sample
+            returned by b.limits_samples[1].
+        """
+        return 0.0, len(self) / self.sampling_frequency
+
+    @property
+    def limits_samples(self):
+        """Get the sample limits.
+
+        :return: (start, stop) where start is inclusive and stop is exclusive.
+
+        In other words:
+            self.limits_time == (b.sample_id_to_time(b.limits_samples[0]),
+                                 b.sample_id_to_time(b.limits_samples[1]))
+        """
+        _, s_max = self.sample_id_range
+        return (s_max - len(self)), s_max
+
+    def time_to_sample_id(self, t):
+        idx_start, idx_end = self.limits_samples
+        t_start, t_end = self.limits_time
+        return int(np.round((t - t_start) / (t_end - t_start) * (idx_end - idx_start) + idx_start))
+
+    def sample_id_to_time(self, s):
+        idx_start, idx_end = self.limits_samples
+        t_start, t_end = self.limits_time
+        return (s - idx_start) / (idx_end - idx_start) * (t_end - t_start) + t_start
 
     def status(self):
         return {
@@ -1199,8 +1243,8 @@ cdef class StreamBuffer:
             for i in range(12):
                 b[i] = stats[i]
             b = b.reshape((3, 4))
-            # todo handle variable sampling frequencies and reductions
-            time_interval = 0.5  # seconds
+            sample_count = self.reductions[self.reduction_count - 1].samples_per_reduction_sample
+            time_interval = sample_count / self.sampling_frequency  # seconds
             charge_picocoulomb = (b[0][0] * 1e12)  * time_interval
             energy_picojoules = (b[2][0] * 1e12) * time_interval
             if isfinite(charge_picocoulomb) and isfinite(energy_picojoules):
@@ -1318,7 +1362,7 @@ cpdef usb_packet_factory_signal(packet_index, count=None, samples_total=None):
     sample_rate = 2000000
     samples_total = sample_rate * 100 if samples_total is None else int(samples_total)
     slope = (2 ** 14 - 1) / samples_total
-    stream_buffer = StreamBuffer(sample_rate // 10, [100])
+    stream_buffer = StreamBuffer(sample_rate // 10, [100], sample_rate)
 
     cdef frame = np.empty(512 * count, dtype=np.uint8)
     for i in range(count):

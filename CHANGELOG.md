@@ -4,7 +4,7 @@
 This file contains the list of changes made to pyjoulescope.
 
 
-## 0.5.2-dev01
+## 0.6.0-dev01
 
 2019 Sep ??
 
@@ -15,6 +15,14 @@ This file contains the list of changes made to pyjoulescope.
 *   Added digital data path pattern test.  Was intentionally broken long ago.
 *   Modified View.samples_get() to have 'signals' like Driver.statistics_get().
 *   Fixed invalid data surrounding dropped samples.
+*   Reimplemented View to run in separate thread.
+    *   Moved Device.statistics_get to View.statistics_get.
+    *   Removed Device.view and added Device.view_factory().
+    *   Added StreamProcessApi.  Refactored View and DataReader.
+    *   Modified StreamBuffer to be aware of time and sampling frequency.
+*   Removed Device.recording_start() and Device.recording_stop().
+    *   Update DataRecorder to implement StreamProcessApi.
+    *   Updated joulescope/command/capture.py.  See for new usage example.
 
 
 ## 0.5.1

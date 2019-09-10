@@ -15,12 +15,12 @@
 from joulescope import usb
 from joulescope.paths import JOULESCOPE_DIR
 from joulescope.usb.device_thread import DeviceThread
-from joulescope.view import View
 from .parameters_v1 import PARAMETERS, PARAMETERS_DICT, PARAMETERS_DEFAULTS, name_to_value, value_to_name
 from . import datafile
 from . import bootloader
-from joulescope.stream_buffer import StreamBuffer, stats_to_api
+from joulescope.stream_buffer import StreamBuffer
 from joulescope.calibration import Calibration
+from joulescope.view import View
 import struct
 import copy
 import time
@@ -116,6 +116,26 @@ class StreamProcessApi:
     will call close() when streaming is stopped.
     """
 
+    def start(self, stream_buffer: StreamBuffer):
+        """Start a new streaming session. [optional]
+
+        :param stream_buffer: The :class:`StreamBuffer` instance which contains
+            the new data from the Joulescope.  This same instance will be passed
+            to future :meth:`stream_notify` calls, too.
+
+        This method will be called from the USB thread.  The processing
+        duration must be very short to prevent dropping samples.  You
+        should post any significant processing to a separate thread.
+        """
+        raise NotImplementedError()
+
+    def stop(self):
+        """Stop the existing streaming session. [optional]
+
+        This method will be called from the USB thread.
+        """
+        raise NotImplementedError()
+
     def stream_notify(self, stream_buffer: StreamBuffer):
         """Notify that new data is available from the Joulescope.
 
@@ -130,11 +150,9 @@ class StreamProcessApi:
         raise NotImplementedError()
 
     def close(self):
-        """Close the processing instance.
+        """Close the processing instance. [optional]
 
-        This method will be called from the USB thread.  The processing
-        duration must be very short to prevent dropping samples.  You
-        should post any significant processing to a separate thread.
+        This method may be called from the USB thread.
         """
         raise NotImplementedError()
 
@@ -159,11 +177,10 @@ class Device:
         self._reductions = REDUCTIONS
         self._sampling_frequency = SAMPLING_FREQUENCY
         self.stream_buffer = None
-        self.view = None  #
         self._streaming = False
         self._stop_fn = None
-        self._process_objs = []
-        self._process_objs_add = []
+        self._process_objs = []  #: list of :class:`StreamProcessApi` compatible instances
+        self._process_objs_add = []  #: list of :class:`StreamProcessApi` compatible instances
         self.calibration = None
         self._statistics_callback = None
         self._parameters_defaults = PARAMETERS_DEFAULTS
@@ -201,6 +218,16 @@ class Device:
         idx = len(self._reductions)
         if idx:
             self.stream_buffer.callback = cbk
+
+    def view_factory(self):
+        """Construct a new View into the device's data.
+
+        :return: A View-compatible instance.
+        """
+        view = View(self.stream_buffer, self.calibration)
+        view.on_close = lambda: self.stream_process_unregister(view)
+        self.stream_process_register(view)
+        return view
 
     def parameters(self, name=None):
         """Get the list of :class:`joulescope.parameter.Parameter` instances.
@@ -276,12 +303,11 @@ class Device:
         The event_callback_fn may be called asynchronous and from other
         threads.  The event_callback_fn must implement any thread safety.
         """
-        if self.view:
+        if self.stream_buffer:
             self.close()
         self._usb.open(event_callback_fn)
         sb_len = self._sampling_frequency * STREAM_BUFFER_DURATION
-        self.stream_buffer = StreamBuffer(sb_len, self._reductions)
-        self.view = View(self)
+        self.stream_buffer = StreamBuffer(sb_len, self._reductions, self._sampling_frequency)
         try:
             info = self.info()
             if info is not None:
@@ -395,16 +421,17 @@ class Device:
 
     def close(self):
         """Close the device and release resources"""
-        try:
-            self.stop()
-        except:
-            log.exception('USB stop failed')
-        try:
-            self._usb.close()
-        except:
-            log.exception('USB close failed')
-        self.view = None
-        self.stream_buffer = None
+        if self.stream_buffer is not None:
+            try:
+                self.stop()
+            except:
+                log.exception('USB stop failed')
+            try:
+                self._usb.close()
+            except:
+                log.exception('USB close failed')
+            self._stream_process_call('close')
+            self.stream_buffer = None
 
     def _wait_for_sensor_command(self, timeout=None):
         timeout = SENSOR_COMMAND_TIMEOUT_SECONDS if timeout is None else float(timeout)
@@ -477,15 +504,17 @@ class Device:
         _ioerror_on_bad_result(rv)
 
     def _on_data(self, data):
-        # invoked from USB thread
+        # DeviceDriverApi.read_stream_start data_fn callback
+        # invoked from USB thread when new sample data is available
+        # VERY time critical - keep as short as possible
+        # return False to continue streaming, True to stop streaming
         return self.stream_buffer.insert(data)
 
     def _on_process(self):
-        """Perform data processing.
-
-        WARNING: called from USB thread!
-        Return True to stop streaming.
-        """
+        # DeviceDriverApi.read_stream_start process_fn callback
+        # invoked from USB thread when new sample data is available after _on_data
+        # Time critical, but less so than _on_data
+        # return False to continue streaming, True to stop streaming
         rv = False
         try:
             self.stream_buffer.process()
@@ -499,9 +528,10 @@ class Device:
         for obj in objs:
             if obj.driver_active:
                 try:
-                    rv |= bool(obj.stream_notify())
+                    rv |= bool(obj.stream_notify(self.stream_buffer))
                 except Exception:
-                    log.exception('on_process exception: stop streaming')
+                    log.exception('%s stream_notify() exception - stop streaming', obj)
+                    obj.driver_active = False
                     rv = True
                 self._process_objs.append(obj)
             else:
@@ -509,20 +539,37 @@ class Device:
         return rv
 
     def _on_stop(self, status, message):
+        # DeviceDriverApi.read_stream_start stop_fn callback
+        # invoked from USB thread
         log.info('streaming done(%d, %s)', status, message)
         stop_fn, self._stop_fn = self._stop_fn, None
         if callable(stop_fn):
             stop_fn(status, message)
+        for obj in self._process_objs:
+            if obj.driver_active and hasattr(obj, 'stop'):
+                try:
+                    obj.stop()
+                except Exception:
+                    log.exception('%s stop() exception', obj)
+
+    def _stream_process_call(self, method, *args, **kwargs):
+        for obj in self._process_objs:
+            fn = getattr(obj, method, None)
+            if obj.driver_active and callable(fn):
+                try:
+                    fn(*args, **kwargs)
+                except Exception:
+                    log.exception('%s %s() exception', obj, method)
+                    obj.driver_active = False
 
     def start(self, stop_fn=None, duration=None, contiguous_duration=None):
         """Start data streaming.
 
         :param stop_fn: The function(event, message) called when the device stops.
             The device can stop "automatically" on errors.
-            Call :meth:`read_stream_stop` to stop from
-            the caller.  This function will be called from the USB
-            processing thread.  Any calls back into self MUST BE
-            resynchronized.
+            Call :meth:`stop` to stop from the caller.
+            This function will be called from the USB processing thread.
+            Any calls back into self MUST BE resynchronized.
         :param duration: The duration in seconds for the capture.
         :param contiguous_duration: The contiguous duration in seconds for
             the capture.  As opposed to duration, this ensures that the
@@ -534,7 +581,7 @@ class Device:
         if self._streaming:
             self.stop()
         self.stream_buffer.reset()
-        self.view.clear()
+
         self._stop_fn = stop_fn
         if duration is not None:
             self.stream_buffer.sample_id_max = int(duration * self.sampling_frequency)
@@ -543,6 +590,9 @@ class Device:
             c += self._reductions[0]
             self.stream_buffer.contiguous_max = c
             log.info('contiguous_samples=%s', c)
+
+        self._process_objs = self._process_objs + self._process_objs_add
+        self._stream_process_call('start', stream_buffer=self.stream_buffer)
         self._streaming = True
         self._stream_settings_send()
         self._usb.read_stream_start(
@@ -570,6 +620,7 @@ class Device:
                 self._stream_settings_send()
             except:
                 log.warning('Device.stop() while attempting _stream_settings_send')
+            self._stream_process_call('stop')
             return True
         return False
 
@@ -785,67 +836,6 @@ class Device:
         for key, value in status.items():
             value['name'] = key
         return status
-
-    def statistics_get(self, t1, t2):
-        """Get the statistics for the collected sample data over a time range.
-
-        :param t1: The starting time in seconds relative to the streaming start time.
-        :param t2: The ending time in seconds.
-        :return: The statistics data structure.  Here is an example:
-
-            {
-              "time": {
-                "range": [4.2224105, 4.7224105],
-                "delta": 0.5,
-                "units": "s"
-              },
-              "signals": {
-                "current": {
-                  "statistics": {
-                    "μ": 1.1410409683776379e-07,
-                    "σ": 3.153094851882088e-08,
-                    "min": 2.4002097531727884e-10,
-                    "max": 2.77493541034346e-07,
-                    "p2p": 2.772535200590287e-07
-                  },
-                  "units": "A",
-                  "integral_units": "C"
-                },
-                "voltage": {
-                  "statistics": {
-                    "μ": 3.2984893321990967,
-                    "σ": 0.0010323672322556376,
-                    "min": 3.293551445007324,
-                    "max": 3.3026282787323,
-                    "p2p": 0.009076833724975586
-                  },
-                  "units": "V",
-                  "integral_units": null
-                },
-                "power": {
-                  "statistics": {
-                    "μ": 3.763720144434046e-07,
-                    "σ": 1.0400773930996365e-07,
-                    "min": 7.916107769290193e-10,
-                    "max": 9.155134534921672e-07,
-                    "p2p": 9.147218427152382e-07
-                  },
-                  "units": "W",
-                  "integral_units": "J"
-                }
-              }
-            }
-
-        Note: this same format is used by the :meth:`statistics_callback`.
-        """
-        v = self.view
-        s1 = v.time_to_sample_id(t1)
-        s2 = v.time_to_sample_id(t2)
-        log.info('buffer %s, %s => %s, %s', t1, t2, s1, s2)
-        d = self.stream_buffer.stats_get(start=s1, stop=s2)
-        t_start = s1 / self.sampling_frequency
-        t_stop = s2 / self.sampling_frequency
-        return stats_to_api(d, t_start, t_stop)
 
     def sensor_firmware_program(self, data, progress_cbk=None):
         """Program the sensor microcontroller firmware

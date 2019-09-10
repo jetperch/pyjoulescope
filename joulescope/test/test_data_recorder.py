@@ -51,7 +51,7 @@ class TestDataRecorder(unittest.TestCase):
         d.close()
 
     def _create_file(self, packet_index, count=None):
-        stream_buffer = StreamBuffer(2000, [10])
+        stream_buffer = StreamBuffer(2000, [10], 1000.0)
         stream_buffer.suppress_mode = 'off'
         if packet_index > 0:
             data = usb_packet_factory(0, packet_index - 1)
@@ -60,11 +60,11 @@ class TestDataRecorder(unittest.TestCase):
 
         fh = io.BytesIO()
         d = DataRecorder(fh, sampling_frequency=1000)
-        d.process(stream_buffer)
+        d.stream_notify(stream_buffer)
         data = usb_packet_factory(packet_index, count)
         stream_buffer.insert(data)
         stream_buffer.process()
-        d.process(stream_buffer)
+        d.stream_notify(stream_buffer)
         d.close()
         fh.seek(0)
 
@@ -79,6 +79,18 @@ class TestDataRecorder(unittest.TestCase):
         r = DataReader().open(fh)
         data = r.get(0, 10, 1)
         np.testing.assert_allclose(np.arange(0, 20, 2), data[:, 0, 0])
+
+    def test_time_conversion(self):
+        fh = self._create_file(0, 2)
+        r = DataReader().open(fh)
+        self.assertEqual([0, 200], r.sample_id_range)
+        self.assertEqual(1000, r.sampling_frequency)
+        self.assertEqual(1000 / 10, r.reduction_frequency)
+        self.assertEqual(0.2, r.duration)
+        self.assertEqual(0.0, r.sample_id_to_time(0))
+        self.assertEqual(0, r.time_to_sample_id(0))
+        self.assertEqual(0.2, r.sample_id_to_time(200))
+        self.assertEqual(200, r.time_to_sample_id(0.2))
 
     def test_write_read_direct_with_offset(self):
         fh = self._create_file(0, 2)
@@ -139,16 +151,16 @@ class TestDataRecorder(unittest.TestCase):
         samples_total = sample_rate * 2
         packets_per_burst = 128
         bursts = int(np.ceil(samples / (SAMPLES_PER_PACKET * packets_per_burst)))
-        stream_buffer = StreamBuffer(sample_rate, [100])
+        stream_buffer = StreamBuffer(sample_rate, [100], sample_rate)
         fh = io.BytesIO()
         d = DataRecorder(fh, sampling_frequency=sample_rate)
-        d.process(stream_buffer)
+        d.stream_notify(stream_buffer)
         for burst_index in range(bursts):
             packet_index = burst_index * packets_per_burst
             frames = usb_packet_factory_signal(packet_index, count=packets_per_burst, samples_total=samples_total)
             stream_buffer.insert(frames)
             stream_buffer.process()
-            d.process(stream_buffer)
+            d.stream_notify(stream_buffer)
         d.close()
         fh.seek(0)
 

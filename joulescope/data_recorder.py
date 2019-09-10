@@ -75,12 +75,15 @@ class DataRecorder:
 
         self._stream_buffer = None  # to ensure same
         self._sb_sample_id_last = None
+        self._voltage_range = None
 
         self._writer = datafile.DataFileWriter(filehandle)
         self._closed = False
         self._total_size = 0
         self._append_configuration()
         if calibration is not None:
+            if isinstance(calibration, Calibration):
+                calibration = calibration.data
             self._writer.append_subfile('calibration', calibration)
         self._writer.collection_start(0, 0)
 
@@ -111,7 +114,7 @@ class DataRecorder:
         self._sample_id_block = None
         self._reduction[:] = np.nan
 
-    def process(self, stream_buffer):
+    def stream_notify(self, stream_buffer):
         """Process data from a stream buffer.
 
         :param stream_buffer: The stream_buffer instance which has a
@@ -133,6 +136,7 @@ class DataRecorder:
                 raise ValueError('stream_buffer length too small.  %s > %s' %
                                  (self._samples_per_tlv, len(stream_buffer)))
 
+            self._voltage_range = stream_buffer.voltage_range
             if self._sample_id_block is None:
                 collection_data = {
                     'v_range': stream_buffer.voltage_range,
@@ -200,6 +204,7 @@ class DataReader:
         self._fh = None
         self._f = None  # type: datafile.DataFileReader
         self._data_start_position = 0
+        self._voltage_range = 0
 
     def __str__(self):
         if self._f is not None:
@@ -283,7 +288,7 @@ class DataReader:
             return (r[1] - r[0]) / f
         return 0.0
 
-    def _validate_range(self, start, stop, increment=None):
+    def _validate_range(self, start=None, stop=None, increment=None):
         idx_start = 0
         idx_end = idx_start + self.footer['size']
         if increment is not None:
@@ -295,17 +300,19 @@ class DataReader:
             raise ValueError('stop out of range: %d <= %d <= %d: %s' %
                              (idx_start, stop, idx_end, increment))
 
-    def raw(self, start=None, stop=None, calibrated=None, out=None):
+    def raw(self, start=None, stop=None, units=None, calibrated=None, out=None):
         """Get the raw data.
 
-        :param start: The starting sample identifier.
-        :param stop: The ending sample identifier.
+        :param start: The starting time relative to the first sample.
+        :param stop: The ending time.
+        :param units: The units for start and stop: ['seconds', 'samples'].  None (default) is 'samples'.
         :param calibrated: When true, return calibrated np.float32 data.
             When false, return raw np.uint16 data.
         :param out: The optional output Nx2 output array.
             N must be >= (stop - start).
         :return: The output which is either a new array or (when provided) out.
         """
+        start, stop = self.normalize_time_arguments(start, stop, units)
         r_start, r_stop = self.sample_id_range
         if start is None:
             start = r_start
@@ -342,10 +349,10 @@ class DataReader:
                     tag, collection_bytes = next(self._f)
                     c = datafile.Collection.decode(collection_bytes)
                     if c.data is None:
-                        v_range = 0
+                        self._voltage_range = 0
                     else:
                         collection_start_meta = json.loads(c.data)
-                        v_range = collection_start_meta.get('v_range', 0)
+                        self._voltage_range = collection_start_meta.get('v_range', 0)
                     sample_idx = block_counter * samples_per_block
             elif tag == datafile.TAG_COLLECTION_END:
                 block_counter += 1
@@ -364,7 +371,7 @@ class DataReader:
                     length = idx_stop - idx_start
                     if calibrated:
                         v, i, _ = self.calibration.transform(data[idx_start:idx_stop, :],
-                                                             v_range=v_range)
+                                                             v_range=self._voltage_range)
                         out[out_idx:(out_idx + length), 0] = v
                         out[out_idx:(out_idx + length), 1] = i
                     else:
@@ -379,18 +386,17 @@ class DataReader:
                 self._f.advance()
         return out[:out_idx, :]
 
-    def get_reduction(self, start=None, stop=None, out=None):
+    def get_reduction(self, start=None, stop=None, units=None, out=None):
         """Get the fixed reduction with statistics.
 
         :param start: The starting sample identifier (inclusive).
         :param stop: The ending sample identifier (exclusive).
+        :param units: The units for start and stop.
+            'seconds' or None is in floating point seconds relative to the view.
+            'samples' is in stream buffer sample indices.
         :return: The Nx3x4 sample data.
         """
-        if start is None:
-            start = self.sample_id_range[0]
-        if stop is None:
-            stop = self.sample_id_range[1]
-
+        start, stop = self.normalize_time_arguments(start, stop, units)
         sz = self.config['samples_per_reduction']
         incr = self.config['samples_per_block'] // sz
         self._fh.seek(self._data_start_position)
@@ -501,43 +507,40 @@ class DataReader:
                 break
         return (r_start * sz, r_stop * sz), s
 
-    def get_calibrated(self, start=None, stop=None):
+    def get_calibrated(self, start=None, stop=None, units=None):
         """Get the calibrated data (no statistics).
 
         :param start: The starting sample identifier (inclusive).
         :param stop: The ending sample identifier (exclusive).
+        :param units: The units for start and stop.
+            'seconds' or None is in floating point seconds relative to the view.
+            'samples' is in stream buffer sample indices.
         :return: The tuple of (current, voltage), each as np.ndarray
             with dtype=np.float32.
         """
-        if start is None:
-            start = self.sample_id_range[0]
-        if stop is None:
-            stop = self.sample_id_range[1]
+        log.debug('get_calibrated(%s, %s, %s)', start, stop, units)
         d = self.raw(start, stop, calibrated=True)
         i, v = d[:, 0], d[:, 1]
         return i, v
 
-    def get(self, start=None, stop=None, increment=None):
+    def get(self, start=None, stop=None, increment=None, units=None):
         """Get the data with statistics.
 
         :param start: The starting sample identifier (inclusive).
         :param stop: The ending sample identifier (exclusive).
         :param increment: The number of raw samples per output sample.
+        :param units: The units for start and stop.
+            'seconds' or None is in floating point seconds relative to the view.
+            'samples' is in stream buffer sample indices.
         :return: The Nx3x4 sample data.
         """
-        r_start, r_stop = self.sample_id_range
-        if start is None:
-            start = r_start
-        if stop is None:
-            stop = r_stop
+        log.debug('DataReader.get(start=%r,stop=%r,increment=%r)', start, stop, increment)
+        start, stop = self.normalize_time_arguments(start, stop, units)
         if increment is None:
             increment = 1
-        log.debug('DataReader.get(start=%r,stop=%r,increment=%r)', start, stop, increment)
         if self._fh is None:
             raise IOError('file not open')
         increment = max(1, int(np.round(increment)))
-        start = max(start, r_start)
-        stop = min(stop, r_stop)
         out_len = (stop - start) // increment
         if out_len <= 0:
             return np.empty((0, 3, 4), dtype=np.float32)
@@ -589,25 +592,52 @@ class DataReader:
         return '\n'.join(s)
 
     def time_to_sample_id(self, t):
+        if t is None:
+            return None
         s_min, s_max = self.sample_id_range
         s = int(t * self.sampling_frequency)
         if s < s_min or s > s_max:
             return None
         return s
 
-    def statistics_get(self, t1, t2):
+    def sample_id_to_time(self, s):
+        if s is None:
+            return None
+        return s / self.sampling_frequency
+
+    def normalize_time_arguments(self, start, stop, units):
+        s_min, s_max = self.sample_id_range
+        if units == 'seconds':
+            start = self.time_to_sample_id(start)
+            stop = self.time_to_sample_id(stop)
+        elif units is None or units == 'samples':
+            if start is not None and start < 0:
+                start = s_max + start
+            if stop is not None and stop < 0:
+                stop = s_max + start
+        else:
+            raise ValueError(f'invalid time units: {units}')
+        s1 = s_min if start is None else start
+        s2 = s_max if stop is None else stop
+        if not s_min <= s1 < s_max:
+            raise ValueError(f'start sample out of range: {s1}')
+        if not s_min <= s2 <= s_max:
+            raise ValueError(f'start sample out of range: {s2}')
+        return s1, s2
+
+    def statistics_get(self, start=None, stop=None, units=None):
         """Get the statistics for the collected sample data over a time range.
 
-        :param t1: The starting time in seconds relative to the streaming start time.
-        :param t2: The ending time in seconds.
+        :param start: The starting time relative to the first sample.
+        :param stop: The ending time.
+        :param units: The units for start and stop.
+            'seconds' or None is in floating point seconds relative to the view.
+            'samples' is in stream buffer sample indices.
         :return: The statistics data structure.  See :meth:`joulescope.driver.Driver.statistics_get`
             for details.
         """
-        log.debug('statistics_get(%s, %s)', t1, t2)
-        s1 = self.time_to_sample_id(t1)
-        s2 = self.time_to_sample_id(t2)
-        if s1 is None or s2 is None:
-            return None
+        log.debug('statistics_get(%s, %s, %s)', start, stop, units)
+        s1, s2 = self.normalize_time_arguments(start, stop, units)
 
         (k1, k2), s = self._get_reduction_stats(s1, s2)
         if s1 < k1:

@@ -16,6 +16,7 @@ import signal
 import time
 import logging
 from joulescope.driver import scan_require_one
+from joulescope.data_recorder import DataRecorder
 
 
 def parser_config(p):
@@ -65,16 +66,18 @@ def run(device, filename, duration=None, contiguous_duration=None):
         nonlocal quit_
         quit_ = 'quit from SIGINT'
 
-    def on_stop():
+    def on_stop(event, message):
         nonlocal quit_
         quit_ = 'quit from stop duration'
 
+    recorder = None
     signal.signal(signal.SIGINT, do_quit)
     try:
         device.open()
+        recorder = DataRecorder(filename, sampling_frequency=device.sampling_frequency, calibration=device.calibration)
+        device.stream_process_register(recorder)
         device.start(stop_fn=on_stop, duration=duration,
                      contiguous_duration=contiguous_duration)
-        device.recording_start(filename)
         time_last = time.time()
         sample_id_last = 0
         sample_id_incr = 1000000
@@ -100,6 +103,8 @@ def run(device, filename, duration=None, contiguous_duration=None):
         print('Data capture failed')
         return 1
     finally:
+        if recorder is not None:
+            recorder.close()
         device.close()
     print('done capturing data: %s' % quit_)
     return 0

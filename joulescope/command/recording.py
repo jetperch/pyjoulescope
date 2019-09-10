@@ -50,7 +50,7 @@ def on_cmd(args):
         stop = r.sample_id_range[1] + 1 + stop
 
     if args.export is not None:
-        i, v = r.get_calibrated(start, stop)
+        i, v = r.get_calibrated(start, stop, units='samples')
         data = np.hstack((i.reshape((-1, 1)), (v.reshape((-1, 1)))))
         if args.export.endswith('npy'):
             np.save(args.export, data)
