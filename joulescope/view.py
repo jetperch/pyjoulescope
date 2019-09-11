@@ -305,6 +305,7 @@ class View:
         return self._stream_buffer.sample_id_to_time(s)
 
     def _stream_notify(self, stream_buffer):
+        self._stream_buffer = stream_buffer
         buffer = stream_buffer
         length = len(self)
         data_idx_view_end, sample_id_end, delta = self._view()
@@ -417,6 +418,7 @@ class View:
                     on_close()
                 except Exception:
                     self._log.exception('view.on_close')
+            self._stream_buffer = None
 
     def refresh(self, force=None):
         return self._post('refresh', {'force': force})
