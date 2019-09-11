@@ -249,7 +249,10 @@ def get_error_str(error_code):
         0,
         0)
 
-    s = bufptr.value.strip()
+    if bufptr.value is None:
+        s = '(None)'
+    else:
+        s = bufptr.value.strip()
     return '[%d] %s' % (error_code, s)
 
 
