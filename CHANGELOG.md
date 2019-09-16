@@ -4,9 +4,9 @@
 This file contains the list of changes made to pyjoulescope.
 
 
-## 0.6.0-dev01
+## 0.6.0
 
-2019 Sep ??
+2019 Sep 16
 
 *   Fixed contiguous_stop log message, which was not correctly displayed.
 *   Modified capture command to use config='auto'.
