@@ -21,9 +21,6 @@ import numpy as np
 import pyximport; pyximport.install(setup_args={'include_dirs': np.get_include()})
 from joulescope.stream_buffer import Statistics, StreamBuffer, usb_packet_factory
 
-import logging
-logging.basicConfig(level=logging.DEBUG)
-
 
 SAMPLES_PER = 126
 
@@ -168,8 +165,6 @@ class TestStreamBuffer(unittest.TestCase):
         np.testing.assert_allclose([30.0, 33.0, 21.0, 39.0], data[1, 1, :])
 
     def test_get_over_reduction(self):
-        import logging
-        logging.basicConfig(level=logging.DEBUG)
         b = StreamBuffer(2000, [10, 10], 1000.0)
         b.suppress_mode = 'off'
         frame = usb_packet_factory(0, 1)
@@ -272,8 +267,6 @@ class TestStreamBuffer(unittest.TestCase):
 
     def test_stats_over_single_reductions(self):
         b = self.stream_buffer_01()
-        import logging
-        logging.basicConfig(level=logging.DEBUG)
         np.testing.assert_allclose(np.mean(b.data_get(9, 20, 1)[:, 0, 0]), b.stats_get(9, 20)[0, 0])
         np.testing.assert_allclose(np.mean(b.data_get(10, 21, 1)[:, 0, 0]), b.stats_get(10, 21)[0, 0])
         np.testing.assert_allclose(np.mean(b.data_get(9, 21, 1)[:, 0, 0]), b.stats_get(9, 21)[0, 0])
@@ -281,8 +274,6 @@ class TestStreamBuffer(unittest.TestCase):
         np.testing.assert_allclose(np.mean(b.data_get(5, 105, 1)[:, 0, 0]), b.stats_get(5, 105)[0, 0])
 
     def test_stats_over_single_reduction_nan(self):
-        import logging
-        logging.basicConfig(level=logging.DEBUG)
         b = self.stream_buffer_02()
         np.testing.assert_allclose(np.mean(b.data_get(120, 126, 1)[:, 0, 0]), b.stats_get(120, 130)[0, 0])
         np.testing.assert_allclose(np.mean(b.data_get(120, 126, 1)[:, 0, 0]), b.stats_get(120, 140)[0, 0])
