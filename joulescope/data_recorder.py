@@ -288,6 +288,10 @@ class DataReader:
             return (r[1] - r[0]) / f
         return 0.0
 
+    @property
+    def voltage_range(self):
+        return self._voltage_range
+
     def _validate_range(self, start=None, stop=None, increment=None):
         idx_start = 0
         idx_end = idx_start + self.footer['size']
@@ -631,8 +635,8 @@ class DataReader:
         :param start: The starting time relative to the first sample.
         :param stop: The ending time.
         :param units: The units for start and stop.
-            'seconds' or None is in floating point seconds relative to the view.
-            'samples' is in stream buffer sample indices.
+            'seconds' is in floating point seconds relative to the view.
+            'samples' or None is in stream buffer sample indices.
         :return: The statistics data structure.  See :meth:`joulescope.driver.Driver.statistics_get`
             for details.
         """

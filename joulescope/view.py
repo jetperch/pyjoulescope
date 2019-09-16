@@ -335,7 +335,7 @@ class View:
         if units is None or units == 'seconds':
             return self.time_to_sample_id(x)
         elif units == 'samples':
-            return x
+            return int(x)
         else:
             raise ValueError(f'unsupported units {units}')
 
@@ -447,13 +447,13 @@ class View:
         :param start: The starting time.
         :param stop: The ending time.
         :param units: The units for start and stop.
-            'seconds' is in floating point seconds relative to the view.
-            'samples' or None is in stream buffer sample indices.
+            'seconds' or None is in floating point seconds relative to the view.
+            'samples' is in stream buffer sample indices.
         :return: The statistics data structure.
 
             {
               "time": {
-                "range": [4.2224105, 4.7224105],
+                "range": [4.2224105, 4.7224105],  # in buffer (not necessarily view) coordinates
                 "delta": 0.5,
                 "units": "s"
               },

@@ -48,3 +48,7 @@ class TestView(unittest.TestCase):
         self.assertEqual(252, self.v.time_to_sample_id(2.0))
         self.assertEqual(2.0, self.v.sample_id_to_time(252))
         self.assertEqual(152, self.v.time_to_sample_id(1.9))
+
+    def test_statistics_get(self):
+        s1 = self.v.statistics_get(-2, -1, units='samples')
+        # todo  test
