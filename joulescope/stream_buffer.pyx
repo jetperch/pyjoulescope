@@ -87,7 +87,7 @@ cdef struct js_stream_buffer_reduction_s:
     uint32_t length
     js_stream_buffer_cbk cbk_fn
     void * cbk_user_data
-    float *data    # data[length][3][4]  as [sample][i, v, power][mean, var, min, max]
+    float *data    # data[length][STATS_FIELDS][STATS_VALUES]  as [sample][i, v, power][mean, var, min, max]
     uint64_t * samples_per_data  # samples_per_data[length]
 
 
@@ -267,7 +267,7 @@ cdef _reduction_downsample(js_stream_buffer_reduction_s * r,
 def reduction_downsample(reduction, idx_start, idx_stop, increment):
     """Downsample a data reduction.
 
-    :param reduction: The np.float32 (N, 3, 4) array.
+    :param reduction: The np.float32 (N, STATS_FIELDS, STATS_VALUES) array.
     :param idx_start: The starting index (inclusive) in reduction.
     :param idx_stop: The stopping index (exclusive) in reduction.
     :param increment: The increment value
@@ -280,14 +280,14 @@ def reduction_downsample(reduction, idx_start, idx_stop, increment):
     cdef js_stream_buffer_reduction_s r_inst
     r_inst.length = <uint32_t> len(reduction)
     length = (idx_stop - idx_start) // increment
-    out = np.empty((length, 3, 4), dtype=np.float32)
-    cdef np.ndarray[np.float32_t, ndim=3, mode = 'c'] reduction_c = reduction
+    out = np.empty((length, STATS_FIELDS, STATS_VALUES), dtype=np.float32)
+    cdef np.ndarray[np.float32_t, ndim=STATS_FIELDS, mode = 'c'] reduction_c = reduction
     r_inst.data = <float *> reduction_c.data
     r_inst.samples_per_data = <uint64_t *> 0
     r_inst.samples_per_step = 1  # does not matter, weight all equally
 
-    out = np.empty((length, 3, 4), dtype=np.float32)
-    cdef np.ndarray[np.float32_t, ndim=3, mode = 'c'] out_c = out
+    out = np.empty((length, STATS_FIELDS, STATS_VALUES), dtype=np.float32)
+    cdef np.ndarray[np.float32_t, ndim=STATS_FIELDS, mode = 'c'] out_c = out
     cdef float * out_ptr = <float *> out_c.data
     _reduction_downsample(&r_inst, out_ptr, idx_start, idx_stop, increment)
     return out
@@ -321,7 +321,7 @@ cdef class Statistics:
         return self
 
     cdef _value(self):
-        out = np.empty((3, 4), dtype=np.float32)
+        out = np.empty((STATS_FIELDS, STATS_VALUES), dtype=np.float32)
         cdef np.ndarray[np.float32_t, ndim=2, mode = 'c'] out_c = out
         cdef float * out_ptr = <float *> out_c.data
         memcpy(out_ptr, self.stats, sizeof(self.stats))
@@ -387,7 +387,7 @@ cdef class StreamBuffer:
     cdef object reductions_samples_per_data
     cdef uint64_t _sample_id_max  # used to automatically stop streaming
     cdef uint64_t _contiguous_max  # used to automatically stop streaming
-    cdef object _callback  # fn(np.array [3][4] of statistics, energy)
+    cdef object _callback  # fn(np.array [STATS_FIELDS][STATS_VALUES] of statistics, energy)
     cdef object _charge_picocoulomb  # python integer for infinite precision
     cdef object _energy_picojoules  # python integer for infinite precision
 
@@ -424,7 +424,7 @@ cdef class StreamBuffer:
         self.reductions_samples_per_data = []
 
         cdef js_stream_buffer_reduction_s * r
-        cdef np.ndarray[np.float32_t, ndim=3, mode = 'c'] reduction_data_c
+        cdef np.ndarray[np.float32_t, ndim=STATS_FIELDS, mode = 'c'] reduction_data_c
         cdef np.ndarray[np.uint64_t, ndim=1, mode = 'c'] reduction_samples_per_data_c
         sz = length
 
@@ -456,7 +456,7 @@ cdef class StreamBuffer:
 
         self._sample_id_max = 0  # used to automatically stop streaming
         self._contiguous_max = 0  # used to automatically stop streaming
-        self._callback = None  # fn(np.array [3][4] of statistics, energy)
+        self._callback = None  # fn(np.array [STATS_FIELDS][STATS_VALUES] of statistics, energy)
         self._charge_picocoulomb = 0
         self._energy_picojoules = 0  # integer for infinite precision
 
@@ -971,7 +971,7 @@ cdef class StreamBuffer:
         :param stop: The ending sample_id (exclusive).
         :param out: The optional output array.  None (default) creates
             and outputs a new array.
-        :return: The np.ndarray((3, 4), dtype=np.float32) data of
+        :return: The np.ndarray((STATS_FIELDS, STATS_VALUES), dtype=np.float32) data of
             (fields, values) with
             fields (current, voltage, power) and
             values (mean, variance, min, max).
@@ -1049,8 +1049,8 @@ cdef class StreamBuffer:
                             int64_t start, int64_t stop, uint64_t increment):
         """Get the summarized statistics over a range.
         
-        :param buffer: The Nx3x4 buffer to populate.
-        :param buffer_samples: The size N of the buffer in units of 3x4 float samples.
+        :param buffer: The N x STATS_FIELDS x STATS_VALUES buffer to populate.
+        :param buffer_samples: The size N of the buffer in units of STATS_FIELDS x STATS_VALUES float samples.
         :param start: The starting sample id (inclusive).
         :param stop: The ending sample id (exclusive).
         :param increment: The number of raw samples.
@@ -1152,9 +1152,9 @@ cdef class StreamBuffer:
         :param start: The starting sample id (inclusive).
         :param stop: The ending sample id (exclusive).
         :param increment: The number of raw samples.
-        :param out: The optional output np.ndarray(N, 3, 4) to populate with
+        :param out: The optional output np.ndarray(N, STATS_FIELDS, STATS_VALUES) to populate with
             the result.  None (default) will construct and return a new array.
-        :return: The np.ndarray((N, 3, 4), dtype=np.float32) data of
+        :return: The np.ndarray((N, STATS_FIELDS, STATS_VALUES), dtype=np.float32) data of
             (length, fields, values) with
             fields (current, voltage, power) and
             values (mean, variance, min, max).
@@ -1168,7 +1168,7 @@ cdef class StreamBuffer:
             out = np.empty((expected_length, STATS_FIELDS, STATS_VALUES), dtype=np.float32)
 
         #out = np.ascontiguousarray(out, dtype=np.float32)
-        cdef np.ndarray[np.float32_t, ndim=3, mode = 'c'] out_c = out
+        cdef np.ndarray[np.float32_t, ndim=STATS_FIELDS, mode = 'c'] out_c = out
         out_ptr = <float *> out_c.data
 
         length = self._data_get(out_ptr, len(out), start, stop, increment)
@@ -1227,10 +1227,10 @@ cdef class StreamBuffer:
         k = stop - start
         r = self.reductions_data[idx]
         if k == 0:
-            return np.empty((0, 3, 4), dtype=np.float32)
+            return np.empty((0, STATS_FIELDS, STATS_VALUES), dtype=np.float32)
         elif k < 0:  # copy on wrap
             k += r_len
-            d = np.empty((k, 3, 4), dtype=np.float32)
+            d = np.empty((k, STATS_FIELDS, STATS_VALUES), dtype=np.float32)
             d[:(r_len - start), :, :] = r[start:, :, :]
             d[r_len - start:, :, :] = r[:stop, :, :]
             return d
@@ -1242,7 +1242,7 @@ cdef class StreamBuffer:
             b = np.empty(12, dtype=np.float32)
             for i in range(12):
                 b[i] = stats[i]
-            b = b.reshape((3, 4))
+            b = b.reshape((STATS_FIELDS, STATS_VALUES))
             sample_count = self.reductions[self.reduction_count - 1].samples_per_reduction_sample
             time_interval = sample_count / self.sampling_frequency  # seconds
             charge_picocoulomb = (b[0][0] * 1e12)  * time_interval
