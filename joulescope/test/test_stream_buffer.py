@@ -301,3 +301,9 @@ class TestStreamBuffer(unittest.TestCase):
         b.process()
         data = b.data_get(50, 250)
         np.testing.assert_allclose(expect[50:, 0], data[:, 0, 0])
+
+    def test_voltage_range(self):
+        b = StreamBuffer(200, [], 1000.0)
+        self.assertEqual(0, b.voltage_range)
+        b.voltage_range = 1
+        self.assertEqual(1, b.voltage_range)
