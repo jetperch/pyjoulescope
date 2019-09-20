@@ -4,6 +4,13 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 0.6.2
+
+2019 Sep 20
+
+*   Added parameter aliases for increased API flexibility.
+
+
 ## 0.6.0
 
 2019 Sep 16
