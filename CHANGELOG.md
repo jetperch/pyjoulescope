@@ -4,6 +4,14 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 0.6.3
+
+2019 Sep 22
+
+*   Modified "recording" command to display reduction and samples.
+*   Fixed data recorder statistics computation when length < 1 reduction.
+
+
 ## 0.6.2
 
 2019 Sep 20
