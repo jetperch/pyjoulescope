@@ -21,9 +21,12 @@ def parser_config(p):
     """Inspect recordings"""
     p.add_argument('filename',
                    help='The JLS filename to process.')
+    p.add_argument('--plot-reduction',
+                   action='store_true',
+                   help='Plot the stored data reduction preview of the captured data.')
     p.add_argument('--plot',
                    action='store_true',
-                   help='Plot the captured data (data reduction preview only).')
+                   help='Plot the calibrated, captured data.')
     p.add_argument('--plot-raw',
                    help='Plot the raw data with list of plots.'
                         "'i'=current, 'v'=voltage, 'r'=current range. "
@@ -57,7 +60,7 @@ def on_cmd(args):
         else:
             np.savetxt(args.export, data, fmt='%.5g', delimiter=',')
 
-    if args.plot:
+    if args.plot_reduction:
         import matplotlib.pyplot as plt
         y = r.get_reduction(start, stop)
         x = np.arange(len(y)) * (r.config['samples_per_reduction'] / r.config['sampling_frequency'])
@@ -67,6 +70,27 @@ def on_cmd(args):
             ax.plot(x, y[:, axis, 0], color='blue')
             ax.plot(x, y[:, axis, 2], color='red')
             ax.plot(x, y[:, axis, 3], color='red')
+
+        plt.show()
+        plt.close(f)
+
+    if args.plot:
+        import matplotlib.pyplot as plt
+        i, v = r.get_calibrated(start, stop)
+        x = np.arange(len(i)) * (1.0 / r.config['sampling_frequency'])
+        f = plt.figure()
+
+        ax_i = f.add_subplot(2, 1, 1)
+        ax_i.plot(x, i)
+        ax_i.set_ylabel('Current (A)')
+        ax_i.grid(True)
+
+        ax_v = f.add_subplot(2, 1, 2, sharex=ax_i)
+        ax_v.plot(x, v)
+        ax_v.set_ylabel('Voltage (V)')
+        ax_v.grid(True)
+
+        ax_v.set_xlabel('Time (s)')
 
         plt.show()
         plt.close(f)
