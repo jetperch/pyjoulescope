@@ -131,7 +131,7 @@ class DataRecorder:
             raise ValueError('Supports only a single stream_buffer instance')
 
         sample_id_next = self._sample_id_tlv + self._samples_per_tlv
-        while sb_stop > sample_id_next:  # have at least one block
+        while sb_stop >= sample_id_next:  # have at least one block
             if self._samples_per_tlv > len(stream_buffer):
                 raise ValueError('stream_buffer length too small.  %s > %s' %
                                  (self._samples_per_tlv, len(stream_buffer)))
@@ -205,6 +205,7 @@ class DataReader:
         self._f = None  # type: datafile.DataFileReader
         self._data_start_position = 0
         self._voltage_range = 0
+        self._sample_cache = None
 
     def __str__(self):
         if self._f is not None:
@@ -216,6 +217,8 @@ class DataReader:
         self._fh_close = False
         self._fh = None
         self._f = None
+        self._sample_cache = None
+        self._reduction_cache = None
 
     def open(self, filehandle):
         self.close()
@@ -293,16 +296,94 @@ class DataReader:
         return self._voltage_range
 
     def _validate_range(self, start=None, stop=None, increment=None):
-        idx_start = 0
-        idx_end = idx_start + self.footer['size']
+        idx_start, idx_end = self.sample_id_range
         if increment is not None:
             idx_end = ((idx_end + increment - 1) // increment) * increment
-        log.debug('[%d, %d] : [%d, %d]', start, stop, idx_start, idx_end)
+        # log.debug('[%d, %d] : [%d, %d]', start, stop, idx_start, idx_end)
         if not idx_start <= start < idx_end:
             raise ValueError('start out of range: %d <= %d < %d' % (idx_start, start, idx_end))
         if not idx_start <= stop <= idx_end:
             raise ValueError('stop out of range: %d <= %d <= %d: %s' %
                              (idx_start, stop, idx_end, increment))
+
+    def _sample_tlv(self, sample_idx):
+        if self._sample_cache and self._sample_cache['start'] <= sample_idx < self._sample_cache['stop']:
+            # cache hit
+            return self._sample_cache
+
+        idx_start, idx_end = self.sample_id_range
+        if not idx_start <= sample_idx < idx_end:
+            raise ValueError('sample index out of range: %d <= %d < %d', idx_start, sample_idx, idx_end)
+
+        if self._sample_cache is not None:
+            log.debug('_sample_cache cache miss: %s : %s %s',
+                      sample_idx, self._sample_cache['start'], self._sample_cache['stop'])
+
+
+        # seek
+        samples_per_tlv = self.config['samples_per_tlv']
+        samples_per_block = self.config['samples_per_block']
+        tgt_block = sample_idx // samples_per_block
+
+        if self._sample_cache is not None and sample_idx > self._sample_cache['start']:
+            # continue forward
+            self._fh.seek(self._sample_cache['tlv_pos'])
+            voltage_range = self._sample_cache['voltage_range']
+            block_fh_pos = self._sample_cache['block_pos']
+            current_sample_idx = self._sample_cache['start']
+            block_counter = current_sample_idx // samples_per_block
+        else:  # add case for rewind?
+            log.debug('_sample_tlv resync to beginning')
+            self._fh.seek(self._data_start_position)
+            voltage_range = 0
+            block_fh_pos = 0
+            block_counter = 0
+            current_sample_idx = 0
+            if self._f.advance() != datafile.TAG_COLLECTION_START:
+                raise ValueError('data section must be single collection')
+
+        while True:
+            tag, _ = self._f.peek_tag_length()
+            if tag is None:
+                log.error('sample_tlv not found before end of file: %s > %s', sample_idx, current_sample_idx)
+                break
+            if tag == datafile.TAG_COLLECTION_START:
+                if block_counter < tgt_block:
+                    self._f.skip()
+                    block_counter += 1
+                else:
+                    block_fh_pos = self._f.tell()
+                    tag, collection_bytes = next(self._f)
+                    c = datafile.Collection.decode(collection_bytes)
+                    if c.data:
+                        collection_start_meta = json.loads(c.data)
+                        voltage_range = collection_start_meta.get('v_range', 0)
+                        self._voltage_range = voltage_range
+                    current_sample_idx = block_counter * samples_per_block
+            elif tag == datafile.TAG_COLLECTION_END:
+                block_counter += 1
+                self._f.advance()
+            elif tag == datafile.TAG_DATA_BINARY:
+                tlv_stop = current_sample_idx + samples_per_tlv
+                if current_sample_idx <= sample_idx < tlv_stop:
+                    # found it!
+                    tlv_pos = self._f.tell()
+                    tag, value = next(self._f)
+                    data = np.frombuffer(value, dtype=np.uint16).reshape((-1, 2))
+                    self._sample_cache = {
+                        'voltage_range': voltage_range,
+                        'start': current_sample_idx,
+                        'stop': tlv_stop,
+                        'buffer': data,
+                        'tlv_pos': tlv_pos,
+                        'block_pos': block_fh_pos,
+                    }
+                    return self._sample_cache
+                else:
+                    self._f.advance()
+                current_sample_idx = tlv_stop
+            else:
+                self._f.advance()
 
     def raw(self, start=None, stop=None, units=None, calibrated=None, out=None):
         """Get the raw data.
@@ -317,11 +398,11 @@ class DataReader:
         :return: The output which is either a new array or (when provided) out.
         """
         start, stop = self.normalize_time_arguments(start, stop, units)
-        r_start, r_stop = self.sample_id_range
+        x_start, x_stop = self.sample_id_range
         if start is None:
-            start = r_start
+            start = x_start
         if stop is None:
-            stop = r_stop        
+            stop = x_stop
         self._fh.seek(self._data_start_position)
         self._validate_range(start, stop)
         length = stop - start
@@ -333,62 +414,89 @@ class DataReader:
             else:
                 out = np.empty((length, 2), dtype=np.uint16)
 
-        sample_idx = 0
-        samples_per_tlv = self.config['samples_per_tlv']
-        samples_per_block = self.config['samples_per_block']
-        block_start = start // samples_per_block
-        block_counter = 0
+        sample_idx = start
         out_idx = 0
         if self._f.advance() != datafile.TAG_COLLECTION_START:
             raise ValueError('data section must be single collection')
+        while sample_idx < stop:
+            sample_cache = self._sample_tlv(start)
+            if sample_cache is None:
+                break
+            data = sample_cache['buffer']
+            b_start = sample_idx - sample_cache['start']
+            length = sample_cache['stop'] - sample_cache['start'] - b_start
+            out_remaining = stop - sample_idx
+            length = min(length, out_remaining)
+            if length <= 0:
+                break
+            b_stop = b_start + length
+            if calibrated:
+                v, i, _ = self.calibration.transform(data[b_start:b_stop, :],
+                                                     v_range=sample_cache['voltage_range'])
+                out[out_idx:(out_idx + length), 0] = v
+                out[out_idx:(out_idx + length), 1] = i
+            else:
+                out[out_idx:(out_idx + length), :] = data[b_start:b_stop, :]
+            out_idx += length
+            sample_idx += length
+        return out[:out_idx, :]
+
+    def _reduction_tlv(self, reduction_idx):
+        sz = self.config['samples_per_reduction']
+        incr = self.config['samples_per_block'] // sz
+        tgt_r_idx = reduction_idx
+
+        if self._reduction_cache and self._reduction_cache['r_start'] <= tgt_r_idx < self._reduction_cache['r_stop']:
+            return self._reduction_cache
+
+        if self._reduction_cache is not None:
+            log.debug('_reduction_tlv cache miss: %s : %s %s',
+                      tgt_r_idx, self._reduction_cache['r_start'], self._reduction_cache['r_stop'])
+
+        idx_start, idx_end = self.sample_id_range
+        r_start = idx_start // sz
+        r_stop = idx_end // sz
+        if not r_start <= tgt_r_idx < r_stop:
+            raise ValueError('reduction index out of range: %d <= %d < %d', r_start, tgt_r_idx, r_stop)
+
+        if self._reduction_cache is not None and tgt_r_idx > self._reduction_cache['r_start']:
+            # continue forward
+            self._fh.seek(self._reduction_cache['next_collection_pos'])
+            r_idx = self._reduction_cache['r_stop']
+        else:  # add case for rewind?
+            log.debug('_reduction_tlv resync to beginning')
+            self._fh.seek(self._data_start_position)
+            r_idx = 0
+            if self._f.advance() != datafile.TAG_COLLECTION_START:
+                raise ValueError('data section must be single collection')
+            self._fh.seek(self._data_start_position)
+            if self._f.advance() != datafile.TAG_COLLECTION_START:
+                raise ValueError('data section must be single collection')
+
         while True:
             tag, _ = self._f.peek_tag_length()
-            if tag is None:
+            if tag is None or tag == datafile.TAG_COLLECTION_END:
+                log.error('reduction_tlv not found before end of file: %s > %s', r_stop, r_idx)
                 break
-            if tag == datafile.TAG_COLLECTION_START:
-                if block_counter < block_start:
-                    self._f.skip()
-                    block_counter += 1
-                else:
-                    tag, collection_bytes = next(self._f)
-                    c = datafile.Collection.decode(collection_bytes)
-                    if c.data is None:
-                        self._voltage_range = 0
-                    else:
-                        collection_start_meta = json.loads(c.data)
-                        self._voltage_range = collection_start_meta.get('v_range', 0)
-                    sample_idx = block_counter * samples_per_block
-            elif tag == datafile.TAG_COLLECTION_END:
-                block_counter += 1
-                self._f.advance()
-            elif tag == datafile.TAG_DATA_BINARY:
-                tlv_stop = sample_idx + samples_per_tlv
-                if start < tlv_stop:
-                    tag, value = next(self._f)
-                    data = np.frombuffer(value, dtype=np.uint16).reshape((-1, 2))
-                    idx_start = 0
-                    idx_stop = samples_per_tlv
-                    if start > sample_idx:
-                        idx_start = start - sample_idx
-                    if stop < tlv_stop:
-                        idx_stop = stop - sample_idx
-                    length = idx_stop - idx_start
-                    if calibrated:
-                        v, i, _ = self.calibration.transform(data[idx_start:idx_stop, :],
-                                                             v_range=self._voltage_range)
-                        out[out_idx:(out_idx + length), 0] = v
-                        out[out_idx:(out_idx + length), 1] = i
-                    else:
-                        out[out_idx:(out_idx + length), :] = data[idx_start:idx_stop, :]
-                    out_idx += length
-                else:
-                    self._f.advance()
-                sample_idx = tlv_stop
-                if sample_idx > stop:
-                    break
-            else:
-                self._f.advance()
-        return out[:out_idx, :]
+            elif tag != datafile.TAG_COLLECTION_START:
+                raise ValueError('invalid file format: not collection start')
+            r_idx_next = r_idx + incr
+            if tgt_r_idx >= r_idx_next:
+                self._f.skip()
+                r_idx = r_idx_next
+                continue
+            self._f.collection_goto_end()
+            tag, value = next(self._f)
+            if tag != datafile.TAG_COLLECTION_END:
+                raise ValueError('invalid file format: not collection end')
+            data = np.frombuffer(value, dtype=np.float32).reshape((-1, 3, 4))
+            self._reduction_cache = {
+                'r_start': r_idx,
+                'r_stop': r_idx_next,
+                'buffer': data,
+                'next_collection_pos': self._f.tell()
+            }
+            return self._reduction_cache
 
     def get_reduction(self, start=None, stop=None, units=None, out=None):
         """Get the fixed reduction with statistics.
@@ -401,60 +509,43 @@ class DataReader:
         :return: The Nx3x4 sample data.
         """
         start, stop = self.normalize_time_arguments(start, stop, units)
-        sz = self.config['samples_per_reduction']
-        incr = self.config['samples_per_block'] // sz
         self._fh.seek(self._data_start_position)
         self._validate_range(start, stop)
+
+        sz = self.config['samples_per_reduction']
         r_start = start // sz
-        length = (stop - start) // sz
-        r_stop = r_start + length
+        total_length = (stop - start) // sz
+        r_stop = r_start + total_length
         log.info('DataReader.get_reduction(r_start=%r,r_stop=%r)', r_start, r_stop)
-        if length <= 0:
+
+        if total_length <= 0:
             return np.empty((0, 3, 4), dtype=np.float32)
         if out is None:
-            out = np.empty((length, 3, 4), dtype=np.float32)
-        elif len(out) < length:
+            out = np.empty((total_length, 3, 4), dtype=np.float32)
+        elif len(out) < total_length:
             raise ValueError('out too small')
 
+        r_idx = r_start
         out_idx = 0
-        r_idx = 0
 
-        if self._f.advance() != datafile.TAG_COLLECTION_START:
-            raise ValueError('data section must be single collection')
-        while True:
-            tag, _ = self._f.peek_tag_length()
-            if tag is None or tag == datafile.TAG_COLLECTION_END:
+        while r_idx < r_stop:
+            reduction_cache = self._reduction_tlv(r_idx)
+            if reduction_cache is None:
                 break
-            elif tag != datafile.TAG_COLLECTION_START:
-                raise ValueError('invalid file format: not collection start')
-            r_idx_next = r_idx + incr
-            if r_start >= r_idx_next:
-                self._f.skip()
-                r_idx = r_idx_next
-                continue
-            self._f.collection_goto_end()
-            tag, value = next(self._f)
-            if tag != datafile.TAG_COLLECTION_END:
-                raise ValueError('invalid file format: not collection end')
-            data = np.frombuffer(value, dtype=np.float32).reshape((-1, 3, 4))
-            r_idx_start = 0
-            r_idx_stop = incr
-            if r_idx < r_start:
-                r_idx_start = r_start - r_idx
-            if r_idx_next > r_stop:
-                r_idx_stop = r_stop - r_idx
-            if r_idx_stop > len(data):
-                r_idx_stop = len(data)
-            copy_len = r_idx_stop - r_idx_start
-            out[out_idx:(out_idx + copy_len), :, :] = data[r_idx_start:r_idx_stop, :, :]
-            out_idx += copy_len
-            r_idx = r_idx_next
-            if r_idx_next >= r_stop:
+            data = reduction_cache['buffer']
+            b_start = r_idx - reduction_cache['r_start']
+            length = reduction_cache['r_stop'] - reduction_cache['r_start'] - b_start
+            out_remaining = r_stop - r_idx
+            length = min(length, out_remaining)
+            if length <= 0:
                 break
-        if out_idx != length:
-            log.warning('DataReader length mismatch: out_idx=%s, length=%s', out_idx, length)
-            length = min(out_idx, length)
-        return out[:length, :]
+            out[out_idx:(out_idx + length), :, :] = data[b_start:(b_start + length), :, :]
+            out_idx += length
+            r_idx += length
+        if out_idx != total_length:
+            log.warning('DataReader length mismatch: out_idx=%s, length=%s', out_idx, total_length)
+            total_length = min(out_idx, total_length)
+        return out[:total_length, :]
 
     def _get_reduction_stats(self, start, stop):
         """Get statistics over the reduction
@@ -463,7 +554,7 @@ class DataReader:
         :param stop: The ending sample identifier (exclusive).
         :return: The tuple of ((sample_start, sample_stop), :class:`Statistics`).
         """
-        log.debug('_get_reduction_stats(%s, %s)', start, stop)
+        # log.debug('_get_reduction_stats(%s, %s)', start, stop)
         s = Statistics()
         sz = self.config['samples_per_reduction']
         incr = self.config['samples_per_block'] // sz
@@ -474,41 +565,22 @@ class DataReader:
         if r_start >= r_stop:  # use the reductions
             s_start = r_start * sz
             return (s_start, s_start), s
-        r_idx = 0
+        r_idx = r_start
 
-        self._fh.seek(self._data_start_position)
-        if self._f.advance() != datafile.TAG_COLLECTION_START:
-            raise ValueError('data section must be single collection')
-        while True:
-            tag, _ = self._f.peek_tag_length()
-            if tag is None or tag == datafile.TAG_COLLECTION_END:
+        while r_idx < r_stop:
+            reduction_cache = self._reduction_tlv(r_idx)
+            if reduction_cache is None:
                 break
-            elif tag != datafile.TAG_COLLECTION_START:
-                raise ValueError('invalid file format: not collection start')
-            r_idx_next = r_idx + incr
-            if r_start >= r_idx_next:
-                self._f.skip()
-                r_idx = r_idx_next
-                continue
-            self._f.collection_goto_end()
-            tag, value = next(self._f)
-            if tag != datafile.TAG_COLLECTION_END:
-                raise ValueError('invalid file format: not collection end')
-            data = np.frombuffer(value, dtype=np.float32).reshape((-1, 3, 4))
-            r_idx_start = 0
-            r_idx_stop = incr
-            if r_idx < r_start:
-                r_idx_start = r_start - r_idx
-            if r_idx_next > r_stop:
-                r_idx_stop = r_stop - r_idx
-            if r_idx_stop > len(data):
-                r_idx_stop = len(data)
-            length = r_idx_stop - r_idx_start
-            r = reduction_downsample(data, r_idx_start, r_idx_stop, length)
+            data = reduction_cache['buffer']
+            b_start = r_idx - reduction_cache['r_start']
+            length = reduction_cache['r_stop'] - reduction_cache['r_start'] - b_start
+            out_remaining = r_stop - r_idx
+            length = min(length, out_remaining)
+            if length <= 0:
+                break
+            r = reduction_downsample(data, b_start, b_start + length, length)
             s.combine(Statistics(length=length * sz, stats=r[0, :, :]))
-            r_idx = r_idx_next
-            if r_idx_next >= r_stop:
-                break
+            r_idx += length
         return (r_start * sz, r_stop * sz), s
 
     def get_calibrated(self, start=None, stop=None, units=None):
@@ -528,7 +600,7 @@ class DataReader:
         return i, v
 
     def get(self, start=None, stop=None, increment=None, units=None):
-        """Get the data with statistics.
+        """Get the calibrated data with statistics.
 
         :param start: The starting sample identifier (inclusive).
         :param stop: The ending sample identifier (exclusive).
@@ -566,26 +638,11 @@ class DataReader:
             increment = int(increment / self.config['samples_per_reduction'])
             out = reduction_downsample(r_out, 0, len(r_out), increment)
         else:
-            z = self.raw(start, stop, calibrated=True)
-            i, v = z[:, 0], z[:, 1]
-            p = i * v
+            k_start = start
             for idx in range(out_len):
-                idx_start = idx * increment
-                idx_stop = (idx + 1) * increment
-                i_view = i[idx_start:idx_stop]
-                zi = np.isfinite(i_view)
-                i_view = i_view[zi]
-                if len(i_view):
-                    v_view = v[idx_start:idx_stop][zi]
-                    p_view = p[idx_start:idx_stop][zi]
-                    out[idx, 0, :] = np.vstack((np.mean(i_view, axis=0), np.var(i_view, axis=0),
-                                                np.amin(i_view, axis=0), np.amax(i_view, axis=0))).T
-                    out[idx, 1, :] = np.vstack((np.mean(v_view, axis=0), np.var(v_view, axis=0),
-                                                np.amin(v_view, axis=0), np.amax(v_view, axis=0))).T
-                    out[idx, 2, :] = np.vstack((np.mean(p_view, axis=0), np.var(p_view, axis=0),
-                                                np.amin(p_view, axis=0), np.amax(p_view, axis=0))).T
-                else:
-                    out[idx, :, :] = np.full((1, 3, 4), np.nan, dtype=np.float32)
+                k_stop = k_start + increment
+                out[idx, :, :] = self._stats_get(k_start, k_stop).value
+                k_start = k_stop
         return out
 
     def summary_string(self):
@@ -629,6 +686,35 @@ class DataReader:
             raise ValueError(f'start sample out of range: {s2}')
         return s1, s2
 
+    def _stats_get(self, start, stop):
+        s1, s2 = start, stop
+        (k1, k2), s = self._get_reduction_stats(s1, s2)
+        if k1 >= k2:
+            # compute directly over samples
+            stats = np.empty((3, 4), dtype=np.float32)
+            z = self.raw(s1, s2, calibrated=True)
+            i, v = z[:, 0], z[:, 1]
+            p = i * v
+            zi = np.isfinite(i)
+            i_view = i[zi]
+            if len(i_view):
+                for idx, field in enumerate([i_view, v[zi], p[zi]]):
+                    stats[idx, 0] = np.mean(field, axis=0)
+                    stats[idx, 1] = np.var(field, axis=0)
+                    stats[idx, 2] = np.amin(field, axis=0)
+                    stats[idx, 3] = np.amax(field, axis=0)
+            else:
+                stats[:, :] = np.full((1, 3, 4), np.nan, dtype=np.float32)
+            s = Statistics(length=len(i_view), stats=stats)
+        else:
+            if s1 < k1:
+                s_start = self._stats_get(s1, k1)
+                s.combine(s_start)
+            if s2 > k2:
+                s_stop = self._stats_get(k2, s2)
+                s.combine(s_stop)
+        return s
+
     def statistics_get(self, start=None, stop=None, units=None):
         """Get the statistics for the collected sample data over a time range.
 
@@ -642,17 +728,9 @@ class DataReader:
         """
         log.debug('statistics_get(%s, %s, %s)', start, stop, units)
         s1, s2 = self.normalize_time_arguments(start, stop, units)
-
-        (k1, k2), s = self._get_reduction_stats(s1, s2)
-        if s1 < k1:
-            length = k1 - s1
-            s_start = self.get(s1, k1, increment=length)
-            s.combine(Statistics(length=length, stats=s_start[0, :, :]))
-        if s2 > k2:
-            length = s2 - k2
-            s_stop = self.get(k2, s2, increment=length)
-            s.combine(Statistics(length=length, stats=s_stop[0, :, :]))
-
+        if s1 == s2:
+            s2 = s1 + 1  # always try to produce valid statistics
+        s = self._stats_get(s1, s2)
         t_start = s1 / self.sampling_frequency
         t_stop = s2 / self.sampling_frequency
         return stats_to_api(s.value, t_start, t_stop)
