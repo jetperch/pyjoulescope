@@ -27,7 +27,6 @@ import time
 from . import kernel32
 import logging
 log = logging.getLogger(__name__)
-log.setLevel(level=logging.INFO)
 
 _winusb = windll.winusb
 

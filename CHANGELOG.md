@@ -9,6 +9,7 @@ This file contains the list of changes made to pyjoulescope.
 2019 Sep 25 [in progress]
 
 * Added configurable stream_buffer_duration (was fixed at 30 seconds).
+* Removed logging.setLevel commands used in debugging.
 
 
 ## 0.6.3

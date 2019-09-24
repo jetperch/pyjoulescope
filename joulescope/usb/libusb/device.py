@@ -33,9 +33,6 @@ from ctypes import Structure, c_uint8, c_uint16, c_uint32, c_uint, \
 import logging
 
 log = logging.getLogger(__name__)
-# log.setLevel(logging.DEBUG)
-
-
 STRING_LENGTH_MAX = 255
 CONTROL_TRANSFER_TIMEOUT_MS = 1000  # default in milliseconds
 

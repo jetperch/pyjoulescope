@@ -23,7 +23,6 @@ from joulescope.usb.api import DeviceDriverApi
 
 
 log = logging.getLogger(__name__)
-log.setLevel(level=logging.INFO)
 TIMEOUT = 3.0
 TIMEOUT_OPEN = 10.0
 
