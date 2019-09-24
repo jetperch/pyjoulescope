@@ -105,7 +105,7 @@ LOOPBACK_BUFFER_SIZE = 132
 
 SAMPLING_FREQUENCY = 2000000  # samples per second (Hz)
 REDUCTIONS = [200, 100, 50]  # in samples in sample units of the previous reduction
-STREAM_BUFFER_DURATION = 30  # seconds
+STREAM_BUFFER_DURATION = 30.0  # seconds
 
 
 class StreamProcessApi:
@@ -175,6 +175,7 @@ class Device:
         self._config = config
         self._parameters = {}
         self._reductions = REDUCTIONS
+        self._stream_buffer_duration = STREAM_BUFFER_DURATION
         self._sampling_frequency = SAMPLING_FREQUENCY
         self.stream_buffer = None
         self._streaming = False
@@ -218,6 +219,19 @@ class Device:
         idx = len(self._reductions)
         if idx:
             self.stream_buffer.callback = cbk
+
+    @property
+    def stream_buffer_duration(self):
+        return self._stream_buffer_duration
+
+    @stream_buffer_duration.setter
+    def stream_buffer_duration(self, value):
+        if value is None:
+            self._stream_buffer_duration = STREAM_BUFFER_DURATION
+        else:
+            self._stream_buffer_duration = float(value)
+        if self.stream_buffer is not None:
+            log.info('stream_buffer_duration change will not take effect until close() then open()')
 
     def view_factory(self):
         """Construct a new View into the device's data.
@@ -297,7 +311,6 @@ class Device:
             asynchronous events, mostly to allow robust handling of device
             errors.  "event" is one of the :class:`DeviceEvent` values,
             and the message is a more detailed description of the event.
-
         :raise IOError: on failure.
 
         The event_callback_fn may be called asynchronous and from other
@@ -306,7 +319,7 @@ class Device:
         if self.stream_buffer:
             self.close()
         self._usb.open(event_callback_fn)
-        sb_len = self._sampling_frequency * STREAM_BUFFER_DURATION
+        sb_len = self._sampling_frequency * self._stream_buffer_duration
         self.stream_buffer = StreamBuffer(sb_len, self._reductions, self._sampling_frequency)
         try:
             info = self.info()
