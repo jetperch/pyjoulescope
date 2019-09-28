@@ -104,7 +104,7 @@ class TestDataFile(unittest.TestCase):
         return fr, {
             'data': data,
             'signing_key_prv': signing_key_prv,
-            'signing_key_pub': monocypher.public_key_compute(signing_key_prv),
+            'signing_key_pub': monocypher.compute_signing_public_key(signing_key_prv),
             'encryption_key': encryption_key,
             'nonce': nonce,
             'associated_data': associated_data,

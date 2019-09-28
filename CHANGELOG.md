@@ -10,6 +10,7 @@ This file contains the list of changes made to pyjoulescope.
 
 * Added configurable stream_buffer_duration (was fixed at 30 seconds).
 * Removed logging.setLevel commands used in debugging.
+* Upgraded to pymonocypher 0.1.3.
 
 
 ## 0.6.3

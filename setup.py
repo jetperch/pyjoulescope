@@ -136,7 +136,7 @@ setuptools.setup(
     install_requires=[
         'numpy>=1.15.2',
         'python-dateutil>=2.7.3',
-        'pymonocypher>=0.1.0',
+        'pymonocypher>=0.1.3',
     ] + PLATFORM_INSTALL_REQUIRES,
 
     extras_require={

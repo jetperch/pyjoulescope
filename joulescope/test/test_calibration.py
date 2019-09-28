@@ -37,7 +37,7 @@ CAL1_1G = [0.0006828914450133605, 0.00016375303534373303, 1.4626174421742075e-05
 
 
 PRIVATE_KEY = bytes(range(32))
-PUBLIC_KEY = monocypher.public_key_compute(PRIVATE_KEY)
+PUBLIC_KEY = monocypher.compute_signing_public_key(PRIVATE_KEY)
 
 
 class TestCalibrate(unittest.TestCase):

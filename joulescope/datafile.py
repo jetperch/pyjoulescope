@@ -396,7 +396,7 @@ class DataFileWriter:
         payload = bytearray(8)
         payload[0] = 1  # Ed25519 using Blake2b
         payload[1] = self._signature['flags']
-        payload += monocypher.public_key_compute(private_key)
+        payload += monocypher.compute_signing_public_key(private_key)
         self.append(TAG_SIGNATURE_START, payload)
         if 0 == (self._signature['flags'] & SIGNATURE_FLAG_KEY_INCLUDE):
             self._signature['data'] = b''
