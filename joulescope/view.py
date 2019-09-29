@@ -39,7 +39,7 @@ def data_array_to_update(x_limits, x, data_array):
     :param x_limits: The list of [x_min, x_max] or None if unknown.
     :param x: The np.ndarray of x-axis times.
     :param data_array: The N x STATS_FIELDS x STATS_VALUES np.ndarray containing:
-        current, voltage, power, current_range, gpi0, gpi1
+        current, voltage, power, current_range, current_lsb, voltage_lsb
         mean, variance, minimum, maximum
     """
     return {
@@ -55,8 +55,8 @@ def data_array_to_update(x_limits, x, data_array):
             'voltage': to_view_statistics(data_array, 1, 'V'),
             'power': to_view_statistics(data_array, 2, 'W'),
             'current_range': to_view_statistics(data_array, 3, ''),
-            'gpi0': to_view_statistics(data_array, 4, ''),
-            'gpi1': to_view_statistics(data_array, 5, ''),
+            'current_lsb': to_view_statistics(data_array, 4, ''),
+            'voltage_lsb': to_view_statistics(data_array, 5, ''),
         },
         'state': {
             'source_type': 'buffer',  # ['realtime', 'buffer']
@@ -379,11 +379,11 @@ class View:
                     'value': data[:, 3, 0],
                     'units': '',
                 },
-                'gpi0': {
+                'current_lsb': {
                     'value': data[:, 4, 0],
                     'units': '',
                 },
-                'gpi1': {
+                'voltage_lsb': {
                     'value': data[:, 5, 0],
                     'units': '',
                 },

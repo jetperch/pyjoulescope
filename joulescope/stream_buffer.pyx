@@ -42,7 +42,7 @@ DEF SAMPLES_PER_PACKET = PACKET_PAYLOAD_SIZE // (2 * 2)
 DEF RAW_SAMPLE_SZ = 2 * 2  # sizeof(uint16_t)
 DEF CAL_SAMPLE_SZ = 2 * 4  # sizeof(float)
 
-DEF _STATS_FIELDS = 6  # current, voltage, power, current_range, gpi0, gpi1
+DEF _STATS_FIELDS = 6  # current, voltage, power, current_range, current_lsb, voltage_lsb
 DEF _STATS_VALUES = 4  # mean, variance, min, max
 DEF _NDIM = 3          # N, fields, stats
 DEF STATS_FLOATS_PER_SAMPLE = _STATS_FIELDS * _STATS_VALUES
@@ -67,6 +67,9 @@ NAME_TO_COLUMN = {
     'v_raw': 1,
     'power': 2,
     'p': 2,
+    'current_range': 3,
+    'current_lsb': 4,
+    'voltage_lsb': 5,
 }
 
 
@@ -155,9 +158,9 @@ cdef void stats_compute_one(float stats[_STATS_FIELDS][_STATS_VALUES],
         idx = i + 3
         value = bit_fields[i]
         stats[idx][0] += value
-        if bit_fields[i] < stats[i + 3][2]:
+        if value < stats[idx][2]:
             stats[idx][2] = value
-        if voltage > stats[i + 3][3]:
+        if value > stats[idx][3]:
             stats[idx][3] = value
 
 
@@ -205,11 +208,11 @@ cdef void stats_compute_end(float stats[_STATS_FIELDS][_STATS_VALUES],
             v_var += t * t
             t = data[k] * data[k + 1] - p_mean
             p_var += t * t
-            t = ((bits[k] & 0x10) >> 4) - g0_mean
+            t = ((bits[idx] & 0x10) >> 4) - g0_mean
             g0_var += t * t
-            t = ((bits[k] & 0x20) >> 5) - g1_mean
+            t = ((bits[idx] & 0x20) >> 5) - g1_mean
             g1_var += t * t
-        t = (bits[k] & 0x0f) - ir_mean
+        t = (bits[idx] & 0x0f) - ir_mean
         ir_var += t * t
 
         idx += 1
@@ -218,9 +221,9 @@ cdef void stats_compute_end(float stats[_STATS_FIELDS][_STATS_VALUES],
     stats[0][1] = i_var * scale_valid
     stats[1][1] = v_var * scale_valid
     stats[2][1] = p_var * scale_valid
-    stats[3][1] = i_var * scale_all
-    stats[4][1] = v_var * scale_valid
-    stats[5][1] = p_var * scale_valid
+    stats[3][1] = ir_var * scale_all
+    stats[4][1] = g0_var * scale_valid
+    stats[5][1] = g1_var * scale_valid
 
 
 cdef uint64_t stats_compute_run(
@@ -411,7 +414,7 @@ cdef class StreamBuffer:
     cdef uint64_t contiguous_count      #
     cdef uint16_t *raw_ptr  # raw[length][2]   as i, v
     cdef float *data_ptr    # data[length][2]  as i, v
-    cdef uint8_t * bits_ptr # data[length]  # packed bits: 7:6=0 , 5=gpi1, 4=gpi0, 3:0=i_range
+    cdef uint8_t * bits_ptr # data[length]  # packed bits: 7:6=0 , 5=voltage_lsb, 4=current_lsb, 3:0=i_range
     cdef js_stream_buffer_calibration_s cal
     cdef js_stream_buffer_reduction_s reductions[REDUCTION_MAX]
     cdef uint32_t reduction_count
@@ -1228,7 +1231,7 @@ cdef class StreamBuffer:
             the result.  None (default) will construct and return a new array.
         :return: The np.ndarray((N, STATS_FIELDS, STATS_VALUES), dtype=np.float32) data of
             (length, fields, values) with
-            fields (current, voltage, power, current_range, gpi0, gpi1) and
+            fields (current, voltage, power, current_range, current_lsb, voltage_lsb) and
             values (mean, variance, min, max).
         """
         increment = 1 if increment is None else int(increment)
@@ -1352,12 +1355,12 @@ cdef class StreamBuffer:
                         'units': '',
                         'integral_units': '',
                     },
-                    'gpi0' : {
+                    'current_lsb' : {
                         'statistics': _to_statistics(b[4, :]),
                         'units': '',
                         'integral_units': '',
                     },
-                    'gpi1' : {
+                    'voltage_lsb' : {
                         'statistics': _to_statistics(b[5, :]),
                         'units': '',
                         'integral_units': '',
@@ -1504,9 +1507,24 @@ def stats_to_api(stats, t_start, t_stop):
                 'units': 'W',  # watt
                 'integral_units': 'J',  # joule
             },
+            'current_range': {
+                'statistics': {},
+                'units': '',
+                'integral_units': None,
+            },
+            'current_lsb': {
+                'statistics': {},
+                'units': '',
+                'integral_units': None,
+            },
+            'voltage_lsb': {
+                'statistics': {},
+                'units': '',
+                'integral_units': None,
+            },
         }
 
-        for i, field in enumerate(['current', 'voltage', 'power']):
+        for i, field in enumerate(data['signals'].keys()):
             v = data['signals'][field]['statistics']
             v['μ'] = float(stats[i, 0])
             v['σ'] = float(np.sqrt(stats[i, 1]))
