@@ -44,6 +44,7 @@ DEF CAL_SAMPLE_SZ = 2 * 4  # sizeof(float)
 
 DEF STATS_FIELDS = 3  # current, voltage, power
 DEF STATS_VALUES = 4  # mean, variance, min, max
+DEF NDIM = 3          # N, fields, stats
 DEF STATS_FLOATS_PER_SAMPLE = STATS_FIELDS * STATS_VALUES
 DEF SUPPRESS_SAMPLES_DEFAULT = 3
 DEF I_RANGE_D_LENGTH = 3
@@ -281,13 +282,13 @@ def reduction_downsample(reduction, idx_start, idx_stop, increment):
     r_inst.length = <uint32_t> len(reduction)
     length = (idx_stop - idx_start) // increment
     out = np.empty((length, STATS_FIELDS, STATS_VALUES), dtype=np.float32)
-    cdef np.ndarray[np.float32_t, ndim=STATS_FIELDS, mode = 'c'] reduction_c = reduction
+    cdef np.ndarray[np.float32_t, ndim=NDIM, mode = 'c'] reduction_c = reduction
     r_inst.data = <float *> reduction_c.data
     r_inst.samples_per_data = <uint64_t *> 0
     r_inst.samples_per_step = 1  # does not matter, weight all equally
 
     out = np.empty((length, STATS_FIELDS, STATS_VALUES), dtype=np.float32)
-    cdef np.ndarray[np.float32_t, ndim=STATS_FIELDS, mode = 'c'] out_c = out
+    cdef np.ndarray[np.float32_t, ndim=NDIM, mode = 'c'] out_c = out
     cdef float * out_ptr = <float *> out_c.data
     _reduction_downsample(&r_inst, out_ptr, idx_start, idx_stop, increment)
     return out
@@ -424,7 +425,7 @@ cdef class StreamBuffer:
         self.reductions_samples_per_data = []
 
         cdef js_stream_buffer_reduction_s * r
-        cdef np.ndarray[np.float32_t, ndim=STATS_FIELDS, mode = 'c'] reduction_data_c
+        cdef np.ndarray[np.float32_t, ndim=NDIM, mode = 'c'] reduction_data_c  # ndim = (N, fields, stats)
         cdef np.ndarray[np.uint64_t, ndim=1, mode = 'c'] reduction_samples_per_data_c
         sz = length
 
@@ -1168,7 +1169,7 @@ cdef class StreamBuffer:
             out = np.empty((expected_length, STATS_FIELDS, STATS_VALUES), dtype=np.float32)
 
         #out = np.ascontiguousarray(out, dtype=np.float32)
-        cdef np.ndarray[np.float32_t, ndim=STATS_FIELDS, mode = 'c'] out_c = out
+        cdef np.ndarray[np.float32_t, ndim=NDIM, mode = 'c'] out_c = out
         out_ptr = <float *> out_c.data
 
         length = self._data_get(out_ptr, len(out), start, stop, increment)

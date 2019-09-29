@@ -23,6 +23,8 @@ from joulescope.stream_buffer import Statistics, StreamBuffer, usb_packet_factor
 
 
 SAMPLES_PER = 126
+STATS_FIELDS = 3
+STATS_VALUES = 4
 
 
 class TestStatistics(unittest.TestCase):
@@ -30,12 +32,12 @@ class TestStatistics(unittest.TestCase):
     def test_initialize_empty(self):
         s = Statistics()
         self.assertEqual(0, len(s))
-        self.assertEqual((3, 4), s.value.shape)
+        self.assertEqual((STATS_FIELDS, STATS_VALUES), s.value.shape)
         np.testing.assert_allclose(0, s.value[:, 0])
         np.testing.assert_allclose(0, s.value[:, 1])
 
     def test_initialize(self):
-        d = np.arange(3*4, dtype=np.float32).reshape((3, 4))
+        d = np.arange(STATS_FIELDS * STATS_VALUES, dtype=np.float32).reshape((STATS_FIELDS, STATS_VALUES))
         s = Statistics(length=10, stats=d)
         self.assertEqual(10, len(s))
         np.testing.assert_allclose(d, s.value)
@@ -48,7 +50,7 @@ class TestStatistics(unittest.TestCase):
         s2 = Statistics(length=1, stats=d2)
         s1.combine(s2)
         self.assertEqual(2, len(s1))
-        np.testing.assert_allclose(e, s1.value)
+        np.testing.assert_allclose(e, s1.value[:3, :])
 
     def test_combine_other_empty(self):
         d = np.array([[1, 0, 1, 1], [2, 0, 2, 2], [3, 0, 3, 3]], dtype=np.float32)
@@ -56,7 +58,7 @@ class TestStatistics(unittest.TestCase):
         s2 = Statistics()
         s1.combine(s2)
         self.assertEqual(10, len(s1))
-        np.testing.assert_allclose(d, s1.value)
+        np.testing.assert_allclose(d, s1.value[:3, :])
 
     def test_combine_self_empty(self):
         d = np.array([[1, 0, 1, 1], [2, 0, 2, 2], [3, 0, 3, 3]], dtype=np.float32)
@@ -64,7 +66,7 @@ class TestStatistics(unittest.TestCase):
         s2 = Statistics(length=10, stats=d)
         s1.combine(s2)
         self.assertEqual(10, len(s1))
-        np.testing.assert_allclose(d, s1.value)
+        np.testing.assert_allclose(d, s1.value[:3, :])
 
     def test_combine_both_empty(self):
         s1 = Statistics()
@@ -145,7 +147,7 @@ class TestStreamBuffer(unittest.TestCase):
         b.insert(frame)
         b.process()
         data = b.data_get(0, 21, 5)
-        self.assertEqual((4, 3, 4), data.shape)
+        self.assertEqual((4, STATS_FIELDS, STATS_VALUES), data.shape)
         np.testing.assert_allclose(np.arange(10), b.data_buffer[0:10])  # processed correctly
         np.testing.assert_allclose([4.0, 14.0, 24.0, 34.0], data[:, 0, 0])
         np.testing.assert_allclose([4.0, 8.0, 0.0, 8.0], data[0, 0, :])
@@ -158,7 +160,7 @@ class TestStreamBuffer(unittest.TestCase):
         b.insert(frame)
         b.process()
         data = b.data_get(0, 20, 10)
-        self.assertEqual((2, 3, 4), data.shape)
+        self.assertEqual((2, STATS_FIELDS, STATS_VALUES), data.shape)
         np.testing.assert_allclose([9.0, 33.0, 0.0, 18.0], data[0, 0, :])
         np.testing.assert_allclose([29.0, 33.0, 20.0, 38.0], data[1, 0, :])
         np.testing.assert_allclose([10.0, 33.0, 1.0, 19.0], data[0, 1, :])
@@ -171,7 +173,7 @@ class TestStreamBuffer(unittest.TestCase):
         b.insert(frame)
         b.process()
         data = b.data_get(0, 40, 20)
-        self.assertEqual((2, 3, 4), data.shape)
+        self.assertEqual((2, STATS_FIELDS, STATS_VALUES), data.shape)
         np.testing.assert_allclose([19.0, 133.0, 0.0, 38.0], data[0, 0, :])
         np.testing.assert_allclose([20.0, 133.0, 1.0, 39.0], data[0, 1, :])
         np.testing.assert_allclose([59.0, 133.0, 40.0, 78.0], data[1, 0, :])
@@ -205,9 +207,9 @@ class TestStreamBuffer(unittest.TestCase):
         b.insert(frame)
         b.process()
         data = b.data_get(0, 10, 1)
-        self.assertEqual((10, 3, 4), data.shape)
-        np.testing.assert_allclose([-20.0, -4.0, 80.0], data[0, :, 0])
-        np.testing.assert_allclose([12.,  60., 720.], data[8, :, 0])
+        self.assertEqual((10, STATS_FIELDS, STATS_VALUES), data.shape)
+        np.testing.assert_allclose([-20.0, -4.0, 80.0], data[0, :3, 0])  # todo, all
+        np.testing.assert_allclose([12.,  60., 720.], data[8, :3, 0])
 
     def stream_buffer_01(self):
         b = StreamBuffer(2000, [10, 10], 1000.0)
