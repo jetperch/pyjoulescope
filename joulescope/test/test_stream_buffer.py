@@ -19,12 +19,10 @@ Test stream buffer
 import unittest
 import numpy as np
 import pyximport; pyximport.install(setup_args={'include_dirs': np.get_include()})
-from joulescope.stream_buffer import Statistics, StreamBuffer, usb_packet_factory
+from joulescope.stream_buffer import Statistics, StreamBuffer, usb_packet_factory, STATS_FIELDS, STATS_VALUES
 
 
 SAMPLES_PER = 126
-STATS_FIELDS = 3
-STATS_VALUES = 4
 
 
 class TestStatistics(unittest.TestCase):
@@ -43,30 +41,35 @@ class TestStatistics(unittest.TestCase):
         np.testing.assert_allclose(d, s.value)
 
     def test_combine(self):
-        d1 = np.array([[1, 0, 1, 1], [2, 0, 2, 2], [3, 0, 3, 3]], dtype=np.float32)
-        d2 = np.array([[3, 0, 3, 3], [4, 0, 4, 4], [5, 0, 5, 5]], dtype=np.float32)
-        e = np.array([[2, 1, 1, 3], [3, 1, 2, 4], [4, 1, 3, 5]], dtype=np.float32)
+        d1 = np.array([[1, 0, 1, 1], [2, 0, 2, 2], [3, 0, 3, 3],
+                       [4, 0, 4, 4], [0, 0, 0, 0], [1, 0, 1, 1]], dtype=np.float32)
+        d2 = np.array([[3, 0, 3, 3], [4, 0, 4, 4], [5, 0, 5, 5],
+                       [6, 0, 6, 6], [1, 0, 1, 1], [0, 0, 0, 0]], dtype=np.float32)
+        e = np.array([[2, 1, 1, 3], [3, 1, 2, 4], [4, 1, 3, 5],
+                      [5, 1, 4, 6], [0.5, 0.25, 0, 1], [0.5, 0.25, 0, 1]], dtype=np.float32)
         s1 = Statistics(length=1, stats=d1)
         s2 = Statistics(length=1, stats=d2)
         s1.combine(s2)
         self.assertEqual(2, len(s1))
-        np.testing.assert_allclose(e, s1.value[:3, :])
+        np.testing.assert_allclose(e, s1.value)
 
     def test_combine_other_empty(self):
-        d = np.array([[1, 0, 1, 1], [2, 0, 2, 2], [3, 0, 3, 3]], dtype=np.float32)
+        d = np.array([[1, 0, 1, 1], [2, 0, 2, 2], [3, 0, 3, 3],
+                      [4, 0, 4, 4], [0, 0, 0, 0], [1, 0, 1, 1]], dtype=np.float32)
         s1 = Statistics(length=10, stats=d)
         s2 = Statistics()
         s1.combine(s2)
         self.assertEqual(10, len(s1))
-        np.testing.assert_allclose(d, s1.value[:3, :])
+        np.testing.assert_allclose(d, s1.value)
 
     def test_combine_self_empty(self):
-        d = np.array([[1, 0, 1, 1], [2, 0, 2, 2], [3, 0, 3, 3]], dtype=np.float32)
+        d = np.array([[1, 0, 1, 1], [2, 0, 2, 2], [3, 0, 3, 3],
+                      [4, 0, 4, 4], [0, 0, 0, 0], [1, 0, 1, 1]], dtype=np.float32)
         s1 = Statistics()
         s2 = Statistics(length=10, stats=d)
         s1.combine(s2)
         self.assertEqual(10, len(s1))
-        np.testing.assert_allclose(d, s1.value[:3, :])
+        np.testing.assert_allclose(d, s1.value)
 
     def test_combine_both_empty(self):
         s1 = Statistics()
@@ -208,8 +211,8 @@ class TestStreamBuffer(unittest.TestCase):
         b.process()
         data = b.data_get(0, 10, 1)
         self.assertEqual((10, STATS_FIELDS, STATS_VALUES), data.shape)
-        np.testing.assert_allclose([-20.0, -4.0, 80.0], data[0, :3, 0])  # todo, all
-        np.testing.assert_allclose([12.,  60., 720.], data[8, :3, 0])
+        np.testing.assert_allclose([-20.0, -4.0, 80.0, 0, 0, 1], data[0, :, 0])
+        np.testing.assert_allclose([12.,  60., 720., 0, 0, 1], data[8, :, 0])
 
     def stream_buffer_01(self):
         b = StreamBuffer(2000, [10, 10], 1000.0)

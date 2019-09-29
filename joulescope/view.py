@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from joulescope import span
-from joulescope.stream_buffer import StreamBuffer, stats_to_api
+from joulescope.stream_buffer import StreamBuffer, stats_to_api, STATS_FIELDS, STATS_VALUES
 import threading
 import queue
 import numpy as np
@@ -38,8 +38,8 @@ def data_array_to_update(x_limits, x, data_array):
 
     :param x_limits: The list of [x_min, x_max] or None if unknown.
     :param x: The np.ndarray of x-axis times.
-    :param data_array: The Nx3x4 np.ndarray containing:
-        current, voltage, power
+    :param data_array: The N x STATS_FIELDS x STATS_VALUES np.ndarray containing:
+        current, voltage, power, current_range, gpi0, gpi1
         mean, variance, minimum, maximum
     """
     return {
@@ -54,6 +54,9 @@ def data_array_to_update(x_limits, x, data_array):
             'current': to_view_statistics(data_array, 0, 'A'),
             'voltage': to_view_statistics(data_array, 1, 'V'),
             'power': to_view_statistics(data_array, 2, 'W'),
+            'current_range': to_view_statistics(data_array, 3, ''),
+            'gpi0': to_view_statistics(data_array, 4, ''),
+            'gpi1': to_view_statistics(data_array, 5, ''),
         },
         'state': {
             'source_type': 'buffer',  # ['realtime', 'buffer']
@@ -251,7 +254,7 @@ class View:
             if length is not None and length != len(self):
                 self._log.info('resize %s', length)
                 self._span.length = length
-                self._data = np.full((length, 3, 4), np.nan, dtype=np.float32)
+                self._data = np.full((length, STATS_FIELDS, STATS_VALUES), np.nan, dtype=np.float32)
                 self._changed = True  # invalidate
             x_range, self._samples_per, self._x = self._span.conform_discrete(x_range)
         elif cmd == 'span_absolute':  # {range: (start: float, stop: float)}]
@@ -367,6 +370,22 @@ class View:
                 'voltage': {
                     'value': data[:, 1, 0],
                     'units': 'V',
+                },
+                'power': {
+                    'value': data[:, 2, 0],
+                    'units': 'W',
+                },
+                'current_range': {
+                    'value': data[:, 3, 0],
+                    'units': '',
+                },
+                'gpi0': {
+                    'value': data[:, 4, 0],
+                    'units': '',
+                },
+                'gpi1': {
+                    'value': data[:, 5, 0],
+                    'units': '',
                 },
                 'raw': {
                     'value': self._stream_buffer.raw_get(start=start, stop=stop),

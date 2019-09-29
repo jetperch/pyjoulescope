@@ -8,9 +8,12 @@ This file contains the list of changes made to pyjoulescope.
 
 2019 Sep 25 [in progress]
 
-* Added configurable stream_buffer_duration (was fixed at 30 seconds).
-* Removed logging.setLevel commands used in debugging.
-* Upgraded to pymonocypher 0.1.3.
+*   Added configurable stream_buffer_duration (was fixed at 30 seconds).
+*   Removed logging.setLevel commands used in debugging.
+*   Upgraded to pymonocypher 0.1.3.
+*   Added general-purpose input (GPI) support.
+    *   Refactored steam_buffer to expose STATS_FIELDS, STATS_VALUES
+    *   Report additional signals: current_range, GPI0, GPI1.
 
 
 ## 0.6.3

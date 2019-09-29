@@ -42,19 +42,19 @@ DEF SAMPLES_PER_PACKET = PACKET_PAYLOAD_SIZE // (2 * 2)
 DEF RAW_SAMPLE_SZ = 2 * 2  # sizeof(uint16_t)
 DEF CAL_SAMPLE_SZ = 2 * 4  # sizeof(float)
 
-DEF STATS_FIELDS = 3  # current, voltage, power
-DEF STATS_VALUES = 4  # mean, variance, min, max
-DEF NDIM = 3          # N, fields, stats
-DEF STATS_FLOATS_PER_SAMPLE = STATS_FIELDS * STATS_VALUES
+DEF _STATS_FIELDS = 6  # current, voltage, power, current_range, gpi0, gpi1
+DEF _STATS_VALUES = 4  # mean, variance, min, max
+DEF _NDIM = 3          # N, fields, stats
+DEF STATS_FLOATS_PER_SAMPLE = _STATS_FIELDS * _STATS_VALUES
 DEF SUPPRESS_SAMPLES_DEFAULT = 3
 DEF I_RANGE_D_LENGTH = 3
 DEF I_RANGE_MISSING = 8
 
-
 DEF SUPPRESS_MODE_OFF = 0  # disabled, zero delay
 DEF SUPPRESS_MODE_NORMAL = 1
 
-
+STATS_FIELDS = _STATS_FIELDS
+STATS_VALUES = _STATS_VALUES
 log = logging.getLogger(__name__)
 
 
@@ -92,33 +92,42 @@ cdef struct js_stream_buffer_reduction_s:
     uint64_t * samples_per_data  # samples_per_data[length]
 
 
-cdef void stats_compute_reset(float stats[STATS_FIELDS][STATS_VALUES]):
-    for i in range(STATS_FIELDS):
+cdef void stats_compute_reset(float stats[_STATS_FIELDS][_STATS_VALUES]):
+    cdef uint8_t i
+    for i in range(_STATS_FIELDS):
         stats[i][0] = 0.0  # mean
         stats[i][1] = 0.0  # variance
         stats[i][2] = FLT_MAX  # min
         stats[i][3] = -FLT_MAX  # max
 
 
-cdef void stats_compute_invalid(float stats[STATS_FIELDS][STATS_VALUES]):
-    for i in range(STATS_FIELDS):
+cdef void stats_compute_invalid(float stats[_STATS_FIELDS][_STATS_VALUES]):
+    cdef uint8_t i
+    for i in range(_STATS_FIELDS):
         stats[i][0] = NAN  # mean
         stats[i][1] = NAN  # variance
         stats[i][2] = NAN  # min
         stats[i][3] = NAN  # max
 
 
-cdef void stats_compute_copy(float dst[STATS_FIELDS][STATS_VALUES], float src[STATS_FIELDS][STATS_VALUES]):
-    for i in range(STATS_FIELDS):
+cdef void stats_compute_copy(float dst[_STATS_FIELDS][_STATS_VALUES], float src[_STATS_FIELDS][_STATS_VALUES]):
+    cdef uint8_t i
+    for i in range(_STATS_FIELDS):
         dst[i][0] = src[i][0]  # mean
         dst[i][1] = src[i][1]  # variance
         dst[i][2] = src[i][2]  # min
         dst[i][3] = src[i][3]  # max
 
 
-cdef void stats_compute_one(float stats[STATS_FIELDS][STATS_VALUES],
+cdef void stats_compute_one(float stats[_STATS_FIELDS][_STATS_VALUES],
                             float current,
-                            float voltage):
+                            float voltage,
+                            uint8_t bits):
+    cdef uint8_t bit_fields[3]
+    cdef uint8_t i
+    cdef uint8_t idx
+    cdef uint8_t value
+
     stats[0][0] += current
     if current < stats[0][2]:
         stats[0][2] = current
@@ -138,29 +147,54 @@ cdef void stats_compute_one(float stats[STATS_FIELDS][STATS_VALUES],
     if power > stats[2][3]:
         stats[2][3] = power
 
+    bit_fields[0] = bits & 0x0f
+    bit_fields[1] = (bits & 0x10) >> 4
+    bit_fields[2] = (bits & 0x20) >> 5
 
-cdef void stats_compute_end(float stats[STATS_FIELDS][STATS_VALUES],
-                            float * data, uint32_t data_length,
+    for i in range(3):
+        idx = i + 3
+        value = bit_fields[i]
+        stats[idx][0] += value
+        if bit_fields[i] < stats[i + 3][2]:
+            stats[idx][2] = value
+        if voltage > stats[i + 3][3]:
+            stats[idx][3] = value
+
+
+cdef void stats_compute_end(float stats[_STATS_FIELDS][_STATS_VALUES],
+                            float * data, uint8_t * bits, uint32_t data_length,
                             uint64_t sample_id,
                             uint64_t length, uint64_t valid_length):
+    cdef uint64_t count
     cdef uint32_t k
     cdef uint32_t idx = sample_id % data_length
     if valid_length <= 0:  # no data, cannot compute stats -> NaN
         stats_compute_invalid(stats)
         return
     # compute mean
-    cdef float scale = (<float> 1.0) / (<float> valid_length)
-    stats[0][0] *= scale
-    stats[1][0] *= scale
-    stats[2][0] *= scale
+    cdef float scale_all = (<float> 1.0) / (<float> length)
+    cdef float scale_valid = (<float> 1.0) / (<float> valid_length)
+    stats[0][0] *= scale_valid
+    stats[1][0] *= scale_valid
+    stats[2][0] *= scale_valid
+    stats[3][0] *= scale_all
+    stats[4][0] *= scale_valid
+    stats[5][0] *= scale_valid
 
     # compute variance
     cdef float i_mean = stats[0][0]
     cdef float v_mean = stats[1][0]
     cdef float p_mean = stats[2][0]
+    cdef float ir_mean = stats[3][0]
+    cdef float g0_mean = stats[4][0]
+    cdef float g1_mean = stats[5][0]
     cdef float i_var = 0.0
     cdef float v_var = 0.0
     cdef float p_var = 0.0
+    cdef float ir_var = 0.0
+    cdef float g0_var = 0.0
+    cdef float g1_var = 0.0
+
     cdef float t
     for count in range(length):
         k = 2 * idx
@@ -171,18 +205,29 @@ cdef void stats_compute_end(float stats[STATS_FIELDS][STATS_VALUES],
             v_var += t * t
             t = data[k] * data[k + 1] - p_mean
             p_var += t * t
+            t = ((bits[k] & 0x10) >> 4) - g0_mean
+            g0_var += t * t
+            t = ((bits[k] & 0x20) >> 5) - g1_mean
+            g1_var += t * t
+        t = (bits[k] & 0x0f) - ir_mean
+        ir_var += t * t
+
         idx += 1
         if idx >= data_length:
             idx = 0
-    stats[0][1] = i_var * scale
-    stats[1][1] = v_var * scale
-    stats[2][1] = p_var * scale
+    stats[0][1] = i_var * scale_valid
+    stats[1][1] = v_var * scale_valid
+    stats[2][1] = p_var * scale_valid
+    stats[3][1] = i_var * scale_all
+    stats[4][1] = v_var * scale_valid
+    stats[5][1] = p_var * scale_valid
 
 
 cdef uint64_t stats_compute_run(
-        float stats[STATS_FIELDS][STATS_VALUES],
-        float * data, uint32_t data_length,
+        float stats[_STATS_FIELDS][_STATS_VALUES],
+        float * data, uint8_t * bits, uint32_t data_length,
         uint64_t sample_id, uint64_t length):
+    cdef uint64_t i
     cdef uint32_t idx = sample_id % data_length
     cdef uint32_t data_idx
     cdef uint64_t counter = 0
@@ -190,20 +235,21 @@ cdef uint64_t stats_compute_run(
     for i in range(length):
         data_idx = idx * 2
         if isfinite(data[data_idx]):
-            stats_compute_one(stats, data[data_idx], data[data_idx + 1])
+            stats_compute_one(stats, data[data_idx], data[data_idx + 1], bits[idx])
             counter += 1
         idx += 1
         if idx >= data_length:
             idx = 0
-    stats_compute_end(stats, data, data_length, sample_id, length, counter)
+    stats_compute_end(stats, data, bits, data_length, sample_id, length, counter)
     return counter
 
 
 cdef uint64_t stats_combine(
-        float stats[STATS_FIELDS][STATS_VALUES],
+        float stats[_STATS_FIELDS][_STATS_VALUES],
         uint64_t stats_sample_count,
-        float stats_merge[STATS_FIELDS][STATS_VALUES],
+        float stats_merge[_STATS_FIELDS][_STATS_VALUES],
         uint64_t stats_merge_sample_count):
+    cdef uint8_t i
     cdef uint64_t total_count = stats_sample_count + stats_merge_sample_count
     cdef double f1
     cdef double f2
@@ -214,7 +260,7 @@ cdef uint64_t stats_combine(
     elif 0 == stats_sample_count or not isfinite(stats[0][0]):
         stats_compute_copy(stats, stats_merge)
     else:
-        for i in range(STATS_FIELDS):
+        for i in range(_STATS_FIELDS):
             f1 = (<double> stats_sample_count) / total_count
             f2 = 1.0 - f1
             mean_new = f1 * stats[i][0] + f2 * stats_merge[i][0]
@@ -227,7 +273,7 @@ cdef uint64_t stats_combine(
 
 
 cdef uint64_t reduction_stats(js_stream_buffer_reduction_s * r,
-        float stats[STATS_FIELDS][STATS_VALUES], uint32_t idx_start, uint32_t length):
+                              float stats[_STATS_FIELDS][_STATS_VALUES], uint32_t idx_start, uint32_t length):
     cdef uint32_t count
     cdef uint64_t sample_count
     cdef uint64_t reduction_sample_count
@@ -243,7 +289,7 @@ cdef uint64_t reduction_stats(js_stream_buffer_reduction_s * r,
             reduction_sample_count = r.samples_per_data[idx]
         else:
             reduction_sample_count = r.samples_per_step
-        sample_count = stats_combine(stats, sample_count, <float[STATS_VALUES] *> f, reduction_sample_count)
+        sample_count = stats_combine(stats, sample_count, <float[_STATS_VALUES] *> f, reduction_sample_count)
         idx += 1
         if idx >= r.length:
             idx = 0
@@ -257,7 +303,7 @@ cdef uint64_t reduction_stats(js_stream_buffer_reduction_s * r,
 cdef _reduction_downsample(js_stream_buffer_reduction_s * r,
         float * buffer, uint32_t idx_start, uint32_t idx_stop, uint32_t increment):
     cdef uint32_t idx = idx_start
-    cdef float stats[STATS_FIELDS][STATS_VALUES]
+    cdef float stats[_STATS_FIELDS][_STATS_VALUES]
     while idx + increment <= idx_stop:
         reduction_stats(r, stats, idx, increment)
         memcpy(buffer, stats, sizeof(stats))
@@ -281,14 +327,14 @@ def reduction_downsample(reduction, idx_start, idx_stop, increment):
     cdef js_stream_buffer_reduction_s r_inst
     r_inst.length = <uint32_t> len(reduction)
     length = (idx_stop - idx_start) // increment
-    out = np.empty((length, STATS_FIELDS, STATS_VALUES), dtype=np.float32)
-    cdef np.ndarray[np.float32_t, ndim=NDIM, mode = 'c'] reduction_c = reduction
+    out = np.empty((length, _STATS_FIELDS, _STATS_VALUES), dtype=np.float32)
+    cdef np.ndarray[np.float32_t, ndim=_NDIM, mode = 'c'] reduction_c = reduction
     r_inst.data = <float *> reduction_c.data
     r_inst.samples_per_data = <uint64_t *> 0
     r_inst.samples_per_step = 1  # does not matter, weight all equally
 
-    out = np.empty((length, STATS_FIELDS, STATS_VALUES), dtype=np.float32)
-    cdef np.ndarray[np.float32_t, ndim=NDIM, mode = 'c'] out_c = out
+    out = np.empty((length, _STATS_FIELDS, _STATS_VALUES), dtype=np.float32)
+    cdef np.ndarray[np.float32_t, ndim=_NDIM, mode = 'c'] out_c = out
     cdef float * out_ptr = <float *> out_c.data
     _reduction_downsample(&r_inst, out_ptr, idx_start, idx_stop, increment)
     return out
@@ -297,7 +343,7 @@ def reduction_downsample(reduction, idx_start, idx_stop, increment):
 
 cdef class Statistics:
 
-    cdef float stats[STATS_FIELDS][STATS_VALUES]
+    cdef float stats[_STATS_FIELDS][_STATS_VALUES]
     cdef uint64_t length
 
     def __cinit__(self):
@@ -322,7 +368,7 @@ cdef class Statistics:
         return self
 
     cdef _value(self):
-        out = np.empty((STATS_FIELDS, STATS_VALUES), dtype=np.float32)
+        out = np.empty((_STATS_FIELDS, _STATS_VALUES), dtype=np.float32)
         cdef np.ndarray[np.float32_t, ndim=2, mode = 'c'] out_c = out
         cdef float * out_ptr = <float *> out_c.data
         memcpy(out_ptr, self.stats, sizeof(self.stats))
@@ -334,6 +380,7 @@ cdef class Statistics:
 
 
 cdef void cal_init(js_stream_buffer_calibration_s * self):
+    cdef uint8_t i
     for i in range(8):
         self.current_offset[i] = <float> 0.0
         self.current_gain[i] = <float> 1.0
@@ -364,6 +411,7 @@ cdef class StreamBuffer:
     cdef uint64_t contiguous_count      #
     cdef uint16_t *raw_ptr  # raw[length][2]   as i, v
     cdef float *data_ptr    # data[length][2]  as i, v
+    cdef uint8_t * bits_ptr # data[length]  # packed bits: 7:6=0 , 5=gpi1, 4=gpi0, 3:0=i_range
     cdef js_stream_buffer_calibration_s cal
     cdef js_stream_buffer_reduction_s reductions[REDUCTION_MAX]
     cdef uint32_t reduction_count
@@ -376,7 +424,7 @@ cdef class StreamBuffer:
 
     cdef uint32_t stats_counter  # excludes NAN for mean
     cdef uint32_t stats_remaining
-    cdef float stats[STATS_FIELDS][STATS_VALUES]  # [i, v, power][mean, var, min, max]
+    cdef float stats[_STATS_FIELDS][_STATS_VALUES]  # [i, v, power][mean, var, min, max]
 
     cdef uint16_t sample_toggle_last
     cdef uint16_t sample_toggle_mask
@@ -384,6 +432,7 @@ cdef class StreamBuffer:
 
     cdef object raw
     cdef object data
+    cdef object bits
     cdef object reductions_data
     cdef object reductions_samples_per_data
     cdef uint64_t _sample_id_max  # used to automatically stop streaming
@@ -421,11 +470,16 @@ cdef class StreamBuffer:
         cdef np.ndarray[np.float32_t, ndim=1, mode = 'c'] data_c = self.data
         self.data_ptr = <float *> data_c.data
 
+        self.bits = np.empty(length, dtype=np.uint8)
+        self.bits = np.ascontiguousarray(self.bits, dtype=np.uint8)
+        cdef np.ndarray[np.uint8_t, ndim=1, mode = 'c'] bits_c = self.bits
+        self.bits_ptr = <uint8_t *> bits_c.data
+
         self.reductions_data = []
         self.reductions_samples_per_data = []
 
         cdef js_stream_buffer_reduction_s * r
-        cdef np.ndarray[np.float32_t, ndim=NDIM, mode = 'c'] reduction_data_c  # ndim = (N, fields, stats)
+        cdef np.ndarray[np.float32_t, ndim=_NDIM, mode = 'c'] reduction_data_c  # ndim = (N, fields, stats)
         cdef np.ndarray[np.uint64_t, ndim=1, mode = 'c'] reduction_samples_per_data_c
         sz = length
 
@@ -438,7 +492,7 @@ cdef class StreamBuffer:
             r_samples *= rsamples
             r.samples_per_reduction_sample = r_samples
 
-            d = np.empty((sz, STATS_FIELDS, STATS_VALUES), dtype=np.float32)
+            d = np.empty((sz, _STATS_FIELDS, _STATS_VALUES), dtype=np.float32)
             d = np.ascontiguousarray(d, dtype=np.float32)
             reduction_data_c = d
             r.data = <float *> reduction_data_c.data
@@ -660,7 +714,7 @@ cdef class StreamBuffer:
 
     cdef void reduction_update_n(self, int n, uint32_t parent_samples_per_step):
         cdef js_stream_buffer_reduction_s * r = &self.reductions[n]
-        cdef float stats[STATS_FIELDS][STATS_VALUES]
+        cdef float stats[_STATS_FIELDS][_STATS_VALUES]
         cdef uint32_t samples_per_step
         cdef uint32_t idx_target
         cdef uint32_t idx_start
@@ -699,7 +753,7 @@ cdef class StreamBuffer:
         cdef uint32_t length = self.reductions[0].samples_per_step
         cdef uint32_t idx = self.reduction_index(&self.reductions[0], 1)
         idx *= self.reductions[0].samples_per_step
-        stats_compute_end(self.stats, self.data_ptr, self.length, idx, length, self.stats_counter)
+        stats_compute_end(self.stats, self.data_ptr, self.bits_ptr, self.length, idx, length, self.stats_counter)
 
     cdef void _insert_usb_bulk(self, const uint8_t *data, size_t length):
         cdef uint8_t buffer_type
@@ -822,10 +876,12 @@ cdef class StreamBuffer:
     cdef void _process(self):
         cdef uint32_t idx_start
         cdef uint32_t idx
+        cdef int32_t a
         cdef uint32_t suppress_idx
         cdef uint32_t i_range_idx
         cdef uint16_t raw_i
         cdef uint16_t raw_v
+        cdef uint8_t bits
         cdef uint8_t i_range
         cdef uint16_t sample_toggle_current
         cdef uint64_t sample_sync_count
@@ -848,6 +904,8 @@ cdef class StreamBuffer:
                 self.i_range_d[0] = I_RANGE_MISSING  # missing sample
             else:
                 self.i_range_d[0] = <uint8_t> ((raw_i & 0x0003) | ((raw_v & 0x0001) << 2))
+            bits = (self.i_range_d[0] & 0x0f) | ((raw_i & 0x0004) << 2) | ((raw_v & 0x0004) << 3)
+            self.bits_ptr[idx_start] = bits
 
             # process i_range for glitch suppression
             if SUPPRESS_MODE_NORMAL == self._suppress_mode:
@@ -916,28 +974,29 @@ cdef class StreamBuffer:
                     for a in range(self.suppress_samples + 1):
                         self.data_ptr[2 * suppress_idx + 0] = cal_i
                         self.data_ptr[2 * suppress_idx + 1] = cal_v
+                        bits = self.bits_ptr[suppress_idx]
                         suppress_idx += 1
                         if suppress_idx >= self.length:
                             suppress_idx = 0
-                        self._process_stats(cal_i, cal_v)
+                        self._process_stats(cal_i, cal_v, bits)
                 else:
                     # temporarily write NaN, reprocess at end, above
                     self.data_ptr[idx + 0] = NAN
                     self.data_ptr[idx + 1] = NAN
                 self.suppress_count -= 1
             else:
-                self._process_stats(cal_i, cal_v)
+                self._process_stats(cal_i, cal_v, bits)
 
             idx_start += 1
             if idx_start >= self.length:
                 idx_start = 0
 
-    cdef void _process_stats(self, cal_i, cal_v):
+    cdef void _process_stats(self, cal_i, cal_v, bits):
         if 0 == self.reductions[0].enabled:
             return
         if isfinite(cal_i):
             self.stats_counter += 1
-            stats_compute_one(self.stats, cal_i, cal_v)
+            stats_compute_one(self.stats, cal_i, cal_v, bits)
         if self.stats_remaining > self.reductions[0].samples_per_step:
             log.warning('Internal error stats_remaining: %d > %d',
                         self.stats_remaining,
@@ -979,8 +1038,8 @@ cdef class StreamBuffer:
         """
         cdef uint64_t length
         cdef uint64_t count
-        cdef float stats_accum[STATS_FIELDS][STATS_VALUES]
-        cdef float stats_merge[STATS_FIELDS][STATS_VALUES]
+        cdef float stats_accum[_STATS_FIELDS][_STATS_VALUES]
+        cdef float stats_merge[_STATS_FIELDS][_STATS_VALUES]
         cdef uint32_t samples_per_step
         cdef uint64_t sample_count
         cdef uint64_t reduction_sample_count
@@ -998,7 +1057,7 @@ cdef class StreamBuffer:
         stats_compute_reset(stats_accum)
         length = stop - start
         if out is None:
-            out = np.empty((STATS_FIELDS, STATS_VALUES), dtype=np.float32)
+            out = np.empty((_STATS_FIELDS, _STATS_VALUES), dtype=np.float32)
         cdef np.ndarray[np.float32_t, ndim=2, mode = 'c'] out_c = out
 
         ranges = [[start, stop], [None, None]]
@@ -1037,7 +1096,7 @@ cdef class StreamBuffer:
         for r1, r2 in ranges:
             if r1 is not None:
                 r_sample_length = r2 - r1
-                count = stats_compute_run(stats_merge, self.data_ptr, self.length, r1, r_sample_length)
+                count = stats_compute_run(stats_merge, self.data_ptr, self.bits_ptr, self.length, r1, r_sample_length)
                 # log.debug('direct: %s to %s (%d + %d)', r1, r2, sample_count, count)
                 sample_count = stats_combine(stats_accum, sample_count, stats_merge, count)
 
@@ -1060,7 +1119,7 @@ cdef class StreamBuffer:
         cdef uint64_t buffer_samples_orig = buffer_samples
         cdef int64_t idx
         cdef int64_t data_offset
-        cdef float stats[STATS_FIELDS][STATS_VALUES]
+        cdef float stats[_STATS_FIELDS][_STATS_VALUES]
         cdef uint64_t count
         cdef uint64_t fill_count = 0
         cdef uint64_t fill_count_tmp
@@ -1120,6 +1179,18 @@ cdef class StreamBuffer:
                 buffer[9] = <float> 0.0
                 buffer[10] = NAN
                 buffer[11] = NAN
+                buffer[12] = <float> (self.bits_ptr[idx] & 0x0f)
+                buffer[13] = <float> 0.0
+                buffer[14] = NAN
+                buffer[15] = NAN
+                buffer[16] = <float> ((self.bits_ptr[idx] & 0x10) >> 4)
+                buffer[17] = <float> 0.0
+                buffer[18] = NAN
+                buffer[19] = NAN
+                buffer[20] = <float> ((self.bits_ptr[idx] & 0x20) >> 5)
+                buffer[21] = <float> 0.0
+                buffer[22] = NAN
+                buffer[23] = NAN
                 buffer_samples -= 1
                 idx += 1
                 start += 1
@@ -1129,14 +1200,14 @@ cdef class StreamBuffer:
         elif not self.reductions[0].enabled or (self.reductions[0].samples_per_step > increment):
             # compute over raw data.
             while start + <int64_t> increment <= stop and buffer_samples:
-                count = stats_compute_run(stats, self.data_ptr, self.length, start, increment)
+                count = stats_compute_run(stats, self.data_ptr, self.bits_ptr, self.length, start, increment)
                 memcpy(buffer, stats, sizeof(stats))
                 buffer += STATS_FLOATS_PER_SAMPLE
                 start += increment
                 buffer_samples -= 1
         else:
             # use reductions through stats_get
-            out = np.empty((STATS_FIELDS, STATS_VALUES), dtype=np.float32)
+            out = np.empty((_STATS_FIELDS, _STATS_VALUES), dtype=np.float32)
             out_c = out
             while start + <int64_t> increment <= stop and buffer_samples:
                 next_start = start + increment
@@ -1157,19 +1228,19 @@ cdef class StreamBuffer:
             the result.  None (default) will construct and return a new array.
         :return: The np.ndarray((N, STATS_FIELDS, STATS_VALUES), dtype=np.float32) data of
             (length, fields, values) with
-            fields (current, voltage, power) and
+            fields (current, voltage, power, current_range, gpi0, gpi1) and
             values (mean, variance, min, max).
         """
         increment = 1 if increment is None else int(increment)
         if start >= stop:
             log.info('data_get: start >= stop')
-            return np.empty((0, STATS_FIELDS, STATS_VALUES), dtype=np.float32)
+            return np.empty((0, _STATS_FIELDS, _STATS_VALUES), dtype=np.float32)
         expected_length = (stop - start) // increment
         if out is None:
-            out = np.empty((expected_length, STATS_FIELDS, STATS_VALUES), dtype=np.float32)
+            out = np.empty((expected_length, _STATS_FIELDS, _STATS_VALUES), dtype=np.float32)
 
         #out = np.ascontiguousarray(out, dtype=np.float32)
-        cdef np.ndarray[np.float32_t, ndim=NDIM, mode = 'c'] out_c = out
+        cdef np.ndarray[np.float32_t, ndim=_NDIM, mode = 'c'] out_c = out
         out_ptr = <float *> out_c.data
 
         length = self._data_get(out_ptr, len(out), start, stop, increment)
@@ -1228,10 +1299,10 @@ cdef class StreamBuffer:
         k = stop - start
         r = self.reductions_data[idx]
         if k == 0:
-            return np.empty((0, STATS_FIELDS, STATS_VALUES), dtype=np.float32)
+            return np.empty((0, _STATS_FIELDS, _STATS_VALUES), dtype=np.float32)
         elif k < 0:  # copy on wrap
             k += r_len
-            d = np.empty((k, STATS_FIELDS, STATS_VALUES), dtype=np.float32)
+            d = np.empty((k, _STATS_FIELDS, _STATS_VALUES), dtype=np.float32)
             d[:(r_len - start), :, :] = r[start:, :, :]
             d[r_len - start:, :, :] = r[:stop, :, :]
             return d
@@ -1240,10 +1311,10 @@ cdef class StreamBuffer:
 
     cdef _on_cbk(self, float * stats):
         if callable(self._callback):
-            b = np.empty(12, dtype=np.float32)
-            for i in range(12):
+            b = np.empty(_STATS_FIELDS * _STATS_VALUES, dtype=np.float32)
+            for i in range(_STATS_FIELDS * _STATS_VALUES):
                 b[i] = stats[i]
-            b = b.reshape((STATS_FIELDS, STATS_VALUES))
+            b = b.reshape((_STATS_FIELDS, _STATS_VALUES))
             sample_count = self.reductions[self.reduction_count - 1].samples_per_reduction_sample
             time_interval = sample_count / self.sampling_frequency  # seconds
             charge_picocoulomb = (b[0][0] * 1e12)  * time_interval
@@ -1275,6 +1346,21 @@ cdef class StreamBuffer:
                         'statistics': _to_statistics(b[2, :]),
                         'units': 'W',
                         'integral_units': 'J',
+                    },
+                    'current_range' : {
+                        'statistics': _to_statistics(b[3, :]),
+                        'units': '',
+                        'integral_units': '',
+                    },
+                    'gpi0' : {
+                        'statistics': _to_statistics(b[4, :]),
+                        'units': '',
+                        'integral_units': '',
+                    },
+                    'gpi1' : {
+                        'statistics': _to_statistics(b[5, :]),
+                        'units': '',
+                        'integral_units': '',
                     },
                 },
                 'accumulators': {
