@@ -14,6 +14,8 @@ This file contains the list of changes made to pyjoulescope.
 *   Added general-purpose input (GPI) support.
     *   Refactored steam_buffer to expose STATS_FIELDS, STATS_VALUES
     *   Report additional signals: current_range, GPI0, GPI1.
+    *   Updated file recording to store reductions.  Handle old & new.
+*   Defer view update until requested (improve performance).
 
 
 ## 0.6.3

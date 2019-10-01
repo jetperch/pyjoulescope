@@ -215,9 +215,37 @@ class View:
         # self._log.debug('_post_block %s done', command)  # rv
         return rv
 
+    def _update_from_buffer(self):
+        buffer = self._stream_buffer
+        if buffer is None:
+            return
+        length = len(self)
+        data_idx_view_end, sample_id_end, delta = self._view()
+
+        if self._data is None:
+            return
+        elif not self._changed and 0 == delta:
+            return
+        elif self._changed or delta >= length:  # perform full recompute
+            self._data[:, :, :] = np.nan
+            if data_idx_view_end > 0:
+                start_idx = (data_idx_view_end - length) * self._samples_per
+                # self.log.debug('recompute(start=%s, stop=%s, increment=%s)', start_idx, sample_id_end, self.samples_per)
+                buffer.data_get(start_idx, sample_id_end, self._samples_per, self._data)
+        elif data_idx_view_end > 0:
+            start_idx = self._data_idx * self._samples_per
+            # self.log.debug('update(start=%s, stop=%s, increment=%s)', start_idx, sample_id_end, self.samples_per)
+            self._data = np.roll(self._data, -delta, axis=0)
+            buffer.data_get(start_idx, sample_id_end, self._samples_per, self._data[-delta:, :, :])
+        else:
+            self._data[:, :, :] = np.nan
+        self._data_idx = data_idx_view_end
+        self._changed = False
+
     def _update(self):
         if not callable(self.on_update_fn):
             return
+        self._update_from_buffer()
         if self._data is None:
             data = None
         else:
@@ -309,29 +337,6 @@ class View:
 
     def _stream_notify(self, stream_buffer):
         self._stream_buffer = stream_buffer
-        buffer = stream_buffer
-        length = len(self)
-        data_idx_view_end, sample_id_end, delta = self._view()
-
-        if self._data is None:
-            return
-        elif not self._changed and 0 == delta:
-            return
-        elif self._changed or delta >= length:  # perform full recompute
-            self._data[:, :, :] = np.nan
-            if data_idx_view_end > 0:
-                start_idx = (data_idx_view_end - length) * self._samples_per
-                # self.log.debug('recompute(start=%s, stop=%s, increment=%s)', start_idx, sample_id_end, self.samples_per)
-                buffer.data_get(start_idx, sample_id_end, self._samples_per, self._data)
-        elif data_idx_view_end > 0:
-            start_idx = self._data_idx * self._samples_per
-            # self.log.debug('update(start=%s, stop=%s, increment=%s)', start_idx, sample_id_end, self.samples_per)
-            self._data = np.roll(self._data, -delta, axis=0)
-            buffer.data_get(start_idx, sample_id_end, self._samples_per, self._data[-delta:, :, :])
-        else:
-            self._data[:, :, :] = np.nan
-        self._data_idx = data_idx_view_end
-        self._changed = False
         self._stream_notify_available = True
 
     def _convert_time_to_samples(self, x, units):
