@@ -15,7 +15,8 @@
 from . import datafile
 from joulescope import JOULESCOPE_DIR
 from joulescope.calibration import Calibration
-from joulescope.stream_buffer import reduction_downsample, Statistics, stats_to_api
+from joulescope.stream_buffer import reduction_downsample, Statistics, stats_to_api, \
+    STATS_FIELDS, STATS_VALUES, I_RANGE_MISSING
 import json
 import numpy as np
 import datetime
@@ -67,7 +68,7 @@ class DataRecorder:
         self._reductions_per_tlv = self._samples_per_tlv // self._samples_per_reduction
         reduction_block_size = self._samples_per_block // self._samples_per_reduction
 
-        self._reduction = np.empty((reduction_block_size, 3, 4), dtype=np.float32)
+        self._reduction = np.empty((reduction_block_size, STATS_FIELDS, STATS_VALUES), dtype=np.float32)
         self._reduction[:] = np.nan
 
         self._sample_id_tlv = 0  # sample id for start of next TLV
@@ -95,6 +96,8 @@ class DataRecorder:
             'samples_per_reduction': self._samples_per_reduction,
             'samples_per_tlv': self._samples_per_tlv,
             'samples_per_block': self._samples_per_block,
+            'reduction_fields': ['current', 'voltage', 'power',
+                                 'current_range', 'current_lsb', 'voltage_lsb']
         }
         cfg_data = json.dumps(config).encode('utf-8')
         self._writer.append(datafile.TAG_META_JSON, cfg_data)
@@ -261,6 +264,7 @@ class DataReader:
         log.info('DataReader with %d samples:\n%s', self.footer['size'], json.dumps(self.config, indent=2))
         if self.config['data_recorder_format_version'] != DATA_RECORDER_FORMAT_VERSION:
             raise ValueError('Invalid file format')
+        self.config.setdefault('reduction_fields', ['current', 'voltage', 'power'])
         return self
 
     @property
@@ -385,17 +389,13 @@ class DataReader:
             else:
                 self._f.advance()
 
-    def raw(self, start=None, stop=None, units=None, calibrated=None, out=None):
+    def raw(self, start=None, stop=None, units=None):
         """Get the raw data.
 
         :param start: The starting time relative to the first sample.
         :param stop: The ending time.
         :param units: The units for start and stop: ['seconds', 'samples'].  None (default) is 'samples'.
-        :param calibrated: When true, return calibrated np.float32 data.
-            When false, return raw np.uint16 data.
-        :param out: The optional output Nx2 output array.
-            N must be >= (stop - start).
-        :return: The output which is either a new array or (when provided) out.
+        :return: The output which is (out_raw, bits, out_cal).
         """
         start, stop = self.normalize_time_arguments(start, stop, units)
         x_start, x_stop = self.sample_id_range
@@ -408,11 +408,9 @@ class DataReader:
         length = stop - start
         if length <= 0:
             return np.empty((0, 2), dtype=np.uint16)
-        if out is None:
-            if calibrated:
-                out = np.empty((length, 2), dtype=np.float32)
-            else:
-                out = np.empty((length, 2), dtype=np.uint16)
+        d_raw = np.empty((length, 2), dtype=np.uint16)
+        d_bits = np.empty(length, dtype=np.uint8)
+        d_cal = np.empty((length, 2), dtype=np.float32)
 
         sample_idx = start
         out_idx = 0
@@ -430,16 +428,19 @@ class DataReader:
             if length <= 0:
                 break
             b_stop = b_start + length
-            if calibrated:
-                v, i, _ = self.calibration.transform(data[b_start:b_stop, :],
-                                                     v_range=sample_cache['voltage_range'])
-                out[out_idx:(out_idx + length), 0] = v
-                out[out_idx:(out_idx + length), 1] = i
-            else:
-                out[out_idx:(out_idx + length), :] = data[b_start:b_stop, :]
+            d = data[b_start:b_stop, :]
+            d_raw[out_idx:(out_idx + length), :] = d
+            i_range = np.bitwise_or(np.bitwise_and(d[:, 0], 0x03), np.left_shift(np.bitwise_and(d[:, 1], 0x01), 2))
+            i_range[d[:, 0] == 0xffff] = I_RANGE_MISSING
+            np.bitwise_or(i_range, np.left_shift(np.bitwise_and(d[:, 0], 0x0004), 2), out=i_range)
+            np.bitwise_or(i_range, np.left_shift(np.bitwise_and(d[:, 1], 0x0004), 3), out=i_range)
+            d_bits[out_idx:(out_idx + length)] = i_range
+            v, i, _ = self.calibration.transform(d, v_range=sample_cache['voltage_range'])
+            d_cal[out_idx:(out_idx + length), 0] = v
+            d_cal[out_idx:(out_idx + length), 1] = i
             out_idx += length
             sample_idx += length
-        return out[:out_idx, :]
+        return d_raw[:out_idx, :], d_bits[:out_idx], d_cal[:out_idx, :]
 
     def _reduction_tlv(self, reduction_idx):
         sz = self.config['samples_per_reduction']
@@ -489,7 +490,11 @@ class DataReader:
             tag, value = next(self._f)
             if tag != datafile.TAG_COLLECTION_END:
                 raise ValueError('invalid file format: not collection end')
-            data = np.frombuffer(value, dtype=np.float32).reshape((-1, 3, 4))
+            field_count = len(self.config['reduction_fields'])
+            data = np.frombuffer(value, dtype=np.float32).reshape((-1, field_count, STATS_VALUES))
+            if field_count != STATS_FIELDS:
+                d_nan = np.full((len(data), STATS_FIELDS - field_count, STATS_VALUES), np.nan, dtype=np.float32)
+                data = np.concatenate((data, d_nan), axis=1)
             self._reduction_cache = {
                 'r_start': r_idx,
                 'r_stop': r_idx_next,
@@ -519,9 +524,9 @@ class DataReader:
         log.info('DataReader.get_reduction(r_start=%r,r_stop=%r)', r_start, r_stop)
 
         if total_length <= 0:
-            return np.empty((0, 3, 4), dtype=np.float32)
+            return np.empty((0, STATS_FIELDS, STATS_VALUES), dtype=np.float32)
         if out is None:
-            out = np.empty((total_length, 3, 4), dtype=np.float32)
+            out = np.empty((total_length, STATS_FIELDS, STATS_VALUES), dtype=np.float32)
         elif len(out) < total_length:
             raise ValueError('out too small')
 
@@ -562,7 +567,7 @@ class DataReader:
         if (r_start * sz) < start:
             r_start += 1
         r_stop = stop // sz
-        if r_start >= r_stop:  # use the reductions
+        if r_start >= r_stop:  # cannot use the reductions
             s_start = r_start * sz
             return (s_start, s_start), s
         r_idx = r_start
@@ -595,7 +600,7 @@ class DataReader:
             with dtype=np.float32.
         """
         log.debug('get_calibrated(%s, %s, %s)', start, stop, units)
-        d = self.raw(start, stop, calibrated=True)
+        _, _, d = self.raw(start, stop)
         i, v = d[:, 0], d[:, 1]
         return i, v
 
@@ -619,15 +624,18 @@ class DataReader:
         increment = max(1, int(np.round(increment)))
         out_len = (stop - start) // increment
         if out_len <= 0:
-            return np.empty((0, 3, 4), dtype=np.float32)
-        out = np.empty((out_len, 3, 4), dtype=np.float32)
+            return np.empty((0, STATS_FIELDS, STATS_VALUES), dtype=np.float32)
+        out = np.empty((out_len, STATS_FIELDS, STATS_VALUES), dtype=np.float32)
 
         if increment == 1:
-            d = self.raw(start, stop, calibrated=True)
-            i, v = d[:, 0], d[:, 1]
+            _, d_bits, d_cal = self.raw(start, stop)
+            i, v = d_cal[:, 0], d_cal[:, 1]
             out[:, 0, 0] = i
             out[:, 1, 0] = v
             out[:, 2, 0] = i * v
+            out[:, 3, 0] = np.bitwise_and(d_bits, 0x0f)
+            out[:, 4, 0] = np.bitwise_and(np.right_shift(d_bits, 4), 0x01)
+            out[:, 5, 0] = np.bitwise_and(np.right_shift(d_bits, 5), 0x01)
             out[:, :, 1] = 0.0  # zero variance, only one sample!
             out[:, :, 2] = np.nan  # min
             out[:, :, 3] = np.nan  # max
@@ -691,20 +699,27 @@ class DataReader:
         (k1, k2), s = self._get_reduction_stats(s1, s2)
         if k1 >= k2:
             # compute directly over samples
-            stats = np.empty((3, 4), dtype=np.float32)
-            z = self.raw(s1, s2, calibrated=True)
+            stats = np.empty((STATS_FIELDS, STATS_VALUES), dtype=np.float32)
+            _, d_bits, z = self.raw(s1, s2)
             i, v = z[:, 0], z[:, 1]
             p = i * v
             zi = np.isfinite(i)
             i_view = i[zi]
             if len(i_view):
-                for idx, field in enumerate([i_view, v[zi], p[zi]]):
+                i_range = np.bitwise_and(d_bits, 0x0f)
+                i_lsb = np.right_shift(np.bitwise_and(d_bits, 0x10), 4)
+                v_lsb = np.right_shift(np.bitwise_and(d_bits, 0x20), 5)
+                for idx, field in enumerate([i_view, v[zi], p[zi], i_range, i_lsb[zi], v_lsb[zi]]):
                     stats[idx, 0] = np.mean(field, axis=0)
                     stats[idx, 1] = np.var(field, axis=0)
                     stats[idx, 2] = np.amin(field, axis=0)
                     stats[idx, 3] = np.amax(field, axis=0)
             else:
-                stats[:, :] = np.full((1, 3, 4), np.nan, dtype=np.float32)
+                stats[:, :] = np.full((1, STATS_FIELDS, STATS_VALUES), np.nan, dtype=np.float32)
+                stats[3, 0] = I_RANGE_MISSING
+                stats[3, 1] = 0
+                stats[3, 2] = I_RANGE_MISSING
+                stats[3, 3] = I_RANGE_MISSING
             s = Statistics(length=len(i_view), stats=stats)
         else:
             if s1 < k1:

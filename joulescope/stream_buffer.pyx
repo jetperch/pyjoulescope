@@ -48,13 +48,14 @@ DEF _NDIM = 3          # N, fields, stats
 DEF STATS_FLOATS_PER_SAMPLE = _STATS_FIELDS * _STATS_VALUES
 DEF SUPPRESS_SAMPLES_DEFAULT = 3
 DEF I_RANGE_D_LENGTH = 3
-DEF I_RANGE_MISSING = 8
+DEF _I_RANGE_MISSING = 8
 
 DEF SUPPRESS_MODE_OFF = 0  # disabled, zero delay
 DEF SUPPRESS_MODE_NORMAL = 1
 
 STATS_FIELDS = _STATS_FIELDS
 STATS_VALUES = _STATS_VALUES
+I_RANGE_MISSING = _I_RANGE_MISSING
 log = logging.getLogger(__name__)
 
 
@@ -904,7 +905,7 @@ cdef class StreamBuffer:
             for i_range_idx in range(I_RANGE_D_LENGTH - 1, 0, -1):
                 self.i_range_d[i_range_idx] = self.i_range_d[i_range_idx - 1]
             if 0xffff == raw_i:
-                self.i_range_d[0] = I_RANGE_MISSING  # missing sample
+                self.i_range_d[0] = _I_RANGE_MISSING  # missing sample
             else:
                 self.i_range_d[0] = <uint8_t> ((raw_i & 0x0003) | ((raw_v & 0x0001) << 2))
             bits = (self.i_range_d[0] & 0x0f) | ((raw_i & 0x0004) << 2) | ((raw_v & 0x0004) << 3)
@@ -918,8 +919,8 @@ cdef class StreamBuffer:
                 elif self.i_range_d[0] >= 0x07:
                     # select is off or missing sample, use immediately
                     i_range = self.i_range_d[0]
-                elif (I_RANGE_MISSING == self.i_range_d[1] or I_RANGE_MISSING == self.i_range_d[2]) and \
-                        self.i_range_d[0] < I_RANGE_MISSING:
+                elif (_I_RANGE_MISSING == self.i_range_d[1] or _I_RANGE_MISSING == self.i_range_d[2]) and \
+                        self.i_range_d[0] < _I_RANGE_MISSING:
                     i_range = self.i_range_d[0]  # use immediately
                 elif self.i_range_d[0] < self.i_range_d[2]:
                     # use old select one more sample

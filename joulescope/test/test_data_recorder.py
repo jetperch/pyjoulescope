@@ -238,7 +238,7 @@ class TestDataRecorder(unittest.TestCase):
         for k_start, k_stop in ranges:
             # print(f'range {k_start}:{k_stop}')
             s1 = r.statistics_get(k_start, k_stop, units='samples')
-            data = r.raw(k_start, k_stop, calibrated=True)
+            _, _, data = r.raw(k_start, k_stop)
             i_mean = np.mean(data[:, 0])
             np.testing.assert_allclose(s1['signals']['current']['statistics']['μ'], i_mean, rtol=0.0005)
         r.close()
@@ -252,7 +252,7 @@ class TestDataRecorder(unittest.TestCase):
             # print(f'step_size = {step_size}')
             for i in range(0, sample_count - step_size, step_size):
                 s1 = r.statistics_get(i, i + step_size, units='samples')
-                data = r.raw(i, i + step_size, calibrated=True)
+                _, _, data = r.raw(i, i + step_size)
                 i_mean = np.mean(data[:, 0])
                 np.testing.assert_allclose(s1['signals']['current']['statistics']['μ'], i_mean, rtol=0.0005)
         r.close()
@@ -261,5 +261,5 @@ class TestDataRecorder(unittest.TestCase):
         fh = self.create_sinusoid_file(2000000, 400000)
         r = DataReader().open(fh)
         s1 = r.statistics_get(20, 20, units='samples')
-        i_mean = r.raw(20, 21, calibrated=True)[0, 0]
+        i_mean = r.raw(20, 21)[2][0, 0]
         np.testing.assert_allclose(s1['signals']['current']['statistics']['μ'], i_mean, rtol=0.0005)

@@ -65,11 +65,13 @@ def on_cmd(args):
         y = r.get_reduction(start, stop)
         x = np.arange(len(y)) * (r.config['samples_per_reduction'] / r.config['sampling_frequency'])
         f = plt.figure()
-        for axis in range(3):
-            ax = f.add_subplot(3, 1, axis + 1)
+        fields = r.config['reduction_fields']
+        for axis, name in enumerate(fields):
+            ax = f.add_subplot(len(fields), 1, axis + 1)
             ax.plot(x, y[:, axis, 0], color='blue')
             ax.plot(x, y[:, axis, 2], color='red')
             ax.plot(x, y[:, axis, 3], color='red')
+            ax.set_ylabel(name)
 
         plt.show()
         plt.close(f)
@@ -103,18 +105,12 @@ def on_cmd(args):
             plot_idx_total = len(args.plot_raw)
             link_axis = None
             plot_idx = 1
-            d = r.raw(start=start, stop=stop, calibrated=False)
-            i_raw = np.right_shift(d[:, 0], 2)
-            v_raw = np.right_shift(d[:, 1], 2)
+            d_raw, d_bits, d_cal = r.raw(start=start, stop=stop)
+            i_raw = np.right_shift(d_raw[:, 0], 2)
+            v_raw = np.right_shift(d_raw[:, 1], 2)
             x = np.arange(len(i_raw)) * (1.0 / r.config['sampling_frequency'])
 
-            i_sel = np.bitwise_and(d[:, 0], 0x0003)
-            i_sel_tmp = np.bitwise_and(d[:, 1], 0x0001)
-            np.left_shift(i_sel_tmp, 2, out=i_sel_tmp)
-            np.bitwise_or(i_sel, i_sel_tmp, out=i_sel)
-            del i_sel_tmp
-            i_sel = i_sel.astype(np.uint8)
-
+            i_sel = np.bitwise_and(d_bits, 0x000F)
             f = plt.figure()
             f.suptitle('Joulescope Raw Data')
 
