@@ -502,8 +502,8 @@ class Device:
                           0,  # hdr_rsv4
                           0,  # flags
                           self._parameters['trigger_source'],
-                          self._parameters['current_gpi'],
-                          self._parameters['voltage_gpi'],
+                          self._parameters['current_lsb'],
+                          self._parameters['voltage_lsb'],
                           self._parameters['gpo0'],
                           self._parameters['gpo1'],
                           0,  # uart_tx mapping reserved
@@ -825,10 +825,10 @@ class Device:
             'trigger_source': {
                 'value': values[1],
                 'units': ''},
-            'current_gpi': {
+            'current_lsb': {
                 'value': values[2],
                 'units': ''},
-            'voltage_gpi': {
+            'voltage_lsb': {
                 'value': values[3],
                 'units': ''},
             'gpo0': {

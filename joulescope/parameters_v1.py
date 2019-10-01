@@ -98,25 +98,25 @@ PARAMETERS = [
         ],
     ),
     Parameter(
-        'current_gpi',
+        'current_lsb',
         'rw',
         'extio',
         'normal',
         [
             ('normal', 0),
-            ('gpi0_lsb', 2),
-            ('gpi1_lsb', 3),
+            ('gpi0', 2),
+            ('gpi1', 3),
         ],
     ),
     Parameter(
-        'voltage_gpi',
+        'voltage_lsb',
         'rw',
         'extio',
         'normal',
         [
             ('normal', 0),
-            ('gpi0_lsb', 2),
-            ('gpi1_lsb', 3),
+            ('gpi0', 2),
+            ('gpi1', 3),
         ],
     ),
     Parameter(
