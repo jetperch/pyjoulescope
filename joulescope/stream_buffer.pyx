@@ -423,6 +423,12 @@ cdef class RawProcessor:
     cdef uint16_t sample_toggle_mask
     cdef uint8_t _voltage_range
 
+    cdef uint16_t * bulk_raw
+    cdef float * bulk_cal
+    cdef uint8_t * bulk_bits
+    cdef uint32_t bulk_index
+    cdef uint32_t bulk_length  # in samples
+
     def __cinit__(self):
         cal_init(&self._cal)
 
@@ -604,6 +610,50 @@ cdef class RawProcessor:
         else:
             self.sample_count += 1
             self._cbk_fn(self._cbk_user_data, cal_i, cal_v, bits)
+
+    def process_bulk(self, raw):
+        cdef int32_t idx
+        cdef uint16_t raw_i
+        cdef uint16_t raw_v
+
+        tmp_cbk_fn, tmp_user_data = self._cbk_fn, self._cbk_user_data
+        self.callback_set(<raw_processor_cbk_fn> self._process_bulk_cbk, self)
+
+        self.bulk_index = 0
+        self.bulk_length = <uint32_t> (len(raw) // 2)
+        raw = np.ascontiguousarray(raw, dtype=np.uint16)
+        cdef np.ndarray[np.uint16_t, ndim=1, mode = 'c'] raw_c = raw
+        self.bulk_raw = <uint16_t *> raw_c.data
+
+        d_cal = np.empty((self.bulk_length, 2), dtype=np.float32)
+        d_cal = np.ascontiguousarray(d_cal, dtype=np.float32)
+        cdef np.ndarray[np.float32_t, ndim=2, mode = 'c'] d_cal_c = d_cal
+        self.bulk_cal = <float *> d_cal_c.data
+
+        d_bits = np.empty(self.bulk_length, dtype=np.uint8)
+        d_bits = np.ascontiguousarray(d_bits, dtype=np.uint8)
+        cdef np.ndarray[np.uint8_t, ndim=1, mode = 'c'] d_bits_c = d_bits
+        self.bulk_bits = <uint8_t *> d_bits_c.data
+
+        for idx in range(0, self.bulk_length * 2, 2):
+            raw_i = self.bulk_raw[idx + 0]
+            raw_v = self.bulk_raw[idx + 1]
+            self.process(raw_i, raw_v)
+
+        while self.bulk_index < self.bulk_length:
+            self.bulk_cal[self.bulk_index * 2 + 0] = NAN
+            self.bulk_cal[self.bulk_index * 2 + 1] = NAN
+            self.bulk_bits[self.bulk_index] = I_RANGE_MISSING
+            self.bulk_index += 1
+
+        self.callback_set(<raw_processor_cbk_fn> tmp_cbk_fn, tmp_user_data)
+        return d_cal, d_bits
+
+    cdef void _process_bulk_cbk(self, float cal_i, float cal_v, uint8_t bits):
+        self.bulk_cal[self.bulk_index * 2 + 0] = cal_i
+        self.bulk_cal[self.bulk_index * 2 + 1] = cal_v
+        self.bulk_bits[self.bulk_index] = bits
+        self.bulk_index += 1
 
 
 cdef class StreamBuffer:

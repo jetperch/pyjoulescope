@@ -19,7 +19,8 @@ Test stream buffer
 import unittest
 import numpy as np
 import pyximport; pyximport.install(setup_args={'include_dirs': np.get_include()})
-from joulescope.stream_buffer import Statistics, StreamBuffer, usb_packet_factory, STATS_FIELDS, STATS_VALUES
+from joulescope.stream_buffer import Statistics, RawProcessor, StreamBuffer, \
+    usb_packet_factory, STATS_FIELDS, STATS_VALUES
 
 
 SAMPLES_PER = 126
@@ -76,6 +77,28 @@ class TestStatistics(unittest.TestCase):
         s2 = Statistics()
         s1.combine(s2)
         self.assertEqual(0, len(s1))
+
+
+class TestRawProcessor(unittest.TestCase):
+
+    def test_bulk(self):
+        r = RawProcessor()
+        r.suppress_mode = 'off'
+        self.assertEqual('off', r.suppress_mode)
+        r.calibration_set([-10.0] * 7, [2.0] * 7, [-2.0, 1.0], [4.0, 1.0])
+        raw = usb_packet_factory(0, 1)[8:].view(dtype=np.uint16)
+        cal, bits = r.process_bulk(raw)
+        self.assertEqual((126, 2), cal.shape)
+        np.testing.assert_allclose([[-20.0, -4.0], [-16, 4], [-12, 12]], cal[0:3, :])
+        np.testing.assert_allclose([0x20, 0x20, 0x20], bits[0:3])
+
+    def test_bulk_skip(self):
+        r = RawProcessor()
+        r.suppress_mode = 'off'
+        r.calibration_set([-10.0] * 7, [2.0] * 7, [-2.0, 1.0], [4.0, 1.0])
+        raw = np.full((20, ), 0xffff, dtype=np.uint16)
+        cal, bits = r.process_bulk(raw)
+        np.testing.assert_allclose(8, np.bitwise_and(0x0f, bits))
 
 
 class TestStreamBuffer(unittest.TestCase):
