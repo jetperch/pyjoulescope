@@ -47,6 +47,7 @@ DEF _STATS_VALUES = 4  # mean, variance, min, max
 DEF _NDIM = 3          # N, fields, stats
 DEF STATS_FLOATS_PER_SAMPLE = _STATS_FIELDS * _STATS_VALUES
 DEF SUPPRESS_SAMPLES_DEFAULT = 3
+DEF SUPPRESS_SAMPLES_MAX = 10
 DEF I_RANGE_D_LENGTH = 3
 DEF _I_RANGE_MISSING = 8
 
@@ -394,6 +395,217 @@ cdef void cal_init(js_stream_buffer_calibration_s * self):
         self.voltage_gain[i] = <float> 1.0
 
 
+ctypedef void (*raw_processor_cbk_fn)(object user_data, float cal_i, float cal_v, uint8_t bits)
+
+
+cdef class RawProcessor:
+
+    cdef float d_cal[SUPPRESS_SAMPLES_MAX][2]  # as i, v
+    cdef uint8_t d_bits[SUPPRESS_SAMPLES_MAX]   # packed bits: 7:6=0 , 5=voltage_lsb, 4=current_lsb, 3:0=i_range
+    cdef js_stream_buffer_calibration_s _cal
+    cdef raw_processor_cbk_fn _cbk_fn
+    cdef object _cbk_user_data
+
+    cdef is_skipping
+    cdef uint32_t _idx_out
+    cdef uint64_t sample_count
+    cdef uint64_t sample_missing_count  # based upon sample_id
+    cdef uint64_t skip_count            # number of sample skips
+    cdef uint64_t sample_sync_count     # based upon alternating 0/1 pattern
+    cdef uint64_t contiguous_count      #
+
+    cdef uint8_t i_range_d[I_RANGE_D_LENGTH]  # the i_range delay for processing
+    cdef int32_t suppress_samples  # the total number of samples to suppress after range change
+    cdef int32_t suppress_count  # the suppress counter, 1 = replace previous
+    cdef uint8_t _suppress_mode
+
+    cdef uint16_t sample_toggle_last
+    cdef uint16_t sample_toggle_mask
+    cdef uint8_t _voltage_range
+
+    def __cinit__(self):
+        cal_init(&self._cal)
+
+        self.suppress_samples = SUPPRESS_SAMPLES_DEFAULT
+        self._suppress_mode = SUPPRESS_MODE_NORMAL
+
+        for idx in range(I_RANGE_D_LENGTH):
+            self.i_range_d[idx] = 7
+
+    def __init__(self):
+        self.reset()
+
+    cdef callback_set(self, raw_processor_cbk_fn cbk, object user_data):
+        self._cbk_fn = cbk
+        self._cbk_user_data = user_data
+
+    @property
+    def voltage_range(self):
+        return self._voltage_range
+
+    @voltage_range.setter
+    def voltage_range(self, value):
+        """Set the voltage range for applying calibration.
+
+        Note that the Joulescope device normally conveys the voltage range in
+        along with the sample data.
+        """
+        self._voltage_range = value
+
+    @property
+    def suppress_mode(self):
+        if self._suppress_mode == SUPPRESS_MODE_OFF:
+            return 'off'
+        elif self._suppress_mode == SUPPRESS_MODE_NORMAL:
+            return 'normal'
+        else:
+            return 'off'
+
+    @suppress_mode.setter
+    def suppress_mode(self, value):
+        if isinstance(value, str):
+            value = value.lower()
+        if value in [SUPPRESS_MODE_OFF, 'off', False] or value is None:
+            self._suppress_mode = SUPPRESS_MODE_OFF
+        elif value in [SUPPRESS_MODE_NORMAL, 'normal', 'on', True]:
+            self._suppress_mode = SUPPRESS_MODE_NORMAL
+        else:
+            raise ValueError('unsupported mode: %s' % (value, ))
+
+    def reset(self):
+        self.sample_count = 0
+        self.sample_missing_count = 0
+        self.is_skipping = 1
+        self.skip_count = 0
+        self.sample_sync_count = 0
+        self.contiguous_count = 0
+
+        self.suppress_count = 0
+        for idx in range(I_RANGE_D_LENGTH):
+            self.i_range_d[idx] = 7
+
+        self.sample_toggle_last = 0
+        self.sample_toggle_mask = 0
+        self._voltage_range = 0
+        self._idx_out = 0
+
+    def calibration_set(self, current_offset, current_gain, voltage_offset, voltage_gain):
+        cdef js_stream_buffer_calibration_s * cal = &self._cal
+        for i in range(7):
+            cal.current_offset[i] = current_offset[i]
+            cal.current_gain[i] = current_gain[i]
+        cal.current_offset[7] = 0.0
+        cal.current_gain[7] = 0.0
+        for i in range(2):
+            cal.voltage_offset[i] = voltage_offset[i]
+            cal.voltage_gain[i] = voltage_gain[i]
+
+    cdef void process(self, uint16_t raw_i, uint16_t raw_v):
+        cdef uint32_t is_missing
+        cdef int32_t suppress_idx
+        cdef uint32_t i_range_idx
+        cdef uint8_t bits
+        cdef uint8_t i_range
+        cdef uint16_t sample_toggle_current
+        cdef uint64_t sample_sync_count
+        cdef float cal_i
+        cdef float cal_v
+
+        is_missing = 0
+        for i_range_idx in range(I_RANGE_D_LENGTH - 1, 0, -1):
+            self.i_range_d[i_range_idx] = self.i_range_d[i_range_idx - 1]
+        if 0xffff == raw_i:
+            is_missing = 1
+            self.i_range_d[0] = _I_RANGE_MISSING  # missing sample
+            self.sample_missing_count += 1
+            self.contiguous_count = 0
+            if self.is_skipping == 0:
+                self.skip_count += 1
+                self.is_skipping = 1
+        else:
+            self.i_range_d[0] = <uint8_t> ((raw_i & 0x0003) | ((raw_v & 0x0001) << 2))
+            self.is_skipping = 0
+            self.contiguous_count += 1
+        bits = (self.i_range_d[0] & 0x0f) | ((raw_i & 0x0004) << 2) | ((raw_v & 0x0004) << 3)
+        self.d_bits[self._idx_out] = bits
+
+        # process i_range for glitch suppression
+        if SUPPRESS_MODE_NORMAL == self._suppress_mode:
+            if self.i_range_d[0] == self.i_range_d[2]:
+                # no change, use single delay since i_range leads data by 1 sample
+                i_range = self.i_range_d[1]
+            elif self.i_range_d[0] >= 0x07:
+                # select is off or missing sample, use immediately
+                i_range = self.i_range_d[0]
+            elif (_I_RANGE_MISSING == self.i_range_d[1] or _I_RANGE_MISSING == self.i_range_d[2]) and \
+                    self.i_range_d[0] < _I_RANGE_MISSING:
+                i_range = self.i_range_d[0]  # use immediately
+            elif self.i_range_d[0] < self.i_range_d[2]:
+                # use old select one more sample
+                # moving to less sensitive range (smaller value resistor)
+                i_range = self.i_range_d[2]
+                if self.i_range_d[1] < self.i_range_d[2] != 0x07:
+                    # delay suppress by one sample
+                    self.suppress_count = self.suppress_samples + 1
+            else:
+                # Use new select immediately
+                # moving to more sensitive range (larger value resistor)
+                i_range = self.i_range_d[0]
+                self.suppress_count = self.suppress_samples + 1
+        else:
+            i_range = self.i_range_d[0]
+
+        sample_toggle_current = (raw_v >> 1) & 0x1
+        raw_i = raw_i >> 2
+        raw_v = raw_v >> 2
+        sample_sync_count = (sample_toggle_current ^ self.sample_toggle_last ^ 1) & \
+                self.sample_toggle_mask
+        if sample_sync_count and is_missing == 0:
+            self.skip_count += 1
+            self.is_skipping = 1
+            self.sample_sync_count += 1
+        self.sample_toggle_last = sample_toggle_current
+        self.sample_toggle_mask = 0x1
+
+        if i_range > 7:  # missing sample
+            cal_i = NAN
+            cal_v = NAN
+        else:
+            if 7 == i_range:
+                # select off, current is zero by definition
+                cal_i = <float> 0.0
+            else:
+                cal_i = <float> raw_i
+                cal_i += self._cal.current_offset[i_range]
+                cal_i *= self._cal.current_gain[i_range]
+
+            cal_v = <float> raw_v
+            cal_v += self._cal.voltage_offset[self._voltage_range]
+            cal_v *= self._cal.voltage_gain[self._voltage_range]
+
+        self.d_cal[self._idx_out][0] = cal_i
+        self.d_cal[self._idx_out][1] = cal_v
+
+        # Suppress Joulescope range switching glitch (at least for now).
+        if self.suppress_count > 0:  # defer output until suppress computed
+            if self.suppress_count == 1:
+                for suppress_idx in range(self._idx_out + 1):
+                    self.sample_count += 1
+                    self.d_cal[suppress_idx][0] = cal_i
+                    self.d_cal[suppress_idx][1] = cal_v
+                    self._cbk_fn(self._cbk_user_data,
+                                 self.d_cal[suppress_idx][0],
+                                 self.d_cal[suppress_idx][1],
+                                 self.d_bits[suppress_idx])
+                    self._idx_out = 0
+            else:
+                self._idx_out += 1  # just skip, will fill in later
+            self.suppress_count -= 1
+        else:
+            self.sample_count += 1
+            self._cbk_fn(self._cbk_user_data, cal_i, cal_v, bits)
+
+
 cdef class StreamBuffer:
     """Efficient real-time Joulescope data buffering.
 
@@ -402,37 +614,24 @@ cdef class StreamBuffer:
         the reduction amount for each resuting sample in units of samples
         of the previous reduction.  Reduction 0 is in raw sample units.
     """
-
+    cdef RawProcessor _raw_processor
     cdef uint32_t reduction_step
     cdef uint32_t length # in samples
     cdef uint64_t packet_index
     cdef uint64_t packet_index_offset
     cdef uint64_t device_sample_id      # exclusive (last received is processed_sample_id - 1)
+    cdef uint64_t _preprocessed_sample_id
     cdef uint64_t processed_sample_id   # exclusive (last processed is processed_sample_id - 1)
-    cdef uint64_t sample_missing_count  # based upon sample_id
-    cdef uint64_t skip_count            # number of sample skips
-    cdef uint64_t sample_sync_count     # based upon alternating 0/1 pattern
-    cdef uint64_t contiguous_count      #
     cdef uint16_t *raw_ptr  # raw[length][2]   as i, v
     cdef float *data_ptr    # data[length][2]  as i, v
     cdef uint8_t * bits_ptr # data[length]  # packed bits: 7:6=0 , 5=voltage_lsb, 4=current_lsb, 3:0=i_range
-    cdef js_stream_buffer_calibration_s cal
     cdef js_stream_buffer_reduction_s reductions[REDUCTION_MAX]
     cdef uint32_t reduction_count
     cdef double _sampling_frequency
 
-    cdef uint8_t i_range_d[I_RANGE_D_LENGTH]  # the i_range delay for processing
-    cdef int32_t suppress_samples  # the total number of samples to suppress after range change
-    cdef int32_t suppress_count  # the suppress counter, 1 = replace previous
-    cdef uint8_t _suppress_mode
-
     cdef uint32_t stats_counter  # excludes NAN for mean
     cdef uint32_t stats_remaining
     cdef float stats[_STATS_FIELDS][_STATS_VALUES]  # [i, v, power][mean, var, min, max]
-
-    cdef uint16_t sample_toggle_last
-    cdef uint16_t sample_toggle_mask
-    cdef uint8_t _voltage_range
 
     cdef object raw
     cdef object data
@@ -445,8 +644,9 @@ cdef class StreamBuffer:
     cdef object _charge_picocoulomb  # python integer for infinite precision
     cdef object _energy_picojoules  # python integer for infinite precision
 
-
     def __cinit__(self, length, reductions, sampling_frequency):
+        self._raw_processor = RawProcessor()
+        self._raw_processor.callback_set(<raw_processor_cbk_fn> self._process_stats, self)
         cdef uint32_t r_samples = 1
         self._sampling_frequency = sampling_frequency
         if length < SAMPLES_PER_PACKET:
@@ -462,7 +662,6 @@ cdef class StreamBuffer:
         self.reduction_step = int(np.prod(reductions))
         length = int(np.ceil(length / self.reduction_step)) * self.reduction_step
         self.length = length
-        cal_init(&self.cal)
 
         self.raw = np.empty((length * 2), dtype=np.uint16)
         self.raw = np.ascontiguousarray(self.raw, dtype=np.uint16)
@@ -518,13 +717,6 @@ cdef class StreamBuffer:
         self._callback = None  # fn(np.array [STATS_FIELDS][STATS_VALUES] of statistics, energy)
         self._charge_picocoulomb = 0
         self._energy_picojoules = 0  # integer for infinite precision
-
-        self.suppress_samples = SUPPRESS_SAMPLES_DEFAULT
-        self.suppress_count = 0
-        self._suppress_mode = SUPPRESS_MODE_NORMAL
-
-        for idx in range(I_RANGE_D_LENGTH):
-            self.i_range_d[idx] = 7
 
     def __init__(self, length, reductions, sampling_frequency):
         self.reset()
@@ -587,7 +779,7 @@ cdef class StreamBuffer:
 
     @property
     def voltage_range(self):
-        return self._voltage_range
+        return self._raw_processor.voltage_range
 
     @voltage_range.setter
     def voltage_range(self, value):
@@ -596,27 +788,15 @@ cdef class StreamBuffer:
         Note that the Joulescope device normally conveys the voltage range in
         along with the sample data.
         """
-        self._voltage_range = value
+        self._raw_processor.voltage_range = value
 
     @property
     def suppress_mode(self):
-        if self._suppress_mode == SUPPRESS_MODE_OFF:
-            return 'off'
-        elif self._suppress_mode == SUPPRESS_MODE_NORMAL:
-            return 'normal'
-        else:
-            return 'off'
+        return self._raw_processor.suppress_mode
 
     @suppress_mode.setter
     def suppress_mode(self, value):
-        if isinstance(value, str):
-            value = value.lower()
-        if value in [SUPPRESS_MODE_OFF, 'off', False] or value is None:
-            self._suppress_mode = SUPPRESS_MODE_OFF
-        elif value in [SUPPRESS_MODE_NORMAL, 'normal', 'on', True]:
-            self._suppress_mode = SUPPRESS_MODE_NORMAL
-        else:
-            raise ValueError('unsupported mode: %s' % (value, ))
+        self._raw_processor.suppress_mode = value
 
     @property
     def sampling_frequency(self):
@@ -658,22 +838,14 @@ cdef class StreamBuffer:
         return {
             'device_sample_id': {'value': self.device_sample_id, 'units': 'samples'},
             'sample_id': {'value': self.processed_sample_id, 'units': 'samples'},
-            'sample_missing_count': {'value': self.sample_missing_count, 'units': 'samples'},
-            'skip_count': {'value': self.skip_count, 'units': ''},
-            'sample_sync_count': {'value': self.sample_sync_count, 'units': 'samples'},
-            'contiguous_count': {'value': self.contiguous_count, 'units': 'samples'},
+            'sample_missing_count': {'value': self._raw_processor.sample_missing_count, 'units': 'samples'},
+            'skip_count': {'value': self._raw_processor.skip_count, 'units': ''},
+            'sample_sync_count': {'value': self._raw_processor.sample_sync_count, 'units': 'samples'},
+            'contiguous_count': {'value': self._raw_processor.contiguous_count, 'units': 'samples'},
         }
 
     def calibration_set(self, current_offset, current_gain, voltage_offset, voltage_gain):
-        cdef js_stream_buffer_calibration_s * cal = &self.cal
-        for i in range(7):
-            cal.current_offset[i] = current_offset[i]
-            cal.current_gain[i] = current_gain[i]
-        cal.current_offset[7] = 0.0
-        cal.current_gain[7] = 0.0
-        for i in range(2):
-            cal.voltage_offset[i] = voltage_offset[i]
-            cal.voltage_gain[i] = voltage_gain[i]
+        self._raw_processor.calibration_set(current_offset, current_gain, voltage_offset, voltage_gain)
 
     cdef _stats_reset(self):
         self.stats_counter = 0
@@ -686,25 +858,17 @@ cdef class StreamBuffer:
         self.packet_index = 0
         self.packet_index_offset = 0
         self.device_sample_id = 0
+        self._preprocessed_sample_id = 0
         self.processed_sample_id = 0
-        self.sample_missing_count = 0
-        self.skip_count = 0
-        self.sample_sync_count = 0
-        self.contiguous_count = 0
-        self.sample_toggle_last = 0
-        self.sample_toggle_mask = 0
-        self._voltage_range = 0
         self._sample_id_max = 1 << 63  # big enough
         self._contiguous_max = 1 << 63  # big enough
         self._charge_picocoulomb = 0
         self._energy_picojoules = 0
         self.stats_counter = 0
-        self.suppress_count = 0
-        for idx in range(I_RANGE_D_LENGTH):
-            self.i_range_d[idx] = 7
         for idx in range(REDUCTION_MAX):
             self.reductions[idx].sample_counter = 0
         self._stats_reset()
+        self._raw_processor.reset()
 
     cdef uint32_t reduction_index(self, js_stream_buffer_reduction_s * r, uint32_t parent_samples_per_step):
         cdef uint32_t idx = <uint32_t> (self.processed_sample_id % self.length)
@@ -774,7 +938,7 @@ cdef class StreamBuffer:
             buffer_type = data[0]
             status = data[1]
             pkt_length = (data[2] | ((<uint16_t> data[3] & 0x7f) << 8)) & 0x7fff
-            self._voltage_range = <uint8_t> ((data[3] >> 7) & 0x01)
+            self._raw_processor.voltage_range = <uint8_t> ((data[3] >> 7) & 0x01)
             pkt_index = <uint64_t> (data[4] | ((<uint16_t> data[5]) << 8))
             # uint16_t usb_frame_index = data[6] | ((<uint16_t> data[7]) << 8)
             length -= PACKET_TOTAL_SIZE
@@ -793,8 +957,6 @@ cdef class StreamBuffer:
                 log.warning("WARNING: duplicate data")
             elif self.device_sample_id < sample_id:
                 log.info("Fill missing samples: %r, %r", self.device_sample_id, sample_id)
-                self.skip_count += 1
-                self.contiguous_count = 0
                 while self.device_sample_id < sample_id:
                     idx2 = idx * 2
                     self.raw[idx2 + 0] = 0xffff  # missing sample is i_range 7 with raw_i = 0x3fff
@@ -803,10 +965,8 @@ cdef class StreamBuffer:
                     if idx >= self.length:
                         idx = 0
                     self.device_sample_id += 1
-                    self.sample_missing_count += 1
 
             samples = SAMPLES_PER_PACKET
-            self.contiguous_count += samples
             data += PACKET_HEADER_SIZE  # skip header
             if (idx + SAMPLES_PER_PACKET) > self.length:
                 samples_to_end = self.length - idx
@@ -821,14 +981,14 @@ cdef class StreamBuffer:
 
     cdef _check_stop(self):
         cdef bint duration_stop = self.device_sample_id >= self._sample_id_max
-        cdef bint contiguous_stop = self.contiguous_count >= self._contiguous_max
+        cdef bint contiguous_stop = self._raw_processor.contiguous_count >= self._contiguous_max
         if duration_stop:
             log.info('insert causing duration stop %d >= %d',
                      self.device_sample_id, self._sample_id_max)
             return True
         elif contiguous_stop:
             log.info('insert causing contiguous stop %d >= %d',
-                     self.contiguous_count, self._contiguous_max)
+                     self._raw_processor.contiguous_count, self._contiguous_max)
             return True
         else:
             return False
@@ -873,129 +1033,37 @@ cdef class StreamBuffer:
             sample_count_remaining -= samples_to_end
         if sample_count_remaining:
             self.raw[idx * 2: (idx + sample_count_remaining) * 2] = data
-        self.contiguous_count += sample_count
         self.device_sample_id += sample_count
         return self._check_stop()
 
     cdef void _process(self):
         cdef uint32_t idx_start
         cdef uint32_t idx
-        cdef int32_t a
-        cdef uint32_t suppress_idx
-        cdef uint32_t i_range_idx
-        cdef uint16_t raw_i
-        cdef uint16_t raw_v
-        cdef uint8_t bits
-        cdef uint8_t i_range
-        cdef uint16_t sample_toggle_current
-        cdef uint64_t sample_sync_count
-        cdef float cal_i
-        cdef float cal_v
-
-        if self.processed_sample_id + self.length < self.device_sample_id:
+        if self._preprocessed_sample_id + self.length < self.device_sample_id:
             log.warning('process: stream_buffer is behind: %r + %r < %r',
-                        self.processed_sample_id, self.length, self.device_sample_id)
-            self.processed_sample_id = self.device_sample_id - self.length
-        idx_start = <uint32_t> (self.processed_sample_id % self.length)
+                        self._preprocessed_sample_id, self.length, self.device_sample_id)
+            self._preprocessed_sample_id = self.device_sample_id - self.length
+            self.processed_sample_id = self._preprocessed_sample_id
+        idx_start = <uint32_t> (self._preprocessed_sample_id % self.length)
 
-        while self.processed_sample_id < self.device_sample_id:
+        while self._preprocessed_sample_id < self.device_sample_id:
             idx = idx_start * 2
             raw_i = self.raw_ptr[idx + 0]
             raw_v = self.raw_ptr[idx + 1]
-            for i_range_idx in range(I_RANGE_D_LENGTH - 1, 0, -1):
-                self.i_range_d[i_range_idx] = self.i_range_d[i_range_idx - 1]
-            if 0xffff == raw_i:
-                self.i_range_d[0] = _I_RANGE_MISSING  # missing sample
-            else:
-                self.i_range_d[0] = <uint8_t> ((raw_i & 0x0003) | ((raw_v & 0x0001) << 2))
-            bits = (self.i_range_d[0] & 0x0f) | ((raw_i & 0x0004) << 2) | ((raw_v & 0x0004) << 3)
-            self.bits_ptr[idx_start] = bits
-
-            # process i_range for glitch suppression
-            if SUPPRESS_MODE_NORMAL == self._suppress_mode:
-                if self.i_range_d[0] == self.i_range_d[2]:
-                    # no change, use single delay since i_range leads data by 1 sample
-                    i_range = self.i_range_d[1]
-                elif self.i_range_d[0] >= 0x07:
-                    # select is off or missing sample, use immediately
-                    i_range = self.i_range_d[0]
-                elif (_I_RANGE_MISSING == self.i_range_d[1] or _I_RANGE_MISSING == self.i_range_d[2]) and \
-                        self.i_range_d[0] < _I_RANGE_MISSING:
-                    i_range = self.i_range_d[0]  # use immediately
-                elif self.i_range_d[0] < self.i_range_d[2]:
-                    # use old select one more sample
-                    # moving to less sensitive range (smaller value resistor)
-                    i_range = self.i_range_d[2]
-                    if self.i_range_d[1] < self.i_range_d[2] != 0x07:
-                        # delay suppress by one sample
-                        self.suppress_count = self.suppress_samples + 1
-                else:
-                    # Use new select immediately
-                    # moving to more sensitive range (larger value resistor)
-                    i_range = self.i_range_d[0]
-                    self.suppress_count = self.suppress_samples + 1
-            else:
-                i_range = self.i_range_d[0]
-
-            sample_toggle_current = (raw_v >> 1) & 0x1
-            raw_i = raw_i >> 2
-            raw_v = raw_v >> 2
-            sample_sync_count = (sample_toggle_current ^ self.sample_toggle_last ^ 1) & \
-                    self.sample_toggle_mask
-            if sample_sync_count:
-                self.contiguous_count = 0
-            self.sample_sync_count += sample_sync_count
-            self.sample_toggle_last = sample_toggle_current
-            self.sample_toggle_mask = 0x1
-
-            if i_range > 7:
-                cal_i = NAN
-                cal_v = NAN
-            else:
-                if 7 == i_range:
-                    # select off, current is zero by definition
-                    cal_i = <float> 0.0
-                else:
-                    cal_i = <float> raw_i
-                    cal_i += self.cal.current_offset[i_range]
-                    cal_i *= self.cal.current_gain[i_range]
-
-                cal_v = <float> raw_v
-                cal_v += self.cal.voltage_offset[self._voltage_range]
-                cal_v *= self.cal.voltage_gain[self._voltage_range]
-
-            self.data_ptr[idx + 0] = cal_i
-            self.data_ptr[idx + 1] = cal_v
-
-            # Suppress Joulescope range switching glitch (at least for now).
-            self.processed_sample_id += 1
-
-            if self.suppress_count > 0:  # disable
-                if self.suppress_count == 1:
-                    suppress_idx = idx_start + self.length - self.suppress_samples
-                    while suppress_idx >= self.length:
-                        suppress_idx -= self.length
-                    for a in range(self.suppress_samples + 1):
-                        self.data_ptr[2 * suppress_idx + 0] = cal_i
-                        self.data_ptr[2 * suppress_idx + 1] = cal_v
-                        bits = self.bits_ptr[suppress_idx]
-                        suppress_idx += 1
-                        if suppress_idx >= self.length:
-                            suppress_idx = 0
-                        self._process_stats(cal_i, cal_v, bits)
-                else:
-                    # temporarily write NaN, reprocess at end, above
-                    self.data_ptr[idx + 0] = NAN
-                    self.data_ptr[idx + 1] = NAN
-                self.suppress_count -= 1
-            else:
-                self._process_stats(cal_i, cal_v, bits)
-
+            self._raw_processor.process(raw_i, raw_v)
             idx_start += 1
             if idx_start >= self.length:
                 idx_start = 0
+            self._preprocessed_sample_id += 1
 
-    cdef void _process_stats(self, cal_i, cal_v, bits):
+    cdef void _process_stats(self, float cal_i, float cal_v, uint8_t bits):
+        cdef uint32_t idx
+        idx = <uint32_t> (self.processed_sample_id % self.length)
+        self.bits_ptr[idx] = bits
+        idx *= 2
+        self.data_ptr[idx + 0] = cal_i
+        self.data_ptr[idx + 1] = cal_v
+        self.processed_sample_id += 1
         if 0 == self.reductions[0].enabled:
             return
         if isfinite(cal_i):
