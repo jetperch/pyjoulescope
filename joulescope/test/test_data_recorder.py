@@ -78,6 +78,7 @@ class TestDataRecorder(unittest.TestCase):
     def test_write_read_direct(self):
         fh = self._create_file(0, 2)
         r = DataReader().open(fh)
+        r.raw_processor.suppress_mode = 'off'
         data = r.get(0, 10, 1)
         np.testing.assert_allclose(np.arange(0, 20, 2), data[:, 0, 0])
 
@@ -96,6 +97,7 @@ class TestDataRecorder(unittest.TestCase):
     def test_write_read_direct_with_offset(self):
         fh = self._create_file(0, 2)
         r = DataReader().open(fh)
+        r.raw_processor.suppress_mode = 'off'
         # d = np.right_shift(r.raw(5, 10), 2)
         data = r.get(5, 10, 1)
         np.testing.assert_allclose(np.arange(10, 20, 2), data[:, 0, 0])
@@ -103,12 +105,14 @@ class TestDataRecorder(unittest.TestCase):
     def test_write_read_direct_with_sample_overscan_before(self):
         fh = self._create_file(1, 3)  # will be samples 120 to 250 (not 126 to 252)
         r = DataReader().open(fh)
+        r.raw_processor.suppress_mode = 'off'
         data = r.get(0, 140, 1)
         np.testing.assert_allclose(np.arange(252, 532, 2), data[:, 0, 0])
 
     def test_write_read_stats_over_samples(self):
         fh = self._create_file(0, 2)
         r = DataReader().open(fh)
+        r.raw_processor.suppress_mode = 'off'
         data = r.get(0, 50, 5)
         np.testing.assert_allclose(np.arange(4, 100, 10), data[:, 0, 0])
 
@@ -251,6 +255,7 @@ class TestDataRecorder(unittest.TestCase):
         for step_size in [1111, 2000, 11111, 20000]:
             # print(f'step_size = {step_size}')
             for i in range(0, sample_count - step_size, step_size):
+                r.raw_processor.reset()
                 s1 = r.statistics_get(i, i + step_size, units='samples')
                 _, _, data = r.raw(i, i + step_size)
                 i_mean = np.mean(data[:, 0])

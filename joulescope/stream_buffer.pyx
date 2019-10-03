@@ -47,7 +47,7 @@ DEF _STATS_VALUES = 4  # mean, variance, min, max
 DEF _NDIM = 3          # N, fields, stats
 DEF STATS_FLOATS_PER_SAMPLE = _STATS_FIELDS * _STATS_VALUES
 DEF SUPPRESS_SAMPLES_DEFAULT = 3
-DEF SUPPRESS_SAMPLES_MAX = 10
+DEF _SUPPRESS_SAMPLES_MAX = 8
 DEF I_RANGE_D_LENGTH = 3
 DEF _I_RANGE_MISSING = 8
 
@@ -57,6 +57,7 @@ DEF SUPPRESS_MODE_NORMAL = 1
 STATS_FIELDS = _STATS_FIELDS
 STATS_VALUES = _STATS_VALUES
 I_RANGE_MISSING = _I_RANGE_MISSING
+SUPPRESS_SAMPLES_MAX = _SUPPRESS_SAMPLES_MAX
 log = logging.getLogger(__name__)
 
 
@@ -400,8 +401,8 @@ ctypedef void (*raw_processor_cbk_fn)(object user_data, float cal_i, float cal_v
 
 cdef class RawProcessor:
 
-    cdef float d_cal[SUPPRESS_SAMPLES_MAX][2]  # as i, v
-    cdef uint8_t d_bits[SUPPRESS_SAMPLES_MAX]   # packed bits: 7:6=0 , 5=voltage_lsb, 4=current_lsb, 3:0=i_range
+    cdef float d_cal[_SUPPRESS_SAMPLES_MAX][2]  # as i, v
+    cdef uint8_t d_bits[_SUPPRESS_SAMPLES_MAX]   # packed bits: 7:6=0 , 5=voltage_lsb, 4=current_lsb, 3:0=i_range
     cdef js_stream_buffer_calibration_s _cal
     cdef raw_processor_cbk_fn _cbk_fn
     cdef object _cbk_user_data
@@ -597,19 +598,17 @@ cdef class RawProcessor:
             if self.suppress_count == 1:
                 for suppress_idx in range(self._idx_out + 1):
                     self.sample_count += 1
-                    self.d_cal[suppress_idx][0] = cal_i
-                    self.d_cal[suppress_idx][1] = cal_v
-                    self._cbk_fn(self._cbk_user_data,
-                                 self.d_cal[suppress_idx][0],
-                                 self.d_cal[suppress_idx][1],
-                                 self.d_bits[suppress_idx])
-                    self._idx_out = 0
+                    # self.d_cal[suppress_idx][0] = cal_i
+                    # self.d_cal[suppress_idx][1] = cal_v
+                    self._cbk_fn(self._cbk_user_data, cal_i, cal_v, self.d_bits[suppress_idx])
+                self._idx_out = 0
             else:
                 self._idx_out += 1  # just skip, will fill in later
             self.suppress_count -= 1
         else:
             self.sample_count += 1
             self._cbk_fn(self._cbk_user_data, cal_i, cal_v, bits)
+            self._idx_out = 0
 
     def process_bulk(self, raw):
         cdef int32_t idx
@@ -646,7 +645,14 @@ cdef class RawProcessor:
             self.bulk_bits[self.bulk_index] = I_RANGE_MISSING
             self.bulk_index += 1
 
-        self.callback_set(<raw_processor_cbk_fn> tmp_cbk_fn, tmp_user_data)
+        self.callback_set(tmp_cbk_fn, tmp_user_data)
+
+        self.bulk_raw = <uint16_t *> 0
+        self.bulk_cal = <float *> 0
+        self.bulk_bits = <uint8_t *> 0
+        self.bulk_index = 0
+        self.bulk_length = 0
+
         return d_cal, d_bits
 
     cdef void _process_bulk_cbk(self, float cal_i, float cal_v, uint8_t bits):

@@ -16,6 +16,8 @@ This file contains the list of changes made to pyjoulescope.
     *   Report additional signals: current_range, GPI0, GPI1.
     *   Updated file recording to store reductions.  Handle old & new.
 *   Defer view update until requested (improve performance).
+*   Fixed recordings to apply glitch filtering on current range switching. Now 
+    behaves sames as live streaming.
 
 
 ## 0.6.3

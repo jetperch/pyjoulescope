@@ -16,7 +16,7 @@ from . import datafile
 from joulescope import JOULESCOPE_DIR
 from joulescope.calibration import Calibration
 from joulescope.stream_buffer import reduction_downsample, Statistics, stats_to_api, \
-    STATS_FIELDS, STATS_VALUES, I_RANGE_MISSING
+    STATS_FIELDS, STATS_VALUES, I_RANGE_MISSING, SUPPRESS_SAMPLES_MAX, RawProcessor
 import json
 import numpy as np
 import datetime
@@ -209,6 +209,7 @@ class DataReader:
         self._data_start_position = 0
         self._voltage_range = 0
         self._sample_cache = None
+        self.raw_processor = RawProcessor()
 
     def __str__(self):
         if self._f is not None:
@@ -265,6 +266,8 @@ class DataReader:
         if self.config['data_recorder_format_version'] != DATA_RECORDER_FORMAT_VERSION:
             raise ValueError('Invalid file format')
         self.config.setdefault('reduction_fields', ['current', 'voltage', 'power'])
+        cal = self.calibration
+        self.raw_processor.calibration_set(cal.current_offset, cal.current_gain, cal.voltage_offset, cal.voltage_gain)
         return self
 
     @property
@@ -408,39 +411,41 @@ class DataReader:
         length = stop - start
         if length <= 0:
             return np.empty((0, 2), dtype=np.uint16)
-        d_raw = np.empty((length, 2), dtype=np.uint16)
-        d_bits = np.empty(length, dtype=np.uint8)
-        d_cal = np.empty((length, 2), dtype=np.float32)
-
-        sample_idx = start
+        # process extra before & after to handle filtering
+        if start > SUPPRESS_SAMPLES_MAX:
+            sample_idx = start - SUPPRESS_SAMPLES_MAX
+            prefix_count = SUPPRESS_SAMPLES_MAX
+        else:
+            sample_idx = 0
+            prefix_count = start
+        end_idx = stop + SUPPRESS_SAMPLES_MAX
         out_idx = 0
+        d_raw = np.empty((end_idx - sample_idx, 2), dtype=np.uint16)
         if self._f.advance() != datafile.TAG_COLLECTION_START:
             raise ValueError('data section must be single collection')
-        while sample_idx < stop:
-            sample_cache = self._sample_tlv(start)
+        while sample_idx < end_idx:
+            sample_cache = self._sample_tlv(sample_idx)
             if sample_cache is None:
                 break
             data = sample_cache['buffer']
             b_start = sample_idx - sample_cache['start']
             length = sample_cache['stop'] - sample_cache['start'] - b_start
-            out_remaining = stop - sample_idx
+            out_remaining = end_idx - sample_idx
             length = min(length, out_remaining)
             if length <= 0:
                 break
             b_stop = b_start + length
             d = data[b_start:b_stop, :]
             d_raw[out_idx:(out_idx + length), :] = d
-            i_range = np.bitwise_or(np.bitwise_and(d[:, 0], 0x03), np.left_shift(np.bitwise_and(d[:, 1], 0x01), 2))
-            i_range[d[:, 0] == 0xffff] = I_RANGE_MISSING
-            np.bitwise_or(i_range, np.left_shift(np.bitwise_and(d[:, 0], 0x0004), 2), out=i_range)
-            np.bitwise_or(i_range, np.left_shift(np.bitwise_and(d[:, 1], 0x0004), 3), out=i_range)
-            d_bits[out_idx:(out_idx + length)] = i_range
-            v, i, _ = self.calibration.transform(d, v_range=sample_cache['voltage_range'])
-            d_cal[out_idx:(out_idx + length), 0] = v
-            d_cal[out_idx:(out_idx + length), 1] = i
             out_idx += length
             sample_idx += length
-        return d_raw[:out_idx, :], d_bits[:out_idx], d_cal[:out_idx, :]
+
+        d_raw = d_raw[:out_idx, :]
+        self.raw_processor.reset()
+        d_cal, d_bits = self.raw_processor.process_bulk(d_raw.reshape((-1, )))
+        j = prefix_count
+        k = min(prefix_count + stop - start, out_idx)
+        return d_raw[j:k, :], d_bits[j:k], d_cal[j:k, :]
 
     def _reduction_tlv(self, reduction_idx):
         sz = self.config['samples_per_reduction']
