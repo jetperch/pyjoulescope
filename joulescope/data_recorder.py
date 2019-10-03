@@ -442,6 +442,7 @@ class DataReader:
 
         d_raw = d_raw[:out_idx, :]
         self.raw_processor.reset()
+        self.raw_processor.voltage_range = self._voltage_range
         d_cal, d_bits = self.raw_processor.process_bulk(d_raw.reshape((-1, )))
         j = prefix_count
         k = min(prefix_count + stop - start, out_idx)
