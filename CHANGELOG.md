@@ -9,6 +9,7 @@ This file contains the list of changes made to pyjoulescope.
 2019 Oct 9
 
 *   Added optional callback to View.statistics_get for non-blocking operation.
+*   Fixed data_recorder.DataReader.raw() to gracefully handle end of file.
 
 
 ## 0.6.4
