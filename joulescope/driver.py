@@ -214,7 +214,10 @@ class Device:
         """Set the statistics callback.
 
         :param cbk: The callable(data) where data is a statistics data
-            structure.  See :meth:`joulescope.View.statistics_get` for details.
+            structure.  See :meth:`joulescope.View.statistics_get` for details
+            on the data format.
+            This function will be called from the USB processing thread.
+            Any calls back into self MUST BE resynchronized.
         """
         idx = len(self._reductions)
         if idx:
