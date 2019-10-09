@@ -4,6 +4,13 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 0.6.5
+
+2019 Oct 9
+
+*   Added optional callback to View.statistics_get for non-blocking operation.
+
+
 ## 0.6.4
 
 2019 Oct 3

@@ -465,7 +465,7 @@ class View:
         args = {'start': start, 'stop': stop, 'units': units}
         return self._post_block('samples_get', args)
 
-    def statistics_get(self, start=None, stop=None, units=None):
+    def statistics_get(self, start=None, stop=None, units=None, callback=None):
         """Get statistics over a range.
 
         :param start: The starting time.
@@ -473,7 +473,10 @@ class View:
         :param units: The units for start and stop.
             'seconds' or None is in floating point seconds relative to the view.
             'samples' is in stream buffer sample indices.
-        :return: The statistics data structure.
+        :param callback: The optional callable.  When provided, this method will
+            not block and the callable will be called with the statistics
+            data structure from the view thread.
+        :return: The statistics data structure or None if callback is provided.
 
             {
               "time": {
@@ -521,7 +524,11 @@ class View:
         Note: this same format is used by the :meth:`Driver.statistics_callback`.
         """
         args = {'start': start, 'stop': stop, 'units': units}
-        return self._post_block('statistics_get', args)
+        if callback is None:
+            return self._post_block('statistics_get', args)
+        else:
+            self._post('statistics_get', args=args, cbk=callback)
+            return None
 
     def ping(self, *args, **kwargs):
         """Ping the thread.
