@@ -320,7 +320,7 @@ class DataReader:
 
         idx_start, idx_end = self.sample_id_range
         if not idx_start <= sample_idx < idx_end:
-            raise ValueError('sample index out of range: %d <= %d < %d', idx_start, sample_idx, idx_end)
+            raise ValueError('sample index out of range: %d <= %d < %d' % (idx_start, sample_idx, idx_end))
 
         if self._sample_cache is not None:
             log.debug('_sample_cache cache miss: %s : %s %s',
@@ -418,7 +418,10 @@ class DataReader:
         else:
             sample_idx = 0
             prefix_count = start
-        end_idx = stop + SUPPRESS_SAMPLES_MAX
+        if stop + SUPPRESS_SAMPLES_MAX <= x_stop:
+            end_idx = stop + SUPPRESS_SAMPLES_MAX
+        else:
+            end_idx = x_stop
         out_idx = 0
         d_raw = np.empty((end_idx - sample_idx, 2), dtype=np.uint16)
         if self._f.advance() != datafile.TAG_COLLECTION_START:
