@@ -48,6 +48,9 @@ cdef class PatternBuffer:
     def __cinit__(self):
         self._reset()
 
+    def __len__(self):
+        return 2**63 - 1
+
     @property
     def sample_id_max(self):
         return self._sample_id_max

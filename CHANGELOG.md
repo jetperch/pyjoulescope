@@ -12,6 +12,7 @@ This file contains the list of changes made to pyjoulescope.
     *   Added duration checking.
     *   Slightly improved memory footprint.
 *   Added missing hasattr for StreamProcessing object close().
+*   Added (fake) missing length to PatternBuffer.
 
 
 ## 0.6.5
