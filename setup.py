@@ -26,7 +26,7 @@ from distutils.command.build import build as build_orig
 import os
 import sys
 
-VERSION = '0.6.5'  # CHANGE THIS VERSION!
+VERSION = '0.6.7'  # CHANGE THIS VERSION!
 MYPATH = os.path.abspath(os.path.dirname(__file__))
 
 try:

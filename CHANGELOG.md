@@ -4,6 +4,15 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 0.6.7
+
+2019 Oct 12 [in progress]
+
+*   Improved joulescope.driver.Device.read() method.
+    *   Added duration checking.
+    *   Slightly improved memory footprint.
+
+
 ## 0.6.5
 
 2019 Oct 9

@@ -644,18 +644,30 @@ class Device:
         """Read data from the device.
 
         :param duration: The duration in seconds for the capture.
+            The duration must fit within the stream_buffer.
         :param contiguous_duration: The contiguous duration in seconds for
             the capture.  As opposed to duration, this ensures that the
             duration has no missing samples.  Missing samples usually
             occur when the device first starts.
+            The duration must fit within the stream_buffer.
         :param out_format: The output format which is one of
             ['raw', 'calibrated', None].
             None (default) is the same as 'calibrated'.
 
         If streaming was already in progress, it will be restarted.
+        If neither duration or contiguous duration is specified, the capture
+        will only be stopped by callbacks registered through
+        :meth:`stream_process_register`.
         """
         log.info('read(duration=%s, contiguous_duration=%s, out_format=%s)',
                  duration, contiguous_duration, out_format)
+        if duration is None and contiguous_duration is None:
+            raise ValueError('Must specify duration or contiguous_duration')
+        duration_max = len(self.stream_buffer) / self.sampling_frequency
+        if contiguous_duration is not None and contiguous_duration > duration_max:
+            raise ValueError(f'contiguous_duration {contiguous_duration} > {duration_max} max seconds')
+        if duration is not None and duration > duration_max:
+            raise ValueError(f'duration {duration} > {duration_max} max seconds')
         q = queue.Queue()
 
         def on_stop(*args, **kwargs):
@@ -666,19 +678,20 @@ class Device:
         q.get()
         self.stop()
         start_id, end_id = self.stream_buffer.sample_id_range
-        log.info('%s, %s', start_id, end_id)
+        log.info('read available range %s, %s', start_id, end_id)
         if contiguous_duration is not None:
             start_id = end_id - int(contiguous_duration * self.sampling_frequency)
-            if start_id < 0:
-                start_id = 0
-            log.info('%s, %s', start_id, end_id)
+        elif duration is not None:
+            start_id = end_id - int(duration * self.sampling_frequency)
+        if start_id < 0:
+            start_id = 0
+        log.info('read actual %s, %s', start_id, end_id)
+
         if out_format == 'raw':
             return self.stream_buffer.raw_get(start_id, end_id).reshape((-1, 2))
         else:
             r = self.stream_buffer.data_get(start_id, end_id, increment=1)
-            i = r[:, 0, 0].reshape((-1, 1))
-            v = r[:, 1, 0].reshape((-1, 1))
-            return np.hstack((i, v))
+            return r[:, 0:2, 0]
 
     @property
     def is_streaming(self):
