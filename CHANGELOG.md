@@ -11,6 +11,7 @@ This file contains the list of changes made to pyjoulescope.
 *   Improved joulescope.driver.Device.read() method.
     *   Added duration checking.
     *   Slightly improved memory footprint.
+*   Added missing hasattr for StreamProcessing object close().
 
 
 ## 0.6.5

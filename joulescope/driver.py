@@ -551,7 +551,12 @@ class Device:
                     rv = True
                 self._process_objs.append(obj)
             else:
-                obj.close()
+                obj.driver_active = False
+                try:
+                    if hasattr(obj, 'close'):
+                        obj.close()
+                except Exception:
+                    log.exception('%s close() exception', obj)
         return rv
 
     def _on_stop(self, status, message):
