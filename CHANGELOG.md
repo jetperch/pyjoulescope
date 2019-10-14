@@ -6,13 +6,15 @@ This file contains the list of changes made to pyjoulescope.
 
 ## 0.6.7
 
-2019 Oct 12 [in progress]
+2019 Oct 14
 
 *   Improved joulescope.driver.Device.read() method.
     *   Added duration checking.
     *   Slightly improved memory footprint.
 *   Added missing hasattr for StreamProcessing object close().
 *   Added (fake) missing length to PatternBuffer.
+*   Added StreamBuffer.samples_get() to make getting the per sample data 
+    simpler, more flexible, and faster.  
 
 
 ## 0.6.5
