@@ -1376,6 +1376,109 @@ cdef class StreamBuffer:
             log.warning('length mismatch: expected=%s, returned=%s', expected_length, length)
         return out[:length, :, :]
 
+    def samples_get(self, start, stop, fields=None):
+        """Get sample data without any skips or reductions.
+
+        :param start: The starting sample id (inclusive).
+        :param stop: The ending sample id (exclusive).
+        :param fields: The list of field names to return.  None (default) is
+            equivalent to ['raw'].  The available fields are:
+            * raw: The raw u16 data from Joulescope.
+              Equivalent to self.raw_get(start, stop)
+            * raw_current: The raw 14-bit current data in LSBs.
+            * raw_voltage: The raw 14-bit voltage data in LSBs.
+            * current: The calibrated float32 current data array.
+            * voltage: The calibrated float32 voltage data array.
+            * current_voltage: The calibrated float32 Nx2 array of current, voltage.
+            * bits: The (voltage_lsb << 5) | (current_lsb << 4) | current_range
+            * current_range: The current range. 0 = 10A, 6 = 18 uA, 7=off.
+            * current_lsb: The current LSB, which can be assign to a general purpose input.
+            * voltage_lsb: The voltage LSB, which can be assign to a general purpose input.
+        :return: The list-like corresponding to each entry in fields.
+        """
+        out = []
+        bits = None
+        if fields is None:
+            fields = ['raw']
+        elif isinstance(fields, str):
+            fields = [fields]
+
+        if stop <= start:
+            log.warning('samples_get %d <= %d', start, stop)
+            start = stop
+
+        total_length = self.length
+        start_idx = start % total_length
+        stop_idx = stop % total_length
+        if 0 == stop_idx:
+            stop_idx = total_length
+
+        def populate_bits():
+            nonlocal bits
+            if bits is None:
+                if stop_idx > start_idx:
+                    bits = self.bits[start_idx:stop_idx]
+                else:
+                    bits = np.concatenate((self.bits[start_idx:], self.bits[:stop_idx]))
+
+        for field in fields:
+            if field == 'raw':
+                if stop_idx > start_idx:
+                    out.append(self.raw[(start_idx * 2):(stop_idx * 2)].reshape((-1, 2)))
+                else:
+                    out.append(np.vstack((
+                        self.raw[(start_idx * 2):].reshape((-1, 2)),
+                        self.raw[:(stop_idx * 2)].reshape((-1, 2)))))
+            elif field == 'raw_current':
+                if stop_idx > start_idx:
+                    d = self.raw[(start_idx * 2):(stop_idx * 2):2]
+                else:
+                    d = np.concatenate((
+                        self.raw[(start_idx * 2)::2],
+                        self.raw[:(stop_idx * 2):2]))
+                out.append(np.right_shift(d, 2))
+            elif field == 'raw_voltage':
+                if stop_idx > start_idx:
+                    d = self.raw[(start_idx * 2 + 1):(stop_idx * 2):2]
+                else:
+                    d = np.concatenate((
+                        self.raw[(start_idx * 2 + 1)::2],
+                        self.raw[1:(stop_idx * 2):2]))
+                out.append(np.right_shift(d, 2))
+            elif field == 'bits':
+                populate_bits()
+                out.append(bits)
+            elif field == 'current':
+                if stop_idx > start_idx:
+                    out.append(self.data[(start_idx * 2):(stop_idx * 2):2])
+                else:
+                    out.append(np.concatenate((self.data[(start_idx * 2)::2],
+                                               self.data[:(stop_idx * 2):2])))
+            elif field == 'voltage':
+                if stop_idx > start_idx:
+                    out.append(self.data[(start_idx * 2 + 1):(stop_idx * 2):2])
+                else:
+                    out.append(np.concatenate((self.data[(start_idx * 2 + 1)::2],
+                                               self.data[1:(stop_idx * 2):2])))
+            elif field == 'current_voltage':
+                if stop_idx > start_idx:
+                    out.append(self.data[(start_idx * 2):(stop_idx * 2)].reshape((-1, 2)))
+                else:
+                    out.append(np.vstack((self.data[(start_idx * 2):].reshape((-1, 2)),
+                                          self.data[:(stop_idx * 2)].reshape((-1, 2)))))
+            elif field == 'current_range':
+                populate_bits()
+                out.append(np.bitwise_and(bits, 0x0f))
+            elif field == 'current_lsb':
+                populate_bits()
+                out.append(np.bitwise_and(np.right_shift(bits, 4), 1))
+            elif field == 'voltage_lsb':
+                populate_bits()
+                out.append(np.bitwise_and(np.right_shift(bits, 5), 1))
+            else:
+                raise ValueError(f'Unsupported field {field}')
+        return out
+
     def raw_get(self, start, stop):
         """Get the raw data from Joulescope.
 

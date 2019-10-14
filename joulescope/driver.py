@@ -695,8 +695,7 @@ class Device:
         if out_format == 'raw':
             return self.stream_buffer.raw_get(start_id, end_id).reshape((-1, 2))
         else:
-            r = self.stream_buffer.data_get(start_id, end_id, increment=1)
-            return r[:, 0:2, 0]
+            return self.stream_buffer.samples_get(start_id, end_id, fields=['current_voltage'])[0]
 
     @property
     def is_streaming(self):
