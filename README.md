@@ -5,7 +5,7 @@
 
 Welcome to Joulescope™!  Joulescope is an affordable, precision DC energy 
 analyzer that enables you to build better products. 
-Joulescope™ accurately and simultaneously measures the voltage and current 
+Joulescope accurately and simultaneously measures the voltage and current 
 supplied to your target device, and it then computes power and energy. 
 For more information on Joulescope, see 
 [www.joulescope.com](https://www.joulescope.com).
@@ -37,7 +37,7 @@ If you just want to use Joulescope, you can
 Install [Python](https://www.python.org/) 3.6+ 64-bit.  If you already have
 Python installed, verify 3.6+ and 64-bit:
 
-    python3 -V
+    python3 -V -V
 
 Install this python package from pypi:
 
@@ -70,6 +70,8 @@ of data, and then display the averaged values:
     current, voltage = np.mean(data, axis=0)
     print(f'{current} A, {voltage} V')
 
+For more examples, see 
+[pyjoulescope_examples](https://github.com/jetperch/pyjoulescope_examples)
 
 ## Developer
 
@@ -118,7 +120,11 @@ Cython. You can use the setup script to allow development in place:
 You should then be able to execute joulescope:
 
     python3 -m joulescope --help
-    
+
+If you want to switch directories, you may need to set your 
+[PYTHONPATH](https://docs.python.org/3/using/cmdline.html#envvar-PYTHONPATH)
+environment variable.
+
 If you would rather build and install Joulescope:
 
     python setup.py sdist
