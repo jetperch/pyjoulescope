@@ -16,6 +16,7 @@ This file contains the list of changes made to pyjoulescope.
     suppress_samples_post.
 *   Changed default current range switch filter from mean_0_3_1 to mean_1_n_1,
     which significantly reduces glitches due to current ranging.
+*   Added travis-ci build status and Joulescope logo to README.
 
 
 ## 0.6.7
