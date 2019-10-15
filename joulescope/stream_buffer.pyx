@@ -46,13 +46,33 @@ DEF _STATS_FIELDS = 6  # current, voltage, power, current_range, current_lsb, vo
 DEF _STATS_VALUES = 4  # mean, variance, min, max
 DEF _NDIM = 3          # N, fields, stats
 DEF STATS_FLOATS_PER_SAMPLE = _STATS_FIELDS * _STATS_VALUES
-DEF SUPPRESS_SAMPLES_DEFAULT = 3
-DEF _SUPPRESS_SAMPLES_MAX = 8
+DEF _SUPPRESS_SAMPLES_MAX = 512
 DEF I_RANGE_D_LENGTH = 3
 DEF _I_RANGE_MISSING = 8
+DEF SUPPRESS_HISTORY_MAX = 8
+DEF SUPPRESS_WINDOW_MAX = 12
+DEF SUPPRESS_POST_MAX = 8
 
-DEF SUPPRESS_MODE_OFF = 0  # disabled, zero delay
-DEF SUPPRESS_MODE_NORMAL = 1
+
+# experimentally determined charge coupling durations in samples at 2 MSPS
+cdef uint8_t[9][9] SUPPRESS_MATRIX = [   # SUPPRESS_MATRIX[to][from]
+    #0, 1, 2, 3, 4, 5, 6, 7, 8    # from this current select
+    [0, 5, 5, 5, 5, 5, 6, 6, 0],  # to 0
+    [3, 0, 5, 5, 5, 6, 7, 8, 0],  # to 1
+    [4, 4, 0, 6, 6, 7, 7, 8, 0],  # to 2
+    [4, 4, 4, 0, 6, 6, 7, 7, 0],  # to 3
+    [4, 4, 4, 4, 0, 6, 7, 6, 0],  # to 4
+    [4, 4, 4, 4, 4, 0, 7, 6, 0],  # to 5
+    [4, 4, 4, 4, 4, 4, 0, 6, 0],  # to 6
+    [0, 0, 0, 0, 0, 0, 0, 0, 0],  # to 7 (off)
+    [0, 0, 0, 0, 0, 0, 0, 0, 0],  # to 8 (missing)
+]
+
+
+DEF SUPPRESS_MODE_OFF = 0   # disabled, force zero delay
+DEF SUPPRESS_MODE_MEAN = 1
+DEF SUPPRESS_MODE_NAN = 3
+
 
 STATS_FIELDS = _STATS_FIELDS
 STATS_VALUES = _STATS_VALUES
@@ -403,11 +423,13 @@ cdef class RawProcessor:
 
     cdef float d_cal[_SUPPRESS_SAMPLES_MAX][2]  # as i, v
     cdef uint8_t d_bits[_SUPPRESS_SAMPLES_MAX]   # packed bits: 7:6=0 , 5=voltage_lsb, 4=current_lsb, 3:0=i_range
+    cdef float d_history[SUPPRESS_HISTORY_MAX][2]  # as i, v
+    cdef uint8_t d_history_idx
     cdef js_stream_buffer_calibration_s _cal
     cdef raw_processor_cbk_fn _cbk_fn
     cdef object _cbk_user_data
 
-    cdef is_skipping
+    cdef int32_t is_skipping
     cdef uint32_t _idx_out
     cdef uint64_t sample_count
     cdef uint64_t sample_missing_count  # based upon sample_id
@@ -415,8 +437,11 @@ cdef class RawProcessor:
     cdef uint64_t sample_sync_count     # based upon alternating 0/1 pattern
     cdef uint64_t contiguous_count      #
 
-    cdef uint8_t i_range_d[I_RANGE_D_LENGTH]  # the i_range delay for processing
-    cdef int32_t suppress_samples  # the total number of samples to suppress after range change
+    cdef uint8_t _i_range_last
+    cdef int32_t _suppress_samples_pre     # the number of samples to use before range change
+    cdef int32_t _suppress_samples_window  # the total number of samples to suppress after range change
+    cdef int32_t _suppress_samples_post
+
     cdef int32_t suppress_count  # the suppress counter, 1 = replace previous
     cdef uint8_t _suppress_mode
 
@@ -432,12 +457,10 @@ cdef class RawProcessor:
 
     def __cinit__(self):
         cal_init(&self._cal)
-
-        self.suppress_samples = SUPPRESS_SAMPLES_DEFAULT
-        self._suppress_mode = SUPPRESS_MODE_NORMAL
-
-        for idx in range(I_RANGE_D_LENGTH):
-            self.i_range_d[idx] = 7
+        self._suppress_samples_pre = 2
+        self._suppress_samples_window = 255  # lookup = 'n'
+        self._suppress_samples_post = 2
+        self._suppress_mode = SUPPRESS_MODE_MEAN
 
     def __init__(self):
         self.reset()
@@ -463,23 +486,73 @@ cdef class RawProcessor:
     def suppress_mode(self):
         if self._suppress_mode == SUPPRESS_MODE_OFF:
             return 'off'
-        elif self._suppress_mode == SUPPRESS_MODE_NORMAL:
-            return 'normal'
+        if self._suppress_mode == SUPPRESS_MODE_NAN:
+            name = 'nan'
         else:
-            return 'off'
+            name = 'mean'
+        window = 'n' if self._suppress_samples_window == 255 else self._suppress_samples_window
+        return f'{name}_{self._suppress_samples_pre}_{window}_{self._suppress_samples_post}'
 
     @suppress_mode.setter
     def suppress_mode(self, value):
+        """Set the suppression mode filter.
+
+        :param value: The specification string, which is normally in the format
+            'mode_pre_window_post' where:
+            * mode:
+              * 'off': Use the data as provided with no filtering
+              * 'nan': Insert NaNs into the window.
+              * 'mean': Compute the mean over pre and post, then insert into window.
+            * pre: The number of samples before the current range change used to
+              compute the value for window.
+            * window: The number of samples to modify after the current range change.
+              'n' uses the characterized duration based upon the actual range switch.
+            * post: The number of additional samples to use to compute
+              the value for window.
+        """
         if isinstance(value, str):
             value = value.lower()
-        if value in [SUPPRESS_MODE_OFF, 'off', False] or value is None:
+        if value is None or not bool(value) or value == 'off':
             self._suppress_mode = SUPPRESS_MODE_OFF
-        elif value in [SUPPRESS_MODE_NORMAL, 'normal', 'on', True]:
-            self._suppress_mode = SUPPRESS_MODE_NORMAL
+            self._suppress_samples_pre = 0
+            self._suppress_samples_window = 0
+            self._suppress_samples_post = 0
+            return
+        if value == 'normal':
+            value = 'mean_0_n_1'
+        parts = value.split('_')
+        if len(parts) != 4:
+            raise ValueError(f'Invalid suppress_mode: {value}')
+        if parts[0] == 'nan':
+            self._suppress_mode = SUPPRESS_MODE_NAN
+        elif parts[0] == 'mean':
+            self._suppress_mode = SUPPRESS_MODE_MEAN
+        elif parts[0] == 'off':
+            # allow algorithm testing
+            self._suppress_mode = SUPPRESS_MODE_OFF
         else:
-            raise ValueError('unsupported mode: %s' % (value, ))
+            raise ValueError(f'Invalid suppress_mode: {value}')
+
+        pre = int(parts[1])
+        post = int(parts[3])
+        if pre > SUPPRESS_HISTORY_MAX:
+            raise ValueError(f'suppress_samples_pre must be < {SUPPRESS_HISTORY_MAX}, was {pre}')
+        self._suppress_samples_pre = pre
+
+        if parts[2] == 'n':
+            self._suppress_samples_window = 255
+        else:
+            window = int(parts[2])
+            if window > SUPPRESS_WINDOW_MAX:
+                raise ValueError(f'suppress_samples_window must be < {SUPPRESS_WINDOW_MAX}, was {window}')
+            self._suppress_samples_window = window
+
+        if post > SUPPRESS_POST_MAX:
+            raise ValueError(f'suppress_samples_post must be < {SUPPRESS_POST_MAX}, was {post}')
+        self._suppress_samples_post = post
 
     def reset(self):
+        cdef uint32_t idx
         self.sample_count = 0
         self.sample_missing_count = 0
         self.is_skipping = 1
@@ -488,16 +561,24 @@ cdef class RawProcessor:
         self.contiguous_count = 0
 
         self.suppress_count = 0
-        for idx in range(I_RANGE_D_LENGTH):
-            self.i_range_d[idx] = 7
+        self._i_range_last = 7
 
         self.sample_toggle_last = 0
         self.sample_toggle_mask = 0
         self._voltage_range = 0
         self._idx_out = 0
 
+        for idx in range(SUPPRESS_HISTORY_MAX):
+            self.d_history[idx][0] = 0.0
+            self.d_history[idx][1] = 0.0
+        self.d_history_idx = 0
+
     def calibration_set(self, current_offset, current_gain, voltage_offset, voltage_gain):
         cdef js_stream_buffer_calibration_s * cal = &self._cal
+        if len(current_offset) < 7 or len(current_gain) < 7:
+            raise ValueError('current calibration vector too small')
+        if len(voltage_offset) < 2 or len(voltage_gain) < 2:
+            raise ValueError('voltage calibration vector too small')
         for i in range(7):
             cal.current_offset[i] = current_offset[i]
             cal.current_gain[i] = current_gain[i]
@@ -509,7 +590,10 @@ cdef class RawProcessor:
 
     cdef void process(self, uint16_t raw_i, uint16_t raw_v):
         cdef uint32_t is_missing
+        cdef uint8_t suppress_window
         cdef int32_t suppress_idx
+        cdef int32_t idx
+        cdef int32_t suppress_filter_counter
         cdef uint32_t i_range_idx
         cdef uint8_t bits
         cdef uint8_t i_range
@@ -519,48 +603,29 @@ cdef class RawProcessor:
         cdef float cal_v
 
         is_missing = 0
-        for i_range_idx in range(I_RANGE_D_LENGTH - 1, 0, -1):
-            self.i_range_d[i_range_idx] = self.i_range_d[i_range_idx - 1]
-        if 0xffff == raw_i:
+        if 0xffff == raw_i and 0xffff == raw_v:
             is_missing = 1
-            self.i_range_d[0] = _I_RANGE_MISSING  # missing sample
+            i_range = _I_RANGE_MISSING  # missing sample
             self.sample_missing_count += 1
             self.contiguous_count = 0
             if self.is_skipping == 0:
                 self.skip_count += 1
                 self.is_skipping = 1
         else:
-            self.i_range_d[0] = <uint8_t> ((raw_i & 0x0003) | ((raw_v & 0x0001) << 2))
+            i_range = <uint8_t> ((raw_i & 0x0003) | ((raw_v & 0x0001) << 2))
             self.is_skipping = 0
             self.contiguous_count += 1
-        bits = (self.i_range_d[0] & 0x0f) | ((raw_i & 0x0004) << 2) | ((raw_v & 0x0004) << 3)
-        self.d_bits[self._idx_out] = bits
+        bits = (i_range & 0x0f) | ((raw_i & 0x0004) << 2) | ((raw_v & 0x0004) << 3)
 
         # process i_range for glitch suppression
-        if SUPPRESS_MODE_NORMAL == self._suppress_mode:
-            if self.i_range_d[0] == self.i_range_d[2]:
-                # no change, use single delay since i_range leads data by 1 sample
-                i_range = self.i_range_d[1]
-            elif self.i_range_d[0] >= 0x07:
-                # select is off or missing sample, use immediately
-                i_range = self.i_range_d[0]
-            elif (_I_RANGE_MISSING == self.i_range_d[1] or _I_RANGE_MISSING == self.i_range_d[2]) and \
-                    self.i_range_d[0] < _I_RANGE_MISSING:
-                i_range = self.i_range_d[0]  # use immediately
-            elif self.i_range_d[0] < self.i_range_d[2]:
-                # use old select one more sample
-                # moving to less sensitive range (smaller value resistor)
-                i_range = self.i_range_d[2]
-                if self.i_range_d[1] < self.i_range_d[2] != 0x07:
-                    # delay suppress by one sample
-                    self.suppress_count = self.suppress_samples + 1
-            else:
-                # Use new select immediately
-                # moving to more sensitive range (larger value resistor)
-                i_range = self.i_range_d[0]
-                self.suppress_count = self.suppress_samples + 1
-        else:
-            i_range = self.i_range_d[0]
+        if i_range != self._i_range_last:
+            suppress_window = SUPPRESS_MATRIX[i_range][self._i_range_last]
+            if suppress_window and self._suppress_samples_window != 255:
+                suppress_window = self._suppress_samples_window
+            if suppress_window:
+                idx = self._idx_out + suppress_window + self._suppress_samples_post
+                if idx > self.suppress_count:
+                    self.suppress_count = idx
 
         sample_toggle_current = (raw_v >> 1) & 0x1
         raw_i = raw_i >> 2
@@ -578,37 +643,108 @@ cdef class RawProcessor:
             cal_i = NAN
             cal_v = NAN
         else:
-            if 7 == i_range:
-                # select off, current is zero by definition
-                cal_i = <float> 0.0
-            else:
-                cal_i = <float> raw_i
-                cal_i += self._cal.current_offset[i_range]
-                cal_i *= self._cal.current_gain[i_range]
-
+            cal_i = <float> raw_i
+            cal_i += self._cal.current_offset[i_range]
+            cal_i *= self._cal.current_gain[i_range]
             cal_v = <float> raw_v
             cal_v += self._cal.voltage_offset[self._voltage_range]
             cal_v *= self._cal.voltage_gain[self._voltage_range]
 
-        self.d_cal[self._idx_out][0] = cal_i
-        self.d_cal[self._idx_out][1] = cal_v
+        if self._idx_out < _SUPPRESS_SAMPLES_MAX:
+            self.d_bits[self._idx_out] = bits
+            self.d_cal[self._idx_out][0] = cal_i
+            self.d_cal[self._idx_out][1] = cal_v
 
         # Suppress Joulescope range switching glitch (at least for now).
         if self.suppress_count > 0:  # defer output until suppress computed
-            if self.suppress_count == 1:
-                for suppress_idx in range(self._idx_out + 1):
+            if self.suppress_count == 1:  # last sample, take action
+
+                if self._idx_out >= _SUPPRESS_SAMPLES_MAX:
+                    log.warning('Suppression filter too long for actual data: %s > %s',
+                                self._idx_out, _SUPPRESS_SAMPLES_MAX)
+                    while self._idx_out >= _SUPPRESS_SAMPLES_MAX:
+                        self._cbk_fn(self._cbk_user_data, NAN, NAN, 0xff)
+                        self._idx_out -= 1
+
+                if SUPPRESS_MODE_MEAN == self._suppress_mode:
+                    suppress_filter_counter = 0
+                    cal_i = 0
+
+                    # sum samples over pre for mean computation
+                    idx = self.d_history_idx - self._suppress_samples_pre
+                    while idx < 0:
+                        idx += SUPPRESS_HISTORY_MAX
+                    for suppress_idx in range(self._suppress_samples_pre):
+                        while idx > SUPPRESS_HISTORY_MAX:
+                            idx -= SUPPRESS_HISTORY_MAX
+                        cal_i += self.d_history[idx][0]
+                        suppress_filter_counter += 1
+                        idx += 1
+
+                    # sum samples over post for mean computation
+                    for idx in range(self._idx_out + 1 - self._suppress_samples_post, self._idx_out + 1):
+                        cal_i += self.d_cal[idx][0]
+                        suppress_filter_counter += 1
+
+                    if suppress_filter_counter:  # compute mean
+                        cal_i = <float> (cal_i / suppress_filter_counter)
+
+                    # update suppressed samples
+                    for idx in range(self._idx_out + 1 - self._suppress_samples_post):
+                        self.sample_count += 1
+                        self._cbk_fn(self._cbk_user_data,
+                                     cal_i,
+                                     self.d_cal[idx][1],
+                                     self.d_bits[idx])
+                        self._history_insert(cal_i, self.d_cal[idx][1])
+
+                elif SUPPRESS_MODE_NAN == self._suppress_mode:
+                    for suppress_idx in range(self._idx_out + 1 - self._suppress_samples_post):
+                        self.sample_count += 1
+                        self._cbk_fn(self._cbk_user_data, NAN, NAN, self.d_bits[suppress_idx])
+
+                elif SUPPRESS_MODE_OFF == self._suppress_mode:
+                    for suppress_idx in range(self._idx_out + 1 - self._suppress_samples_post):
+                        self.sample_count += 1
+                        self._cbk_fn(self._cbk_user_data,
+                                     self.d_cal[suppress_idx][0], self.d_cal[suppress_idx][1],
+                                     self.d_bits[suppress_idx])
+                        self._history_insert(self.d_cal[suppress_idx][0], self.d_cal[suppress_idx][1])
+
+                else:
+                    raise RuntimeError('unsupported suppress_mode')
+
+                # update post samples
+                for idx in range(self._idx_out + 1 - self._suppress_samples_post, self._idx_out + 1):
                     self.sample_count += 1
-                    # self.d_cal[suppress_idx][0] = cal_i
-                    # self.d_cal[suppress_idx][1] = cal_v
-                    self._cbk_fn(self._cbk_user_data, cal_i, cal_v, self.d_bits[suppress_idx])
+                    self._cbk_fn(self._cbk_user_data,
+                                 self.d_cal[idx][0],
+                                 self.d_cal[idx][1],
+                                 self.d_bits[idx])
+                    self._history_insert(self.d_cal[idx][0], self.d_cal[idx][1])
+
                 self._idx_out = 0
-            else:
-                self._idx_out += 1  # just skip, will fill in later
+
+            else:  # just skip, will fill in later
+                self._idx_out += 1
             self.suppress_count -= 1
+
         else:
+            self._history_insert(cal_i, cal_v)
             self.sample_count += 1
             self._cbk_fn(self._cbk_user_data, cal_i, cal_v, bits)
             self._idx_out = 0
+
+        self._i_range_last = i_range
+
+    cdef void _history_insert(self, float cal_i, float cal_v):
+        # store history to circular buffer for _suppress_samples_pre
+        self.d_history[self.d_history_idx][0] = cal_i
+        self.d_history[self.d_history_idx][1] = cal_v
+        self.d_history_idx += 1
+        if self.d_history_idx >= SUPPRESS_HISTORY_MAX:
+            self.d_history_idx = 0
+
 
     def process_bulk(self, raw):
         cdef int32_t idx
@@ -1012,7 +1148,8 @@ cdef class StreamBuffer:
             if sample_id < self.device_sample_id:
                 log.warning("WARNING: duplicate data")
             elif self.device_sample_id < sample_id:
-                log.info("Fill missing samples: %r, %r", self.device_sample_id, sample_id)
+                log.info("Filled %r missing samples (%r, %r) with NaN",
+                         sample_id - self.device_sample_id, self.device_sample_id, sample_id)
                 while self.device_sample_id < sample_id:
                     idx2 = idx * 2
                     self.raw[idx2 + 0] = 0xffff  # missing sample is i_range 7 with raw_i = 0x3fff

@@ -4,6 +4,20 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 0.6.8
+
+2019 Oct 15 [in progress]
+
+*   Fixed data-dependent single NaN sample insertion. Only occurred when
+    i_range was 3 or 7 and current LSBs was saturated.
+    Affects 0.6.0 through 0.6.7.
+*   Added customizable current range switching filter using parameters
+    suppress_type, suppress_samples_pre, suppress_samples_window, 
+    suppress_samples_post.
+*   Changed default current range switch filter from mean_0_3_1 to mean_1_n_1,
+    which significantly reduces glitches due to current ranging.
+
+
 ## 0.6.7
 
 2019 Oct 14

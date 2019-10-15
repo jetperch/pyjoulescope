@@ -35,6 +35,8 @@ class Parameter:
         self.units = units
         if permission not in ['rw', 'r']:
             raise ValueError('Parameter %s, invalid permission %r' % (name, permission))
+        if values is None:
+            return
         for idx, value in enumerate(values):
             if len(value) < 2 or len(value) > 3:
                 raise ValueError('Parameter %s, value %d invalid: %r' % (name, idx, value))

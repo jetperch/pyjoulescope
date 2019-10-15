@@ -183,6 +183,46 @@ PARAMETERS = [
         '8',
         [('%d' % (2**x), (2**x)) for x in range(0, 4)],
     ),
+
+    Parameter(
+        'current_ranging',  # virtual parameter!
+        'rw',
+        'current_ranging',
+        None,
+        None,  # parse into current_ranging fields: type, samples_pre, samples_window, samples_post
+    ),
+    Parameter(
+        'current_ranging_type',
+        'rw',
+        'current_ranging',
+        'mean',
+        [
+            ('off', 'off'),
+            ('mean', 'mean'),
+            ('NaN', 'nan', ['nan'])
+        ],
+    ),
+    Parameter(
+        'current_ranging_samples_pre',
+        'rw',
+        'current_ranging',
+        '0',
+        [(str(d), d, [d]) for d in range(9)]
+    ),
+    Parameter(
+        'current_ranging_samples_window',
+        'rw',
+        'current_ranging',
+        'n',
+        [('n', 'n')] + [(str(d), d, [d]) for d in range(13)]
+    ),
+    Parameter(
+        'current_ranging_samples_post',
+        'rw',
+        'current_ranging',
+        '0',
+        [(str(d), d, [d]) for d in range(9)]
+    ),
 ]
 
 

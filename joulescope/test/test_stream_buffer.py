@@ -94,11 +94,110 @@ class TestRawProcessor(unittest.TestCase):
 
     def test_bulk_skip(self):
         r = RawProcessor()
-        r.suppress_mode = 'off'
+        r.suppress_mode = 'off_0_0_0'
         r.calibration_set([-10.0] * 7, [2.0] * 7, [-2.0, 1.0], [4.0, 1.0])
         raw = np.full((20, ), 0xffff, dtype=np.uint16)
         cal, bits = r.process_bulk(raw)
         np.testing.assert_allclose(8, np.bitwise_and(0x0f, bits))
+
+    def generate(self, mode, i_range=None):
+        if i_range is None:
+            i_range = 0, 1
+        length = 32
+        r = RawProcessor()
+        r.suppress_mode = mode
+        r.calibration_set([-1000] * 7, [0.1 ** x for x in range(7)],
+                          [-1000, -1000], [0.001, 0.0001])
+        current = np.zeros(length, dtype=np.int16)
+        current[:] = 2000
+        voltage = np.zeros(length, dtype=np.int16)
+        voltage[:] = 2000
+
+        raw = np.empty(length * 2, dtype=np.uint16)
+        i_range_ = np.zeros(length, dtype=np.uint8)
+        i_range_[:16] = i_range[0]
+        i_range_[16:] = i_range[1]
+        raw[::2] = np.bitwise_or(
+            np.left_shift(current, 2),
+            np.bitwise_and(i_range_, 0x03))
+        raw[1::2] = np.bitwise_or(
+            np.left_shift(voltage, 2),
+            np.bitwise_and(np.right_shift(i_range_, 2), 0x03))
+        raw[3::4] = np.bitwise_or(raw[3::4], 0x0002)
+        return r.process_bulk(raw)
+
+    def test_invalid_mode(self):
+        r = RawProcessor()
+        with self.assertRaises(ValueError):
+            r.suppress_mode = 'mean_0_'
+
+    def test_malformed(self):
+        r = RawProcessor()
+        with self.assertRaises(ValueError):
+            r.suppress_mode = 'mean_0_0'
+
+    def test_off(self):
+        for k in range(6):
+            with self.subTest(i=k):
+                cal, _ = self.generate('off', i_range=(k, k + 1))
+                g = 0.1 ** k
+                np.testing.assert_allclose(g * 1000, cal[10:16, 0])
+                np.testing.assert_allclose(g * 100, cal[16:, 0])
+                np.testing.assert_allclose(1, cal[:, 1])
+
+    def test_off_1_2_1(self):
+        for k in range(6):
+            with self.subTest(i=k):
+                cal, _ = self.generate('off_1_2_1', i_range=(k, k + 1))
+                g = 0.1 ** k
+                np.testing.assert_allclose(g * 1000, cal[10:16, 0])
+                np.testing.assert_allclose(g * 100, cal[16:, 0])
+                np.testing.assert_allclose(1, cal[:, 1])
+
+    def test_nan_0_1_0(self):
+        cal, _ = self.generate('nan_0_1_0')
+        np.testing.assert_allclose(1000, cal[10:16, 0])
+        self.assertFalse(np.isfinite(cal[16, 0]))
+        np.testing.assert_allclose(100, cal[17:, 0])
+
+    def test_nan_0_2_0(self):
+        cal, _ = self.generate('nan_0_2_0')
+        np.testing.assert_allclose(1000, cal[10:16, 0])
+        self.assertFalse(np.isfinite(cal[16, 0]))
+        self.assertFalse(np.isfinite(cal[17, 0]))
+        np.testing.assert_allclose(100, cal[18:, 0])
+
+    def test_mean_1_3_1(self):
+        cal, _ = self.generate('mean_1_3_1')
+        np.testing.assert_allclose(1000, cal[10:16, 0])
+        mean_expect = np.mean([cal[15, 0], cal[19, 0]])
+        np.testing.assert_allclose(mean_expect, cal[16:19, 0])
+        np.testing.assert_allclose(100, cal[19:, 0])
+
+    def test_mean_2_3_1(self):
+        cal, _ = self.generate('mean_2_3_1')
+        np.testing.assert_allclose(1000, cal[10:16, 0])
+        mean_expect = np.mean([cal[14, 0], cal[15, 0], cal[19, 0]])
+        np.testing.assert_allclose(mean_expect, cal[16:19, 0])
+        np.testing.assert_allclose(100, cal[19:, 0])
+
+    def test_mean_1_3_2(self):
+        cal, _ = self.generate('mean_1_3_2')
+        np.testing.assert_allclose(1000, cal[10:16, 0])
+        mean_expect = np.mean([cal[15, 0], cal[19, 0], cal[20, 0]])
+        np.testing.assert_allclose(mean_expect, cal[16:19, 0])
+        np.testing.assert_allclose(100, cal[19:, 0])
+
+    def test_mean_1_n_1(self):
+        for k in range(6):
+            with self.subTest(i=k):
+                cal, _ = self.generate('mean_1_n_1', i_range=(k, k + 1))
+                n = 3 if k == 0 else 4
+                z = 16 + n
+                g = 0.1 ** k
+                np.testing.assert_allclose(g * 1000, cal[10:16, 0])
+                np.testing.assert_allclose(g * 550, cal[16:z, 0])
+                np.testing.assert_allclose(g * 100, cal[z:, 0])
 
 
 class TestStreamBuffer(unittest.TestCase):
@@ -259,6 +358,7 @@ class TestStreamBuffer(unittest.TestCase):
         self.assertIsNone(s)
         np.testing.assert_allclose(b.data_get(13, 14, 1)[0, 0, 0], b.stats_get(13, 14)[0, 0])
         np.testing.assert_allclose(np.mean(b.data_get(13, 29, 1)[:, 0, 0]), b.stats_get(13, 29)[0, 0])
+        self.assertEqual(0, b.status()['skip_count']['value'])
 
     def test_stats_direct_nan(self):
         b = self.stream_buffer_02()
@@ -273,6 +373,8 @@ class TestStreamBuffer(unittest.TestCase):
         self.assertTrue(np.isnan(b.stats_get(130, 135)[0, 0]))
         self.assertTrue(np.isnan(b.stats_get(247, 252)[0, 0]))
         self.assertFalse(np.isnan(b.stats_get(249, 254)[0, 0]))
+        self.assertEqual(1, b.status()['skip_count']['value'])
+        self.assertEqual(126, b.status()['sample_missing_count']['value'])
 
     def test_stats_over_single_reduction_exact(self):
         b = self.stream_buffer_01()
@@ -300,35 +402,86 @@ class TestStreamBuffer(unittest.TestCase):
         np.testing.assert_allclose(np.mean(b.data_get(9, 21, 1)[:, 0, 0]), b.stats_get(9, 21)[0, 0])
         np.testing.assert_allclose(np.mean(b.data_get(9, 101, 1)[:, 0, 0]), b.stats_get(9, 101)[0, 0])
         np.testing.assert_allclose(np.mean(b.data_get(5, 105, 1)[:, 0, 0]), b.stats_get(5, 105)[0, 0])
+        self.assertEqual(0, b.status()['skip_count']['value'])
 
     def test_stats_over_single_reduction_nan(self):
         b = self.stream_buffer_02()
         np.testing.assert_allclose(np.mean(b.data_get(120, 126, 1)[:, 0, 0]), b.stats_get(120, 130)[0, 0])
         np.testing.assert_allclose(np.mean(b.data_get(120, 126, 1)[:, 0, 0]), b.stats_get(120, 140)[0, 0])
         np.testing.assert_allclose(np.mean(b.data_get(110, 126, 1)[:, 0, 0]), b.stats_get(110, 130)[0, 0])
+        self.assertEqual(1, b.status()['skip_count']['value'])
+        self.assertEqual(126, b.status()['sample_missing_count']['value'])
 
     def test_stats_over_reductions_nan(self):
         b = self.stream_buffer_02()
         np.testing.assert_allclose(np.mean(b.data_get(0, 126, 1)[:, 0, 0]), b.stats_get(0, 200)[0, 0])
+        self.assertEqual(1, b.status()['skip_count']['value'])
+        self.assertEqual(126, b.status()['sample_missing_count']['value'])
 
     def test_insert_raw_simple(self):
         b = StreamBuffer(1000, [100, 100, 100], 1000.0)
         b.suppress_mode = 'off'
         expect = np.arange(126 * 2, dtype=np.uint16).reshape((126, 2))
-        b.insert_raw(np.left_shift(expect, 2))
+        raw = np.left_shift(expect, 2)
+        raw[1::2, 1] = np.bitwise_or(raw[1::2, 1], 0x0002)
+        b.insert_raw(raw)
         b.process()
         data = b.data_get(0, 126)
         np.testing.assert_allclose(expect[:, 0], data[:, 0, 0])
+        self.assertEqual(0, b.status()['skip_count']['value'])
 
     def test_insert_raw_wrap(self):
         b = StreamBuffer(200, [], 1000.0)
         expect = np.arange(250 * 2, dtype=np.uint16).reshape((250, 2))
-        b.insert_raw(np.left_shift(expect[:100], 2))
+        raw = np.left_shift(expect, 2)
+        raw[1::2, 1] = np.bitwise_or(raw[1::2, 1], 0x0002)
+        b.insert_raw(raw[:100])
         b.process()
-        b.insert_raw(np.left_shift(expect[100:], 2))
+        b.insert_raw(raw[100:])
         b.process()
         data = b.data_get(50, 250)
         np.testing.assert_allclose(expect[50:, 0], data[:, 0, 0])
+        self.assertEqual(0, b.status()['skip_count']['value'])
+
+    def test_insert_former_nan_case(self):
+        raw = np.array([
+            [61957, 16937],
+            [62317, 16935],
+            [62585, 16937],
+            [62853, 16935],
+            [65535, 16916],  # raw_i = 0xffff  (i_range=3)
+            [18932, 16942],
+            [8876, 16932],
+            [9788, 16938],
+            [10300, 16936],
+            [10368, 16930],
+            [10528, 16932],
+            [10584, 16938],
+            [10564, 16936],
+            [10568, 16942],
+            [12497, 16932],
+            [12733, 16946],
+            [12613, 16940],
+            [12561, 16930]], dtype=np.uint16)
+        b = StreamBuffer(200, [], 1000.0)
+        b.insert_raw(raw)
+        b.process()
+        self.assertEqual(0, b.status()['skip_count']['value'])
+
+    def test_i_range_off(self):
+        raw = np.array([
+            [0x1003, 0x1001],
+            [0x1003, 0x1003],
+            [0x1003, 0x1001],
+            [0x1003, 0x1003],
+            [0x1003, 0x1001],
+            [0x1003, 0x1003],
+            [0x1003, 0x1001],
+            [0x1003, 0x1003]], dtype=np.uint16)
+        b = StreamBuffer(200, [], 1000.0)
+        b.insert_raw(raw)
+        b.process()
+        self.assertEqual(0, b.samples_get(0, 8, fields=['current'])[0][-1])
 
     def test_voltage_range(self):
         b = StreamBuffer(200, [], 1000.0)

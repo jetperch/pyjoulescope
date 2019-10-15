@@ -186,7 +186,7 @@ class Device:
         self._statistics_callback = None
         self._parameters_defaults = PARAMETERS_DEFAULTS
         for p in PARAMETERS:
-            if p.permission == 'rw':
+            if p.permission == 'rw' and p.default is not None:
                 self._parameters[p.name] = name_to_value(p.name, p.default)
 
     def __str__(self):
@@ -269,6 +269,16 @@ class Device:
         :raise KeyError: if name not found.
         :raise ValueError: if value is not allowed
         """
+        if name == 'current_ranging':
+            if value is None or value in [False, 'off']:
+                self.parameter_set('current_ranging_type', 'off')
+                return
+            parts = value.split('_')
+            if len(parts) != 4:
+                raise ValueError(f'Invalid current_ranging value {value}')
+            for p, v in zip(['type', 'samples_pre', 'samples_window', 'samples_post'], parts):
+                self.parameter_set('current_ranging_' + p, v)
+            return
         value = name_to_value(name, value)
         self._parameters[name] = value
         p = PARAMETERS_DICT[name]
@@ -276,6 +286,8 @@ class Device:
             self._stream_settings_send()
         elif p.path == 'extio':
             self._extio_set()
+        elif p.path == 'current_ranging':
+            self._current_ranging_set()
 
     def parameter_get(self, name):
         """Get a parameter value.
@@ -283,6 +295,10 @@ class Device:
         :param name: The parameter name.
         :raise KeyError: if name not found.
         """
+        if name == 'current_ranging':
+            pnames = ['type', 'samples_pre', 'samples_window', 'samples_post']
+            values = [str(self.parameter_get('current_ranging_' + p)) for p in pnames]
+            return '_'.join(values)
         value = self._parameters[name]
         return value_to_name(name, value)
 
@@ -324,6 +340,7 @@ class Device:
         self._usb.open(event_callback_fn)
         sb_len = self._sampling_frequency * self._stream_buffer_duration
         self.stream_buffer = StreamBuffer(sb_len, self._reductions, self._sampling_frequency)
+        self._current_ranging_set()
         try:
             info = self.info()
             if info is not None:
@@ -518,6 +535,14 @@ class Device:
             'device', 'vendor', request=UsbdRequest.EXTIO,
             value=0, index=0, data=msg)
         _ioerror_on_bad_result(rv)
+
+    def _current_ranging_set(self):
+        if self.stream_buffer is None:
+            return
+        names = ['current_ranging_type', 'current_ranging_samples_pre',
+                 'current_ranging_samples_window', 'current_ranging_samples_post']
+        s = '_'.join([str(self.parameter_get(n)) for n in names])
+        self.stream_buffer.suppress_mode = s
 
     def _on_data(self, data):
         # DeviceDriverApi.read_stream_start data_fn callback
