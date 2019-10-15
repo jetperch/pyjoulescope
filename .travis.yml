@@ -19,10 +19,10 @@ matrix:
     - os: windows
       language: shell  # 'language: python' is an error on Travis CI windows 
       env: >-
-        PATH=/c/Python37:/c/Python37/Scripts:$PATH      
+        PATH=/c/Python38:/c/Python38/Scripts:$PATH      
       before_install:
-        - choco install python
-        - cp /c/Python37/python.exe /c/Python37/python3.exe
+        - choco install python --version=3.8.0
+        - cp /c/Python38/python.exe /c/Python38/python3.exe
 addons:
   apt:
     pacakges:
