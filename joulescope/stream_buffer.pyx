@@ -675,7 +675,7 @@ cdef class RawProcessor:
                     while idx < 0:
                         idx += SUPPRESS_HISTORY_MAX
                     for suppress_idx in range(self._suppress_samples_pre):
-                        while idx > SUPPRESS_HISTORY_MAX:
+                        while idx >= SUPPRESS_HISTORY_MAX:
                             idx -= SUPPRESS_HISTORY_MAX
                         cal_i += self.d_history[idx][0]
                         suppress_filter_counter += 1

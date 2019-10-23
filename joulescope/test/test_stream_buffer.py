@@ -100,7 +100,8 @@ class TestRawProcessor(unittest.TestCase):
         cal, bits = r.process_bulk(raw)
         np.testing.assert_allclose(8, np.bitwise_and(0x0f, bits))
 
-    def generate(self, mode, i_range=None):
+    def generate(self, mode, i_range=None, range_idx=None):
+        range_idx = 16 if range_idx is None else int(range_idx)
         if i_range is None:
             i_range = 0, 1
         length = 32
@@ -115,8 +116,8 @@ class TestRawProcessor(unittest.TestCase):
 
         raw = np.empty(length * 2, dtype=np.uint16)
         i_range_ = np.zeros(length, dtype=np.uint8)
-        i_range_[:16] = i_range[0]
-        i_range_[16:] = i_range[1]
+        i_range_[:range_idx] = i_range[0]
+        i_range_[range_idx:] = i_range[1]
         raw[::2] = np.bitwise_or(
             np.left_shift(current, 2),
             np.bitwise_and(i_range_, 0x03))
@@ -198,6 +199,13 @@ class TestRawProcessor(unittest.TestCase):
                 np.testing.assert_allclose(g * 1000, cal[10:16, 0])
                 np.testing.assert_allclose(g * 550, cal[16:z, 0])
                 np.testing.assert_allclose(g * 100, cal[z:, 0])
+
+    def test_suppress_history_rollover_2_1_0(self):
+        for k in range(16, 25):
+            with self.subTest(i=k):
+                cal, _ = self.generate('mean_2_1_0', range_idx=k)
+                y = np.mean(cal[(k - 2):k, 0])
+                np.testing.assert_allclose(y, cal[k, 0])
 
 
 class TestStreamBuffer(unittest.TestCase):
