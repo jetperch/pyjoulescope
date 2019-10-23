@@ -6,7 +6,7 @@ This file contains the list of changes made to pyjoulescope.
 
 ## 0.6.10
 
-2019 Oct 23 [in progress]
+2019 Oct 23
 
 *   Fixed current range glitch filter using invalid sample data.
     The glitch filter could occasionally use one sample of invalid data during
