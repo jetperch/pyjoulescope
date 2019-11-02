@@ -19,18 +19,18 @@
 import sys
 import argparse
 import logging
-from joulescope.command import capture, capture_usb, gpo_demo, program, recording
+from joulescope.entry_points import capture, capture_usb, gpo_demo, program, recording
 
 
-commands = [capture, capture_usb, gpo_demo, program, recording]
+entry_points = [capture, capture_usb, gpo_demo, program, recording]
 """This list of available command modules.  Each module must contain a 
 parser_config(subparser) function.  The function must return the callable(args)
 that will be executed for the command."""
 
 
 try:
-    from joulescope_ui import command as ui_command
-    commands.insert(0, ui_command)
+    from joulescope_ui.entry_points import ui as ui_entry_point
+    entry_points.insert(0, ui_entry_point)
 except ImportError:
     ui_command = None
 
@@ -41,10 +41,10 @@ def get_parser():
         dest='subparser_name',
         help='The command to execute')
 
-    for command in commands:
-        default_name = command.__name__.split('.')[-1]
-        name = getattr(command, 'NAME', default_name)
-        cfg_fn = command.parser_config
+    for entry_point in entry_points:
+        default_name = entry_point.__name__.split('.')[-1]
+        name = getattr(entry_point, 'NAME', default_name)
+        cfg_fn = entry_point.parser_config
         p = subparsers.add_parser(name, help=cfg_fn.__doc__)
         cmd_fn = cfg_fn(p)
         if not callable(cmd_fn):

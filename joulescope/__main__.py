@@ -16,7 +16,7 @@
 
 import sys
 
-from joulescope.command.runner import run
+from joulescope.entry_points.runner import run
 
 if __name__ == "__main__":
     sys.exit(run())
