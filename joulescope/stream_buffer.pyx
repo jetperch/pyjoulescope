@@ -1311,12 +1311,12 @@ cdef class StreamBuffer:
 
         # log.info('stats_get(%r, %r)', start, stop)
         if start < 0 or stop < 0:
-            log.warning('sample_id < 0: %d, %d', start, stop)
+            # log.warning('sample_id < 0: %d, %d', start, stop)
             return None
         if not self.range_check(start, stop):
             return None
         if stop <= start:
-            log.warning('stop <= start: %d <= %d', start, stop)
+            # log.warning('stop <= start: %d <= %d', start, stop)
             return None
 
         stats_compute_reset(stats_accum)
@@ -1425,7 +1425,7 @@ cdef class StreamBuffer:
             buffer += STATS_FLOATS_PER_SAMPLE
             buffer_samples -= 1
         if buffer_samples != buffer_samples_orig:
-            log.warning('_data_get filled %s', buffer_samples_orig - buffer_samples)
+            log.debug('_data_get filled %s', buffer_samples_orig - buffer_samples)
 
         if increment <= 1:
             # direct copy
