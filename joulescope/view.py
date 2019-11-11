@@ -144,6 +144,8 @@ class View:
                 rv = self._samples_get(**args)
             elif cmd == 'statistics_get':
                 rv = self._statistics_get(**args)
+            elif cmd == 'statistics_get_multiple':
+                rv = self._statistics_get_multiple(**args)
             elif cmd == 'start':
                 rv = self._start()
             elif cmd == 'stop':
@@ -411,6 +413,9 @@ class View:
         t_stop = s2 / self.sampling_frequency
         return stats_to_api(d, t_start, t_stop)
 
+    def _statistics_get_multiple(self, ranges, units=None, source_id=None):
+        return [self._statistics_get(x[0], x[1], units=units) for x in ranges]
+
     def open(self):
         self.close()
         self._log.info('open')
@@ -528,6 +533,14 @@ class View:
             return self._post_block('statistics_get', args)
         else:
             self._post('statistics_get', args=args, cbk=callback)
+            return None
+
+    def statistics_get_multiple(self, ranges, units=None, callback=None, source_id=None):
+        args = {'ranges': ranges, 'units': units, 'source_id': source_id}
+        if callback is None:
+            return self._post_block('statistics_get_multiple', args)
+        else:
+            self._post('statistics_get_multiple', args=args, cbk=callback)
             return None
 
     def ping(self, *args, **kwargs):
