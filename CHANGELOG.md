@@ -11,6 +11,7 @@ This file contains the list of changes made to pyjoulescope.
 *   Renamed "command" to "entry_point" to prevent confusion with UI "commands".
 *   Added "statistics_get_multiple" to view, which allows for markers to be
     fetched together.
+*   Changed libusb device name to match Windows device name: Joulescope:xxxxxx.
 
 
 ## 0.6.10
