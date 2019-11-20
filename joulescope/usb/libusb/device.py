@@ -745,7 +745,7 @@ class LibUsbDevice:
         self._event_callback_fn = None
 
     def __str__(self):
-        return f'Joulescope {self.serial_number}'
+        return f'Joulescope:{self.serial_number}'
 
     @property
     def serial_number(self):
