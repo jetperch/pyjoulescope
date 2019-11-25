@@ -12,6 +12,8 @@ This file contains the list of changes made to pyjoulescope.
 *   Added "statistics_get_multiple" to view, which allows for markers to be
     fetched together.
 *   Changed libusb device name to match Windows device name: Joulescope:xxxxxx.
+*   Added support for setting the reduction frequency, which is normally used
+    for statistics display, such as the UI multimeter.
 
 
 ## 0.6.10

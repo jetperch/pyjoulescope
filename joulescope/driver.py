@@ -236,6 +236,20 @@ class Device:
         if self.stream_buffer is not None:
             log.info('stream_buffer_duration change will not take effect until close() then open()')
 
+    @property
+    def reduction_frequency(self):
+        return np.prod(self._reductions)
+
+    @reduction_frequency.setter
+    def reduction_frequency(self, frequency):
+        if frequency < 1 or frequency > 100:
+            raise ValueError(f'reduction_frequency {frequency} not between 1 Hz and 100 Hz')
+        elif frequency < 50:
+            r = [200, 100, int(100 // frequency)]  # three reduction levels
+        else:
+            r = [200, int((200 * 50) // frequency)]  # two reduction levels
+        self._reductions = r
+
     def view_factory(self):
         """Construct a new View into the device's data.
 
