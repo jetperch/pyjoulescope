@@ -82,11 +82,24 @@ class TestAttributes(unittest.TestCase):
         d = Device(None)
         self.assertEqual(2000000, d.sampling_frequency)
         self.assertEqual(30, d.stream_buffer_duration)
+        self.assertEqual(2, d.reduction_frequency)
         self.assertIsNone(d.stream_buffer)
         self.assertIsNone(d.calibration)
+        self.assertEqual('i_range', d.parameters(name='i_range').name)
+        self.assertEqual('off', d.parameter_get('i_range'))
+        with self.assertRaises(Exception):
+            d.serial_number
+        with self.assertRaises(Exception):
+            d.info()
+        self.assertFalse(d.is_streaming)
+        with self.assertRaises(Exception):
+            d.status()
+        with self.assertRaises(Exception):
+            d.extio_status()
 
     def reduction_frequency(self):
         d = Device(None)
-        self.assertEqual(2, d.reduction_frequency)
-        d.reduction_frequency = 10
-        self.assertEqual(10, d.reduction_frequency)
+        for frequency in [1, 2, 4, 10, 20, 50, 100]:
+            with self.subtest(frequency=frequency):
+                d.reduction_frequency = frequency
+                self.assertEqual(frequency, d.reduction_frequency)
