@@ -238,7 +238,7 @@ class Device:
 
     @property
     def reduction_frequency(self):
-        return np.prod(self._reductions)
+        return self.sampling_frequency / np.prod(self._reductions)
 
     @reduction_frequency.setter
     def reduction_frequency(self, frequency):

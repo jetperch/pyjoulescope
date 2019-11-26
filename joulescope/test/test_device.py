@@ -19,7 +19,7 @@ This test requires that JouleScope hardware be attached to this PC!
 """
 
 import unittest
-from joulescope.driver import scan, UsbdRequest, LOOPBACK_BUFFER_SIZE
+from joulescope.driver import scan, UsbdRequest, LOOPBACK_BUFFER_SIZE, Device
 from joulescope.usb import hw_tests
 from joulescope.pattern_buffer import PatternBuffer
 
@@ -74,3 +74,19 @@ class TestPattern(unittest.TestCase):
         for i in range(10):
             v = self.device.read(contiguous_duration=0.125, out_format='raw')
             self.assertEqual((self.device.sampling_frequency // 8, 2), v.shape)
+
+
+class TestAttributes(unittest.TestCase):
+
+    def test_defaults(self):
+        d = Device(None)
+        self.assertEqual(2000000, d.sampling_frequency)
+        self.assertEqual(30, d.stream_buffer_duration)
+        self.assertIsNone(d.stream_buffer)
+        self.assertIsNone(d.calibration)
+
+    def reduction_frequency(self):
+        d = Device(None)
+        self.assertEqual(2, d.reduction_frequency)
+        d.reduction_frequency = 10
+        self.assertEqual(10, d.reduction_frequency)
