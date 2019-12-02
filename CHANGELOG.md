@@ -4,9 +4,9 @@
 This file contains the list of changes made to pyjoulescope.
 
 
-## 0.6.11
+## 0.7.0
 
-2019 Nov 2 [in progress]
+2019 Dec 2 [in progress]
 
 *   Renamed "command" to "entry_point" to prevent confusion with UI "commands".
 *   Added "statistics_get_multiple" to view, which allows for markers to be
@@ -14,6 +14,8 @@ This file contains the list of changes made to pyjoulescope.
 *   Changed libusb device name to match Windows device name: Joulescope:xxxxxx.
 *   Added support for setting the reduction frequency, which is normally used
     for statistics display, such as the UI multimeter.
+*   Forced StreamBuffer array allocations using np.full.  np.empty and np.zeros
+    appear to defer allocation which can degrade performance.
 
 
 ## 0.6.10

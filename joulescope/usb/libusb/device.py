@@ -358,7 +358,7 @@ class Transfer:
             log.debug('Transfer: copy buffer %d', self.size)
         except TypeError:
             self.size = size
-            self.buffer = np.empty(self.size, dtype=np.uint8)
+            self.buffer = np.full(self.size, 0, dtype=np.uint8)
             log.debug('Transfer: create buffer %d', self.size)
         self.transfer = _lib.libusb_alloc_transfer(0)  # type: _libusb_transfer
         self.addr = ctypes.addressof(self.transfer.contents)

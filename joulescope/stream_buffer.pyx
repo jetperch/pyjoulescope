@@ -855,17 +855,17 @@ cdef class StreamBuffer:
         length = int(np.ceil(length / self.reduction_step)) * self.reduction_step
         self.length = length
 
-        self.raw = np.empty((length * 2), dtype=np.uint16)
+        self.raw = np.full((length * 2), 0, dtype=np.uint16)
         self.raw = np.ascontiguousarray(self.raw, dtype=np.uint16)
         cdef np.ndarray[np.uint16_t, ndim=1, mode = 'c'] raw_c = self.raw
         self.raw_ptr = <uint16_t *> raw_c.data
 
-        self.data = np.empty((length * 2), dtype=np.float32)
+        self.data = np.full((length * 2), 0.0, dtype=np.float32)
         self.data = np.ascontiguousarray(self.data, dtype=np.float32)
         cdef np.ndarray[np.float32_t, ndim=1, mode = 'c'] data_c = self.data
         self.data_ptr = <float *> data_c.data
 
-        self.bits = np.empty(length, dtype=np.uint8)
+        self.bits = np.full(length, 0, dtype=np.uint8)
         self.bits = np.ascontiguousarray(self.bits, dtype=np.uint8)
         cdef np.ndarray[np.uint8_t, ndim=1, mode = 'c'] bits_c = self.bits
         self.bits_ptr = <uint8_t *> bits_c.data

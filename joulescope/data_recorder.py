@@ -68,7 +68,7 @@ class DataRecorder:
         self._reductions_per_tlv = self._samples_per_tlv // self._samples_per_reduction
         reduction_block_size = self._samples_per_block // self._samples_per_reduction
 
-        self._reduction = np.empty((reduction_block_size, STATS_FIELDS, STATS_VALUES), dtype=np.float32)
+        self._reduction = np.full((reduction_block_size, STATS_FIELDS, STATS_VALUES), 0.0, dtype=np.float32)
         self._reduction[:] = np.nan
 
         self._sample_id_tlv = 0  # sample id for start of next TLV

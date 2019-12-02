@@ -188,7 +188,7 @@ class TransferOverlapped:
     def __init__(self, event, size):
         self.ov = kernel32.Overlapped(event)
         self.ptr = pointer(self.ov)
-        self.data = np.empty(size, dtype=np.uint8)
+        self.data = np.full(size, 0, dtype=np.uint8)
         self.b = self.data.ctypes.data_as(POINTER(c_ubyte))
         self.size = size
 
