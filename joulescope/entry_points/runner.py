@@ -32,7 +32,7 @@ try:
     from joulescope_ui.entry_points import ui as ui_entry_point
     entry_points.insert(0, ui_entry_point)
 except ImportError:
-    ui_command = None
+    ui_entry_point = None
 
 
 def get_parser():
@@ -61,8 +61,8 @@ def run():
     parser = get_parser()
     args = parser.parse_args()
     if args.subparser_name is None:
-        if ui_command is not None:
-            return ui_command.run()
+        if ui_entry_point is not None:
+            return ui_entry_point.run()
         else:
             print('No command provided and user interface not found.  Please specify a command.')
             parser.print_help()

@@ -1,5 +1,5 @@
 
-# ![Joulescope](https://www.joulescope.com/images/joulescope_logo-PNG-Transparent-Exact-Small.png "Joulescope Logo")
+# ![Joulescope](https://download.joulescope.com/press/joulescope_logo-PNG-Transparent-Exact-Small.png "Joulescope Logo")
 
 [![Build Status](https://travis-ci.org/jetperch/pyjoulescope.svg?branch=master)](https://travis-ci.org/jetperch/pyjoulescope)
 
@@ -37,7 +37,7 @@ If you just want to use Joulescope, you can
 Install [Python](https://www.python.org/) 3.6+ 64-bit.  If you already have
 Python installed, verify 3.6+ and 64-bit:
 
-    python3 -V -V
+    python3 -VV
 
 Install this python package from pypi:
 
