@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from joulescope.paths import JOULESCOPE_DIR
 from joulescope.driver import scan, scan_require_one, scan_for_changes, \
     bootloaders_run_application, bootloader_go
 import sys
@@ -28,7 +27,7 @@ __version__ = VERSION
 
 __all__ = [scan, scan_require_one, scan_for_changes, bootloaders_run_application,
            bootloader_go,
-           JOULESCOPE_DIR, VERSION, __version__]
+           VERSION, __version__]
 
 if sys.hexversion < 0x030600:
     raise RuntimeError('joulescope requires Python 3.6+ 64-bit')

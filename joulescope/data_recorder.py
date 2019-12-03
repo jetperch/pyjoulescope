@@ -13,14 +13,12 @@
 # limitations under the License.
 
 from . import datafile
-from joulescope import JOULESCOPE_DIR
 from joulescope.calibration import Calibration
 from joulescope.stream_buffer import reduction_downsample, Statistics, stats_to_api, \
     STATS_FIELDS, STATS_VALUES, I_RANGE_MISSING, SUPPRESS_SAMPLES_MAX, RawProcessor
 import json
 import numpy as np
 import datetime
-import os
 import logging
 
 log = logging.getLogger(__name__)
@@ -33,8 +31,7 @@ SAMPLES_PER_BLOCK = 100000
 def construct_record_filename():
     time_start = datetime.datetime.utcnow()
     timestamp_str = time_start.strftime('%Y%m%d_%H%M%S')
-    name = '%s.jls' % (timestamp_str, )
-    return os.path.join(JOULESCOPE_DIR, name)
+    return f'{timestamp_str}.jls'
 
 
 class DataRecorder:

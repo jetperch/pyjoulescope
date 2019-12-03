@@ -13,7 +13,6 @@
 # limitations under the License.
 
 from joulescope import usb
-from joulescope.paths import JOULESCOPE_DIR
 from joulescope.usb.device_thread import DeviceThread
 from .parameters_v1 import PARAMETERS, PARAMETERS_DICT, PARAMETERS_DEFAULTS, name_to_value, value_to_name
 from . import datafile
@@ -25,7 +24,6 @@ import struct
 import copy
 import time
 import json
-import os
 import io
 import queue
 import numpy as np
@@ -170,7 +168,6 @@ class Device:
     """
 
     def __init__(self, usb_device, config=None):
-        os.makedirs(JOULESCOPE_DIR, exist_ok=True)
         self._usb = DeviceThread(usb_device)
         self._config = config
         self._parameters = {}

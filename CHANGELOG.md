@@ -16,6 +16,8 @@ This file contains the list of changes made to pyjoulescope.
     for statistics display, such as the UI multimeter.
 *   Forced StreamBuffer array allocations using np.full.  np.empty and np.zeros
     appear to defer allocation which can degrade performance.
+*   Removed joulescope.paths which is no longer necessary.
+    joulescope.data_recorder.construct_record_filename no longer includes path.
 
 
 ## 0.6.10
