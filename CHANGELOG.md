@@ -6,7 +6,7 @@ This file contains the list of changes made to pyjoulescope.
 
 ## 0.7.0
 
-2019 Dec 2 [in progress]
+2019 Dec 4
 
 *   Renamed "command" to "entry_point" to prevent confusion with UI "commands".
 *   Added "statistics_get_multiple" to view, which allows for markers to be
