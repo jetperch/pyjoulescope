@@ -4,6 +4,13 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 0.7.1
+
+2019 Dec 14 [in progress]
+
+*   Refactored StreamBuffer to split out UsbBulkProcessor.
+
+
 ## 0.7.0
 
 2019 Dec 4

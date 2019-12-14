@@ -416,6 +416,101 @@ cdef void cal_init(js_stream_buffer_calibration_s * self):
         self.voltage_gain[i] = <float> 1.0
 
 
+ctypedef void (*usb_bulk_data_processor_cbk_fn)(object user_data,
+                                                const uint16_t *data, size_t length,
+                                                uint8_t voltage_range)
+
+
+cdef class UsbBulkProcessor:
+    """Process bulk packets received over USB into sample data.
+
+    Detect missing packets and insert samples as needed.
+    """
+
+    cdef uint8_t _voltage_range
+    cdef uint64_t _packet_index
+    # packet_index 64-bits is enough for 18 million years at 2 MSPS, 126 samples / packet
+    #  2**63 / (2000000/126)/ (60 * 60 * 24 * 365)
+    cdef uint64_t _packet_missing_count
+    cdef uint64_t _packet_type_invalid_count
+    cdef uint64_t _packet_data_invalid_count
+
+    cdef object _missing_pkt
+    cdef uint16_t *_missing_pkt_ptr
+    cdef usb_bulk_data_processor_cbk_fn _cbk_fn
+    cdef object _cbk_user_data
+
+    def __cinit__(self):
+        self._missing_pkt = np.full((SAMPLES_PER_PACKET * 2), 0xffff, dtype=np.uint16)
+        assert(self._missing_pkt.flags['C_CONTIGUOUS'])
+        cdef np.ndarray[np.uint16_t, ndim=1, mode = 'c'] missing_pkt_c = self._missing_pkt
+        self._missing_pkt_ptr = <uint16_t *> missing_pkt_c.data
+
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self._voltage_range = 0
+        self._packet_index = 0
+        self._packet_missing_count = 0
+        self._packet_type_invalid_count = 0
+        self._packet_data_invalid_count = 0
+
+    cdef callback_set(self, usb_bulk_data_processor_cbk_fn cbk, object user_data):
+        self._cbk_fn = cbk
+        self._cbk_user_data = user_data
+
+    def status(self):
+        return {
+            'voltage_range': {'value': self._voltage_range, 'units': ''},
+            'packet_index': {'value': self._packet_index, 'units': 'packets'},
+            'packet_missing_count': {'value': self._packet_missing_count, 'units': 'packets'},
+            'packet_type_invalid_count': {'value': self._packet_type_invalid_count, 'units': 'packets'},
+            'packet_data_invalid_count': {'value': self._packet_data_invalid_count, 'units': 'packets'},
+        }
+
+    cdef void process(self, const uint8_t *data, size_t length):
+        """Process one or more USB frames into samples.
+        
+        :param data: The pointer to the USB frame data.
+        :param length: The length of data in bytes.
+        
+        This function invokes the callback for the samples contained
+        in each USB frame that contains sample data.
+        """
+        cdef uint8_t buffer_type
+        cdef uint8_t status
+        cdef uint16_t pkt_length
+        cdef uint8_t voltage_range
+        cdef uint64_t pkt_index
+        # cdef uint16_t usb_frame_index
+
+        while length >= PACKET_TOTAL_SIZE:
+            buffer_type = data[0]
+            if 1 == buffer_type:
+                status = data[1]
+                pkt_length = (data[2] | ((<uint16_t> data[3] & 0x7f) << 8)) & 0x7fff
+                voltage_range = <uint8_t> ((data[3] >> 7) & 0x01)
+                pkt_index = <uint64_t> (data[4] | ((<uint16_t> data[5]) << 8))
+                # usb_frame_index = data[6] | ((<uint16_t> data[7]) << 8)
+                if (0 == status) and (PACKET_TOTAL_SIZE == pkt_length):
+                    while (self._packet_index & 0xffff) != pkt_index:
+                        self._cbk_fn(self._cbk_user_data,
+                                     self._missing_pkt_ptr, SAMPLES_PER_PACKET * 2,
+                                     self._voltage_range)
+                        self._packet_index += 1
+                        self._packet_missing_count += 1
+                    self._voltage_range = voltage_range
+                else:
+                    self._packet_data_invalid_count += 1
+                self._cbk_fn(self._cbk_user_data, <uint16_t *> &data[8], SAMPLES_PER_PACKET * 2, self._voltage_range)
+                self._packet_index += 1
+            else:
+                self._packet_type_invalid_count += 1
+            data += PACKET_TOTAL_SIZE
+            length -= PACKET_TOTAL_SIZE
+
+
 ctypedef void (*raw_processor_cbk_fn)(object user_data, float cal_i, float cal_v, uint8_t bits)
 
 
@@ -745,8 +840,13 @@ cdef class RawProcessor:
         if self.d_history_idx >= SUPPRESS_HISTORY_MAX:
             self.d_history_idx = 0
 
-
     def process_bulk(self, raw):
+        """Process a group of raw samples in bulk.
+
+        :param raw: The np.ndarray of uint16 raw data samples.
+        :return: tuple (cal, bits).  cal[0::2] is current,
+            cal[1::2] is voltage.
+        """
         cdef int32_t idx
         cdef uint16_t raw_i
         cdef uint16_t raw_v
@@ -760,13 +860,11 @@ cdef class RawProcessor:
         cdef np.ndarray[np.uint16_t, ndim=1, mode = 'c'] raw_c = raw
         self.bulk_raw = <uint16_t *> raw_c.data
 
-        d_cal = np.empty((self.bulk_length, 2), dtype=np.float32)
-        d_cal = np.ascontiguousarray(d_cal, dtype=np.float32)
+        d_cal = np.full((self.bulk_length, 2), 0, dtype=np.float32)
         cdef np.ndarray[np.float32_t, ndim=2, mode = 'c'] d_cal_c = d_cal
         self.bulk_cal = <float *> d_cal_c.data
 
-        d_bits = np.empty(self.bulk_length, dtype=np.uint8)
-        d_bits = np.ascontiguousarray(d_bits, dtype=np.uint8)
+        d_bits = np.full(self.bulk_length, 0, dtype=np.uint8)
         cdef np.ndarray[np.uint8_t, ndim=1, mode = 'c'] d_bits_c = d_bits
         self.bulk_bits = <uint8_t *> d_bits_c.data
 
@@ -806,11 +904,10 @@ cdef class StreamBuffer:
         the reduction amount for each resuting sample in units of samples
         of the previous reduction.  Reduction 0 is in raw sample units.
     """
+    cdef UsbBulkProcessor _usb_bulk_processor
     cdef RawProcessor _raw_processor
     cdef uint32_t reduction_step
     cdef uint32_t length # in samples
-    cdef uint64_t packet_index
-    cdef uint64_t packet_index_offset
     cdef uint64_t device_sample_id      # exclusive (last received is processed_sample_id - 1)
     cdef uint64_t _preprocessed_sample_id
     cdef uint64_t processed_sample_id   # exclusive (last processed is processed_sample_id - 1)
@@ -837,6 +934,8 @@ cdef class StreamBuffer:
     cdef object _energy_picojoules  # python integer for infinite precision
 
     def __cinit__(self, length, reductions, sampling_frequency):
+        self._usb_bulk_processor = UsbBulkProcessor()
+        self._usb_bulk_processor.callback_set(<usb_bulk_data_processor_cbk_fn> self._process_samples, self)
         self._raw_processor = RawProcessor()
         self._raw_processor.callback_set(<raw_processor_cbk_fn> self._process_stats, self)
         cdef uint32_t r_samples = 1
@@ -856,17 +955,17 @@ cdef class StreamBuffer:
         self.length = length
 
         self.raw = np.full((length * 2), 0, dtype=np.uint16)
-        self.raw = np.ascontiguousarray(self.raw, dtype=np.uint16)
+        assert(self.raw.flags['C_CONTIGUOUS'])
         cdef np.ndarray[np.uint16_t, ndim=1, mode = 'c'] raw_c = self.raw
         self.raw_ptr = <uint16_t *> raw_c.data
 
         self.data = np.full((length * 2), 0.0, dtype=np.float32)
-        self.data = np.ascontiguousarray(self.data, dtype=np.float32)
+        assert(self.data.flags['C_CONTIGUOUS'])
         cdef np.ndarray[np.float32_t, ndim=1, mode = 'c'] data_c = self.data
         self.data_ptr = <float *> data_c.data
 
         self.bits = np.full(length, 0, dtype=np.uint8)
-        self.bits = np.ascontiguousarray(self.bits, dtype=np.uint8)
+        assert(self.bits.flags['C_CONTIGUOUS'])
         cdef np.ndarray[np.uint8_t, ndim=1, mode = 'c'] bits_c = self.bits
         self.bits_ptr = <uint8_t *> bits_c.data
 
@@ -1047,8 +1146,6 @@ cdef class StreamBuffer:
         stats_compute_reset(self.stats)
 
     def reset(self):
-        self.packet_index = 0
-        self.packet_index_offset = 0
         self.device_sample_id = 0
         self._preprocessed_sample_id = 0
         self.processed_sample_id = 0
@@ -1115,63 +1212,6 @@ cdef class StreamBuffer:
         idx *= self.reductions[0].samples_per_step
         stats_compute_end(self.stats, self.data_ptr, self.bits_ptr, self.length, idx, length, self.stats_counter)
 
-    cdef void _insert_usb_bulk(self, const uint8_t *data, size_t length):
-        cdef uint8_t buffer_type
-        cdef uint8_t status
-        cdef uint16_t pkt_length
-        cdef uint64_t pkt_index
-        cdef uint64_t sample_id
-        cdef uint32_t idx
-        cdef uint32_t idx2
-        cdef uint32_t samples
-        cdef uint32_t samples_to_end
-
-        while length >= PACKET_TOTAL_SIZE:
-            buffer_type = data[0]
-            status = data[1]
-            pkt_length = (data[2] | ((<uint16_t> data[3] & 0x7f) << 8)) & 0x7fff
-            self._raw_processor.voltage_range = <uint8_t> ((data[3] >> 7) & 0x01)
-            pkt_index = <uint64_t> (data[4] | ((<uint16_t> data[5]) << 8))
-            # uint16_t usb_frame_index = data[6] | ((<uint16_t> data[7]) << 8)
-            length -= PACKET_TOTAL_SIZE
-
-            if (1 != buffer_type) or (0 != status) or (PACKET_TOTAL_SIZE != pkt_length):
-                data += PACKET_TOTAL_SIZE
-                continue
-            pkt_index += self.packet_index_offset
-            while pkt_index < self.packet_index:
-                pkt_index += PACKET_INDEX_WRAP
-                self.packet_index_offset += PACKET_INDEX_WRAP
-            sample_id = pkt_index * SAMPLES_PER_PACKET
-            idx = self.device_sample_id % self.length
-
-            if sample_id < self.device_sample_id:
-                log.warning("WARNING: duplicate data")
-            elif self.device_sample_id < sample_id:
-                log.info("Filled %r missing samples (%r, %r) with NaN",
-                         sample_id - self.device_sample_id, self.device_sample_id, sample_id)
-                while self.device_sample_id < sample_id:
-                    idx2 = idx * 2
-                    self.raw[idx2 + 0] = 0xffff  # missing sample is i_range 7 with raw_i = 0x3fff
-                    self.raw[idx2 + 1] = 0xffff
-                    idx += 1
-                    if idx >= self.length:
-                        idx = 0
-                    self.device_sample_id += 1
-
-            samples = SAMPLES_PER_PACKET
-            data += PACKET_HEADER_SIZE  # skip header
-            if (idx + SAMPLES_PER_PACKET) > self.length:
-                samples_to_end = self.length - idx
-                memcpy(&self.raw_ptr[idx * 2], data, samples_to_end * RAW_SAMPLE_SZ)
-                idx = 0
-                data += samples_to_end * RAW_SAMPLE_SZ
-                samples -= samples_to_end
-            memcpy(&self.raw_ptr[idx * 2], data, samples * RAW_SAMPLE_SZ)
-            data += samples * RAW_SAMPLE_SZ
-            self.device_sample_id = sample_id + SAMPLES_PER_PACKET
-            self.packet_index += 1
-
     cdef _check_stop(self):
         cdef bint duration_stop = self.device_sample_id >= self._sample_id_max
         cdef bint contiguous_stop = self._raw_processor.contiguous_count >= self._contiguous_max
@@ -1197,9 +1237,9 @@ cdef class StreamBuffer:
             data = np.ascontiguousarray(data, dtype=np.uint8)
             data_c = data
             data_ptr = <uint8_t *> data_c.data
-            self._insert_usb_bulk(data_ptr, len(data))
+            self._usb_bulk_processor.process(data_ptr, len(data))
         else:
-            self._insert_usb_bulk(data, len(data))
+            self._usb_bulk_processor.process(data, len(data))
         return self._check_stop()
 
     cpdef insert_raw(self, data):
@@ -1248,6 +1288,26 @@ cdef class StreamBuffer:
             if idx_start >= self.length:
                 idx_start = 0
             self._preprocessed_sample_id += 1
+
+    cdef void _process_samples(self,
+                               const uint16_t *data, size_t length,
+                               uint8_t voltage_range):
+        """Samples from UsbBulkProcessor.
+        
+        :param data: The data samples in i,v order.
+        :param length: The length of data in uint16_t.
+        :param voltage_range: The voltage range for these samples.
+        """
+        cdef uint64_t sample_count  = length // 2
+        cdef uint64_t k
+        cdef uint64_t idx
+        while sample_count:
+            idx = self.device_sample_id % self.length
+            k = sample_count if (idx + sample_count) <= self.length else self.length - idx
+            memcpy(&self.raw_ptr[idx * 2], data, k * RAW_SAMPLE_SZ)
+            data += k * 2
+            self.device_sample_id += k
+            sample_count -= k
 
     cdef void _process_stats(self, float cal_i, float cal_v, uint8_t bits):
         cdef uint32_t idx
