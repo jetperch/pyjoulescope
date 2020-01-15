@@ -176,7 +176,7 @@ class Calibration:
         tag, value = next(r)
         public_key = value[8:]
         if keys is None:
-            keys = [public_keys.CALIBRATION_SIGNING]
+            keys = [public_keys.CALIBRATION_SIGNING, public_keys.RECALIBRATION_01_SIGNING]
         if datafile.TAG_SIGNATURE_START != tag:
             self.signed = False
             log.warning('Invalid format: missing signature start tag')

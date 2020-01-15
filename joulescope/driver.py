@@ -98,6 +98,21 @@ class PacketType:
     INFO = 4
 
 
+CALIBRATION_INDEX_TO_NAME = {
+    0: 'factory',
+    1: 'active',
+}
+
+
+CALIBRATION_INDEX = {
+    None: 1,
+    1: 1,
+    'active': 1,
+    0: 0,
+    'factory': 0,
+}
+
+
 LOOPBACK_BUFFER_SIZE = 132
 """The maximum size of the hardware control loopback buffer for testing."""
 
@@ -361,7 +376,7 @@ class Device:
         try:
             self.calibration = self._calibration_read()
         except Exception:
-            log.warning('could not fetch calibration')
+            log.warning('could not fetch active calibration')
         try:
             cfg = self._parameters_defaults.get(self._config, {})
             for key, value in cfg.items():
@@ -408,12 +423,11 @@ class Device:
             log.exception('Could not decode INFO: %s', rv.data[8:])
         return None
 
-    def _calibration_read_raw(self, factory=None):
-        value = 0 if bool(factory) else 1
+    def _calibration_read_raw(self, cal_idx):
         rv = self._usb.control_transfer_in(
             'device', 'vendor',
             request=UsbdRequest.CALIBRATION,
-            value=value, index=0, length=datafile.HEADER_SIZE)
+            value=cal_idx, index=0, length=datafile.HEADER_SIZE)
         if 0 != rv.result:
             log.warning('calibration_read transfer failed %d', rv.result)
             return None
@@ -435,7 +449,7 @@ class Device:
             rv = self._usb.control_transfer_in(
                 'device', 'vendor',
                 request=UsbdRequest.CALIBRATION,
-                value=value, index=offset, length=k)
+                value=cal_idx, index=offset, length=k)
             if 0 != rv.result:
                 log.warning('calibration_read transfer failed %d', rv.result)
                 return None
@@ -444,18 +458,19 @@ class Device:
             calibration += chunk
         return calibration
 
-    def _calibration_read(self) -> Calibration:
+    def _calibration_read(self, calibration=None) -> Calibration:
+        cal_idx = CALIBRATION_INDEX[calibration]
         cal = Calibration()
         serial_number = self.serial_number
         cal.serial_number = serial_number
         try:
-            cal_data = self._calibration_read_raw()
+            cal_data = self._calibration_read_raw(cal_idx)
             if cal_data is None:
                 log.info('no calibration present')
             else:
                 cal.load(cal_data)
         except (ValueError, IOError):
-            log.info('failed reading calibration')
+            log.info('failed reading %s calibration', CALIBRATION_INDEX_TO_NAME[cal_idx])
         if cal.serial_number != serial_number:
             log.info('calibration serial number mismatch')
             return None
