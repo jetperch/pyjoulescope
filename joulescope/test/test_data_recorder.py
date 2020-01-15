@@ -80,7 +80,7 @@ class TestDataRecorder(unittest.TestCase):
         r = DataReader().open(fh)
         r.raw_processor.suppress_mode = 'off'
         data = r.get(0, 10, 1)
-        np.testing.assert_allclose(np.arange(0, 20, 2), data[:, 0, 0])
+        np.testing.assert_allclose(np.arange(0, 20, 2), data[:, 0]['mean'])
 
     def test_time_conversion(self):
         fh = self._create_file(0, 2)
@@ -100,51 +100,51 @@ class TestDataRecorder(unittest.TestCase):
         r.raw_processor.suppress_mode = 'off'
         # d = np.right_shift(r.raw(5, 10), 2)
         data = r.get(5, 10, 1)
-        np.testing.assert_allclose(np.arange(10, 20, 2), data[:, 0, 0])
+        np.testing.assert_allclose(np.arange(10, 20, 2), data[:, 0]['mean'])
 
     def test_write_read_direct_with_sample_overscan_before(self):
         fh = self._create_file(1, 3)  # will be samples 120 to 250 (not 126 to 252)
         r = DataReader().open(fh)
         r.raw_processor.suppress_mode = 'off'
         data = r.get(0, 140, 1)
-        np.testing.assert_allclose(np.arange(252, 532, 2), data[:, 0, 0])
+        np.testing.assert_allclose(np.arange(252, 532, 2), data[:, 0]['mean'])
 
     def test_write_read_stats_over_samples(self):
         fh = self._create_file(0, 2)
         r = DataReader().open(fh)
         r.raw_processor.suppress_mode = 'off'
         data = r.get(0, 50, 5)
-        np.testing.assert_allclose(np.arange(4, 100, 10), data[:, 0, 0])
+        np.testing.assert_allclose(np.arange(4, 100, 10), data[:, 0]['mean'])
 
     def test_write_read_stats_over_samples_offset(self):
         fh = self._create_file(0, 2)
         r = DataReader().open(fh)
         data = r.get(5, 50, 10)
-        np.testing.assert_allclose(np.arange(9, 70, 20), data[:, 0, 0])
+        np.testing.assert_allclose(np.arange(9, 70, 20), data[:, 0]['mean'])
 
     def test_write_read_get_reduction(self):
         fh = self._create_file(0, 2)
         r = DataReader().open(fh)
         data = r.get_reduction(0, 100)
-        np.testing.assert_allclose(np.arange(9, 200, 20), data[:, 0, 0])
+        np.testing.assert_allclose(np.arange(9, 200, 20), data[:, 0]['mean'])
 
     def test_write_read_get_reduction_offset(self):
         fh = self._create_file(0, 2)
         r = DataReader().open(fh)
         data = r.get_reduction(30, 95)
-        np.testing.assert_allclose(np.arange(69, 180, 20), data[:, 0, 0])
+        np.testing.assert_allclose(np.arange(69, 180, 20), data[:, 0]['mean'])
 
     def test_write_read_reduction_direct(self):
         fh = self._create_file(0, 2)
         r = DataReader().open(fh)
         data = r.get(0, 100, 10)
-        np.testing.assert_allclose(np.arange(9, 200, 20), data[:, 0, 0])
+        np.testing.assert_allclose(np.arange(9, 200, 20), data[:, 0]['mean'])
 
     def test_write_read_reduction_indirect(self):
         fh = self._create_file(0, 2)
         r = DataReader().open(fh)
         data = r.get(0, 200, 20)
-        np.testing.assert_allclose(np.arange(19, 400, 40), data[:, 0, 0])
+        np.testing.assert_allclose(np.arange(19, 400, 40), data[:, 0]['mean'])
 
     def _create_large_file(self, samples=None):
         """Create a large file.

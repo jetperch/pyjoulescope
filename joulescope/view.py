@@ -13,7 +13,8 @@
 # limitations under the License.
 
 from joulescope import span
-from joulescope.stream_buffer import StreamBuffer, stats_to_api, STATS_FIELDS, STATS_VALUES
+from joulescope.stream_buffer import StreamBuffer, stats_to_api, \
+    stats_array_factory, stats_array_clear
 import threading
 import queue
 import numpy as np
@@ -24,11 +25,13 @@ TIMEOUT = 10.0
 
 
 def to_view_statistics(b, idx, units):
+    length = b[:, idx]['length'].copy()
     return {
-        'μ': b[:, idx, 0].copy(),
-        'σ2': b[:, idx, 1].copy(),
-        'min': b[:, idx, 2].copy(),
-        'max': b[:, idx, 3].copy(),
+        'length': length,
+        'μ': b[:, idx]['mean'].copy(),
+        'σ2': b[:, idx]['variance'].copy() / (length - 1),
+        'min': b[:, idx]['min'].copy(),
+        'max': b[:, idx]['max'].copy(),
         'units': units,
     }
 
@@ -38,9 +41,7 @@ def data_array_to_update(x_limits, x, data_array):
 
     :param x_limits: The list of [x_min, x_max] or None if unknown.
     :param x: The np.ndarray of x-axis times.
-    :param data_array: The N x STATS_FIELDS x STATS_VALUES np.ndarray containing:
-        current, voltage, power, current_range, current_lsb, voltage_lsb
-        mean, variance, minimum, maximum
+    :param data_array: The np.ndarray((N, STATS_FIELD_COUNT), dtype=STATS_DTYPE)
     """
     return {
         'time': {
@@ -64,6 +65,15 @@ def data_array_to_update(x_limits, x, data_array):
     }
 
 
+def data_array_clear(s):
+    s[:, :]['length'] = 0
+    s[:, :]['mean'] = np.nan
+    s[:, :]['variance'] = np.nan
+    s[:, :]['min'] = np.nan
+    s[:, :]['max'] = np.nan
+
+
+
 class View:
 
     def __init__(self, stream_buffer, calibration):
@@ -71,7 +81,7 @@ class View:
         self._stream_buffer = None
         self._calibration = calibration
         self._x = None
-        self._data = None  # NxMx4 np.float32 [length][current, voltage, power][mean, var, min, max]
+        self._data = None  # [N, STATS_FIELD_COUNT]
         self._x_range = [0.0, 1.0]  # the initial default range
         self._samples_per = 1
         self._data_idx = 0
@@ -229,7 +239,7 @@ class View:
         elif not self._changed and 0 == delta:
             return
         elif self._changed or delta >= length:  # perform full recompute
-            self._data[:, :, :] = np.nan
+            data_array_clear(self._data)
             if data_idx_view_end > 0:
                 start_idx = (data_idx_view_end - length) * self._samples_per
                 # self.log.debug('recompute(start=%s, stop=%s, increment=%s)', start_idx, sample_id_end, self.samples_per)
@@ -238,9 +248,9 @@ class View:
             start_idx = self._data_idx * self._samples_per
             # self.log.debug('update(start=%s, stop=%s, increment=%s)', start_idx, sample_id_end, self.samples_per)
             self._data = np.roll(self._data, -delta, axis=0)
-            buffer.data_get(start_idx, sample_id_end, self._samples_per, self._data[-delta:, :, :])
+            buffer.data_get(start_idx, sample_id_end, self._samples_per, self._data[-delta:, :])
         else:
-            self._data[:, :, :] = np.nan
+            data_array_clear(self._data)
         self._data_idx = data_idx_view_end
         self._changed = False
 
@@ -266,7 +276,7 @@ class View:
         self._refresh_requested = True
         self._data_idx = 0
         if self._data is not None:
-            self._data[:, :, :] = np.nan
+            data_array_clear(self._data)
 
     def _start(self):
         self._log.debug('start')
@@ -284,7 +294,7 @@ class View:
             if length is not None and length != len(self):
                 self._log.info('resize %s', length)
                 self._span.length = length
-                self._data = np.full((length, STATS_FIELDS, STATS_VALUES), np.nan, dtype=np.float32)
+                self._data = stats_array_factory(length)
                 self._changed = True  # invalidate
             x_range, self._samples_per, self._x = self._span.conform_discrete(x_range)
         elif cmd == 'span_absolute':  # {range: (start: float, stop: float)}]

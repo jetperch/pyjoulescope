@@ -20,10 +20,41 @@ import unittest
 import numpy as np
 import pyximport; pyximport.install(setup_args={'include_dirs': np.get_include()})
 from joulescope.stream_buffer import Statistics, RawProcessor, StreamBuffer, \
-    usb_packet_factory, STATS_FIELDS, STATS_VALUES
-
+    usb_packet_factory, STATS_DTYPE, STATS_FIELD_COUNT
 
 SAMPLES_PER = 126
+
+
+# from https://docs.scipy.org/doc/numpy/user/basics.rec.html
+def _print_offsets(d):
+    print("offsets:", [d.fields[name][1] for name in d.names])
+    print("itemsize:", d.itemsize)
+
+
+def _init(data):
+    d = np.zeros(STATS_FIELD_COUNT, dtype=STATS_DTYPE)
+    for k in range(len(d)):
+        for j in range(len(d[k])):
+            d[k][j] = data[k][j]
+    return d
+
+
+def single_stat_as_array(a):
+    try:
+        a = [a[name] for name in a.dtype.names]
+    except:
+        pass
+    return a
+
+
+def assert_single_stat_close(a, b):
+    a = single_stat_as_array(a)
+    b = single_stat_as_array(b)
+    return np.testing.assert_allclose(a, b)
+
+
+def assert_stat_close(a, b):
+    return [assert_single_stat_close(x, y) for x, y in zip(a, b)]
 
 
 class TestStatistics(unittest.TestCase):
@@ -31,46 +62,44 @@ class TestStatistics(unittest.TestCase):
     def test_initialize_empty(self):
         s = Statistics()
         self.assertEqual(0, len(s))
-        self.assertEqual((STATS_FIELDS, STATS_VALUES), s.value.shape)
-        np.testing.assert_allclose(0, s.value[:, 0])
-        np.testing.assert_allclose(0, s.value[:, 1])
+        fields = ('length', 'mean', 'variance', 'min', 'max')
+        self.assertEqual(fields, s.value.dtype.names)
+        _print_offsets(s.value.dtype)
+        np.testing.assert_allclose(0, s.value[0]['length'])
+        np.testing.assert_allclose(0, s.value[0]['mean'])
+        np.testing.assert_allclose(0, s.value[0]['variance'])
 
-    def test_initialize(self):
-        d = np.arange(STATS_FIELDS * STATS_VALUES, dtype=np.float32).reshape((STATS_FIELDS, STATS_VALUES))
-        s = Statistics(length=10, stats=d)
-        self.assertEqual(10, len(s))
-        np.testing.assert_allclose(d, s.value)
+    def test_initialize_zero(self):
+        d = np.zeros(STATS_FIELD_COUNT, dtype=STATS_DTYPE)
+        s = Statistics(stats=d)
+        self.assertEqual(0, len(s))
+        assert_stat_close(d, s.value)
 
     def test_combine(self):
-        d1 = np.array([[1, 0, 1, 1], [2, 0, 2, 2], [3, 0, 3, 3],
-                       [4, 0, 4, 4], [0, 0, 0, 0], [1, 0, 1, 1]], dtype=np.float32)
-        d2 = np.array([[3, 0, 3, 3], [4, 0, 4, 4], [5, 0, 5, 5],
-                       [6, 0, 6, 6], [1, 0, 1, 1], [0, 0, 0, 0]], dtype=np.float32)
-        e = np.array([[2, 1, 1, 3], [3, 1, 2, 4], [4, 1, 3, 5],
-                      [5, 1, 4, 6], [0.5, 0.25, 0, 1], [0.5, 0.25, 0, 1]], dtype=np.float32)
-        s1 = Statistics(length=1, stats=d1)
-        s2 = Statistics(length=1, stats=d2)
+        d1 = _init([[1, 1, 0, 1, 1], [1, 2, 0, 2, 2], [1, 3, 0, 3, 3], [1, 4, 0, 4, 4], [1, 0, 0, 0, 0], [1, 1, 0, 1, 1]])
+        d2 = _init([[1, 3, 0, 3, 3], [1, 4, 0, 4, 4], [1, 5, 0, 5, 5], [1, 6, 0, 6, 6], [1, 1, 0, 1, 1], [1, 0, 0, 0, 0]])
+        e = _init([[2, 2, 1, 1, 3], [2, 3, 1, 2, 4], [2, 4, 1, 3, 5], [2, 5, 1, 4, 6], [2, 0.5, 0.25, 0, 1], [2, 0.5, 0.25, 0, 1]])
+        s1 = Statistics(stats=d1)
+        s2 = Statistics(stats=d2)
         s1.combine(s2)
         self.assertEqual(2, len(s1))
-        np.testing.assert_allclose(e, s1.value)
+        assert_stat_close(e, s1.value)
 
     def test_combine_other_empty(self):
-        d = np.array([[1, 0, 1, 1], [2, 0, 2, 2], [3, 0, 3, 3],
-                      [4, 0, 4, 4], [0, 0, 0, 0], [1, 0, 1, 1]], dtype=np.float32)
-        s1 = Statistics(length=10, stats=d)
+        d = _init([[10, 1, 0, 1, 1], [10, 2, 0, 2, 2], [10, 3, 0, 3, 3], [10, 4, 0, 4, 4], [10, 0, 0, 0, 0], [10, 1, 0, 1, 1]])
+        s1 = Statistics(stats=d)
         s2 = Statistics()
         s1.combine(s2)
         self.assertEqual(10, len(s1))
-        np.testing.assert_allclose(d, s1.value)
+        assert_stat_close(d, s1.value)
 
     def test_combine_self_empty(self):
-        d = np.array([[1, 0, 1, 1], [2, 0, 2, 2], [3, 0, 3, 3],
-                      [4, 0, 4, 4], [0, 0, 0, 0], [1, 0, 1, 1]], dtype=np.float32)
+        d = _init([[10, 1, 0, 1, 1], [10, 2, 0, 2, 2], [10, 3, 0, 3, 3], [10, 4, 0, 4, 4], [10, 0, 0, 0, 0], [10, 1, 0, 1, 1]])
         s1 = Statistics()
-        s2 = Statistics(length=10, stats=d)
+        s2 = Statistics(stats=d)
         s1.combine(s2)
         self.assertEqual(10, len(s1))
-        np.testing.assert_allclose(d, s1.value)
+        assert_stat_close(d, s1.value)
 
     def test_combine_both_empty(self):
         s1 = Statistics()
@@ -245,7 +274,7 @@ class TestStreamBuffer(unittest.TestCase):
         np.testing.assert_allclose(expect, np.right_shift(data, 2))
         np.testing.assert_allclose(expect, b.data_buffer[0:126*2].reshape((126, 2)))
         data = b.data_get(0, 126)
-        np.testing.assert_allclose(expect[:, 0], data[:, 0, 0])
+        np.testing.assert_allclose(expect[:, 0], data[:, 0]['mean'])
 
     def test_wrap_aligned(self):
         frame = usb_packet_factory(0, 4)
@@ -260,8 +289,8 @@ class TestStreamBuffer(unittest.TestCase):
         np.testing.assert_allclose(expect, data)
         np.testing.assert_allclose(expect[:, 0], b.data_buffer[::2])
         data = b.data_get(SAMPLES_PER * 2, SAMPLES_PER * 4)
-        np.testing.assert_allclose(expect[:, 0], data[:, 0, 0])
-        np.testing.assert_allclose(expect[:, 1], data[:, 1, 0])
+        np.testing.assert_allclose(expect[:, 0], data[:, 0]['mean'])
+        np.testing.assert_allclose(expect[:, 1], data[:, 1]['mean'])
 
     def test_wrap_unaligned(self):
         frame = usb_packet_factory(0, 4)
@@ -280,11 +309,11 @@ class TestStreamBuffer(unittest.TestCase):
         b.insert(frame)
         b.process()
         data = b.data_get(0, 21, 5)
-        self.assertEqual((4, STATS_FIELDS, STATS_VALUES), data.shape)
+        self.assertEqual((4, STATS_FIELD_COUNT), data.shape)
         np.testing.assert_allclose(np.arange(10), b.data_buffer[0:10])  # processed correctly
-        np.testing.assert_allclose([4.0, 14.0, 24.0, 34.0], data[:, 0, 0])
-        np.testing.assert_allclose([4.0, 8.0, 0.0, 8.0], data[0, 0, :])
-        np.testing.assert_allclose([5.0, 15.0, 25.0, 35.0], data[:, 1, 0])
+        np.testing.assert_allclose([4.0, 14.0, 24.0, 34.0], data[:, 0]['mean'])
+        np.testing.assert_allclose([5, 4.0, 40.0, 0.0, 8.0], single_stat_as_array(data[0, 0]))
+        np.testing.assert_allclose([5.0, 15.0, 25.0, 35.0], data[:, 1]['mean'])
 
     def test_get_over_reduction_direct(self):
         b = StreamBuffer(2000, [10, 10], 1000.0)
@@ -293,11 +322,11 @@ class TestStreamBuffer(unittest.TestCase):
         b.insert(frame)
         b.process()
         data = b.data_get(0, 20, 10)
-        self.assertEqual((2, STATS_FIELDS, STATS_VALUES), data.shape)
-        np.testing.assert_allclose([9.0, 33.0, 0.0, 18.0], data[0, 0, :])
-        np.testing.assert_allclose([29.0, 33.0, 20.0, 38.0], data[1, 0, :])
-        np.testing.assert_allclose([10.0, 33.0, 1.0, 19.0], data[0, 1, :])
-        np.testing.assert_allclose([30.0, 33.0, 21.0, 39.0], data[1, 1, :])
+        self.assertEqual((2, STATS_FIELD_COUNT), data.shape)
+        np.testing.assert_allclose([10, 9.0, 330.0, 0.0, 18.0], single_stat_as_array(data[0, 0]))
+        np.testing.assert_allclose([10, 29.0, 330.0, 20.0, 38.0], single_stat_as_array(data[1, 0]))
+        np.testing.assert_allclose([10, 10.0, 330.0, 1.0, 19.0], single_stat_as_array(data[0, 1]))
+        np.testing.assert_allclose([10, 30.0, 330.0, 21.0, 39.0], single_stat_as_array(data[1, 1]))
 
     def test_get_over_reduction(self):
         b = StreamBuffer(2000, [10, 10], 1000.0)
@@ -306,10 +335,10 @@ class TestStreamBuffer(unittest.TestCase):
         b.insert(frame)
         b.process()
         data = b.data_get(0, 40, 20)
-        self.assertEqual((2, STATS_FIELDS, STATS_VALUES), data.shape)
-        np.testing.assert_allclose([19.0, 133.0, 0.0, 38.0], data[0, 0, :])
-        np.testing.assert_allclose([20.0, 133.0, 1.0, 39.0], data[0, 1, :])
-        np.testing.assert_allclose([59.0, 133.0, 40.0, 78.0], data[1, 0, :])
+        self.assertEqual((2, STATS_FIELD_COUNT), data.shape)
+        assert_single_stat_close([20, 19.0, 1660.0, 0.0, 38.0], data[0, 0])
+        assert_single_stat_close([20, 20.0, 1660.0, 1.0, 39.0], data[0, 1])
+        assert_single_stat_close([20, 59.0, 1660.0, 40.0, 78.0], data[1, 0])
 
     def test_get_over_reduction_direct_with_raw_nan(self):
         b = StreamBuffer(2000, [10, 10], 1000.0)
@@ -318,7 +347,7 @@ class TestStreamBuffer(unittest.TestCase):
         b.insert(frame)
         b.process()
         r = b.get_reduction(0, 0, 126)
-        self.assertTrue(all(np.isfinite(r[:, 0, 0])))
+        self.assertTrue(all(np.isfinite(r[:, 0]['mean'])))
 
     def test_get_over_reduction_direct_with_reduction0_nan(self):
         b = StreamBuffer(2000, [10, 10], 1000.0)
@@ -327,9 +356,9 @@ class TestStreamBuffer(unittest.TestCase):
         b.insert(frame)
         b.process()
         r0 = b.get_reduction(0, 0, 126)
-        self.assertFalse(np.isfinite(r0[1, 0, 0]))
+        self.assertFalse(np.isfinite(r0[1, 0]['mean']))
         r1 = b.get_reduction(1, 0, 126)
-        self.assertTrue(np.isfinite(r0[0, 0, 0]))
+        self.assertTrue(np.isfinite(r0[0, 0]['mean']))
 
     def test_calibration(self):
         b = StreamBuffer(2000, [10, 10], 1000.0)
@@ -340,9 +369,9 @@ class TestStreamBuffer(unittest.TestCase):
         b.insert(frame)
         b.process()
         data = b.data_get(0, 10, 1)
-        self.assertEqual((10, STATS_FIELDS, STATS_VALUES), data.shape)
-        np.testing.assert_allclose([-20.0, -4.0, 80.0, 0, 0, 1], data[0, :, 0])
-        np.testing.assert_allclose([12.,  60., 720., 0, 0, 1], data[8, :, 0])
+        self.assertEqual((10, STATS_FIELD_COUNT), data.shape)
+        np.testing.assert_allclose([-20.0, -4.0, 80.0, 0, 0, 1], data[0, :]['mean'])
+        np.testing.assert_allclose([12.,  60., 720., 0, 0, 1], data[8, :]['mean'])
 
     def stream_buffer_01(self):
         b = StreamBuffer(2000, [10, 10], 1000.0)
@@ -363,66 +392,66 @@ class TestStreamBuffer(unittest.TestCase):
     def test_stats_direct(self):
         b = self.stream_buffer_01()
         s = b.stats_get(13, 13)
-        self.assertIsNone(s)
-        np.testing.assert_allclose(b.data_get(13, 14, 1)[0, 0, 0], b.stats_get(13, 14)[0, 0])
-        np.testing.assert_allclose(np.mean(b.data_get(13, 29, 1)[:, 0, 0]), b.stats_get(13, 29)[0, 0])
+        self.assertEqual(0, s[0]['length'])
+        np.testing.assert_allclose(b.data_get(13, 14, 1)[0, 0]['mean'], b.stats_get(13, 14)[0]['mean'])
+        np.testing.assert_allclose(np.mean(b.data_get(13, 29, 1)[:, 0]['mean']), b.stats_get(13, 29)[0]['mean'])
         self.assertEqual(0, b.status()['skip_count']['value'])
 
     def test_stats_direct_nan(self):
         b = self.stream_buffer_02()
         self.assertEqual((0, 126 * 3), b.sample_id_range)
-        d = b.data_get(0, 126 * 3, 1)[:, 0, 0]
+        d = b.data_get(0, 126 * 3, 1)[:, 0]['mean']
         self.assertTrue(np.all(np.logical_not(np.isnan(d[0:126]))))
         self.assertTrue(np.all(np.isnan(d[126:252])))
         self.assertTrue(np.all(np.logical_not(np.isnan(d[252:]))))
 
-        self.assertFalse(np.isnan(b.stats_get(121, 126)[0, 0]))
-        self.assertFalse(np.isnan(b.stats_get(124, 129)[0, 0]))
-        self.assertTrue(np.isnan(b.stats_get(130, 135)[0, 0]))
-        self.assertTrue(np.isnan(b.stats_get(247, 252)[0, 0]))
-        self.assertFalse(np.isnan(b.stats_get(249, 254)[0, 0]))
+        self.assertFalse(np.isnan(b.stats_get(121, 126)[0]['mean']))
+        self.assertFalse(np.isnan(b.stats_get(124, 129)[0]['mean']))
+        self.assertTrue(np.isnan(b.stats_get(130, 135)[0]['mean']))
+        self.assertTrue(np.isnan(b.stats_get(247, 252)[0]['mean']))
+        self.assertFalse(np.isnan(b.stats_get(249, 254)[0]['mean']))
         self.assertEqual(1, b.status()['skip_count']['value'])
         self.assertEqual(126, b.status()['sample_missing_count']['value'])
 
     def test_stats_over_single_reduction_exact(self):
         b = self.stream_buffer_01()
-        np.testing.assert_allclose(np.mean(b.data_get(10, 20, 1)[:, 0, 0]), b.stats_get(10, 20)[0, 0])
+        np.testing.assert_allclose(np.mean(b.data_get(10, 20, 1)[:, 0]['mean']), b.stats_get(10, 20)[0]['mean'])
 
     def test_stats_over_single_reduction_leading(self):
         b = self.stream_buffer_01()
-        np.testing.assert_allclose(np.mean(b.data_get(9, 20, 1)[:, 0, 0]), b.stats_get(9, 20)[0, 0])
-        np.testing.assert_allclose(np.mean(b.data_get(8, 20, 1)[:, 0, 0]), b.stats_get(8, 20)[0, 0])
+        np.testing.assert_allclose(np.mean(b.data_get(9, 20, 1)[:, 0]['mean']), b.stats_get(9, 20)[0]['mean'])
+        np.testing.assert_allclose(np.mean(b.data_get(8, 20, 1)[:, 0]['mean']), b.stats_get(8, 20)[0]['mean'])
 
     def test_stats_over_single_reduction_trailing(self):
         b = self.stream_buffer_01()
-        np.testing.assert_allclose(np.mean(b.data_get(10, 21, 1)[:, 0, 0]), b.stats_get(10, 21)[0, 0])
-        np.testing.assert_allclose(np.mean(b.data_get(10, 22, 1)[:, 0, 0]), b.stats_get(10, 22)[0, 0])
+        np.testing.assert_allclose(np.mean(b.data_get(10, 21, 1)[:, 0]['mean']), b.stats_get(10, 21)[0]['mean'])
+        np.testing.assert_allclose(np.mean(b.data_get(10, 22, 1)[:, 0]['mean']), b.stats_get(10, 22)[0]['mean'])
 
     def test_stats_over_single_reduction_extended(self):
         b = self.stream_buffer_01()
-        np.testing.assert_allclose(np.mean(b.data_get(9, 21, 1)[:, 0, 0]), b.stats_get(9, 21)[0, 0])
-        np.testing.assert_allclose(np.mean(b.data_get(5, 25, 1)[:, 0, 0]), b.stats_get(5, 25)[0, 0])
+        np.testing.assert_allclose(np.mean(b.data_get(9, 21, 1)[:, 0]['mean']), b.stats_get(9, 21)[0]['mean'])
+        np.testing.assert_allclose(np.mean(b.data_get(5, 25, 1)[:, 0]['mean']), b.stats_get(5, 25)[0]['mean'])
 
     def test_stats_over_single_reductions(self):
         b = self.stream_buffer_01()
-        np.testing.assert_allclose(np.mean(b.data_get(9, 20, 1)[:, 0, 0]), b.stats_get(9, 20)[0, 0])
-        np.testing.assert_allclose(np.mean(b.data_get(10, 21, 1)[:, 0, 0]), b.stats_get(10, 21)[0, 0])
-        np.testing.assert_allclose(np.mean(b.data_get(9, 21, 1)[:, 0, 0]), b.stats_get(9, 21)[0, 0])
-        np.testing.assert_allclose(np.mean(b.data_get(9, 101, 1)[:, 0, 0]), b.stats_get(9, 101)[0, 0])
-        np.testing.assert_allclose(np.mean(b.data_get(5, 105, 1)[:, 0, 0]), b.stats_get(5, 105)[0, 0])
+        np.testing.assert_allclose(np.mean(b.data_get(9, 20, 1)[:, 0]['mean']), b.stats_get(9, 20)[0]['mean'])
+        np.testing.assert_allclose(np.mean(b.data_get(10, 21, 1)[:, 0]['mean']), b.stats_get(10, 21)[0]['mean'])
+        np.testing.assert_allclose(np.mean(b.data_get(9, 21, 1)[:, 0]['mean']), b.stats_get(9, 21)[0]['mean'])
+        np.testing.assert_allclose(np.mean(b.data_get(9, 101, 1)[:, 0]['mean']), b.stats_get(9, 101)[0]['mean'])
+        np.testing.assert_allclose(np.mean(b.data_get(5, 105, 1)[:, 0]['mean']), b.stats_get(5, 105)[0]['mean'])
         self.assertEqual(0, b.status()['skip_count']['value'])
 
     def test_stats_over_single_reduction_nan(self):
         b = self.stream_buffer_02()
-        np.testing.assert_allclose(np.mean(b.data_get(120, 126, 1)[:, 0, 0]), b.stats_get(120, 130)[0, 0])
-        np.testing.assert_allclose(np.mean(b.data_get(120, 126, 1)[:, 0, 0]), b.stats_get(120, 140)[0, 0])
-        np.testing.assert_allclose(np.mean(b.data_get(110, 126, 1)[:, 0, 0]), b.stats_get(110, 130)[0, 0])
+        np.testing.assert_allclose(np.mean(b.data_get(120, 126, 1)[:, 0]['mean']), b.stats_get(120, 130)[0]['mean'])
+        np.testing.assert_allclose(np.mean(b.data_get(120, 126, 1)[:, 0]['mean']), b.stats_get(120, 140)[0]['mean'])
+        np.testing.assert_allclose(np.mean(b.data_get(110, 126, 1)[:, 0]['mean']), b.stats_get(110, 130)[0]['mean'])
         self.assertEqual(1, b.status()['skip_count']['value'])
         self.assertEqual(126, b.status()['sample_missing_count']['value'])
 
     def test_stats_over_reductions_nan(self):
         b = self.stream_buffer_02()
-        np.testing.assert_allclose(np.mean(b.data_get(0, 126, 1)[:, 0, 0]), b.stats_get(0, 200)[0, 0])
+        np.testing.assert_allclose(np.mean(b.data_get(0, 126, 1)[:, 0]['mean']), b.stats_get(0, 200)[0]['mean'])
         self.assertEqual(1, b.status()['skip_count']['value'])
         self.assertEqual(126, b.status()['sample_missing_count']['value'])
 
@@ -435,7 +464,7 @@ class TestStreamBuffer(unittest.TestCase):
         b.insert_raw(raw)
         b.process()
         data = b.data_get(0, 126)
-        np.testing.assert_allclose(expect[:, 0], data[:, 0, 0])
+        np.testing.assert_allclose(expect[:, 0], data[:, 0]['mean'])
         self.assertEqual(0, b.status()['skip_count']['value'])
 
     def test_insert_raw_wrap(self):
@@ -448,7 +477,7 @@ class TestStreamBuffer(unittest.TestCase):
         b.insert_raw(raw[100:])
         b.process()
         data = b.data_get(50, 250)
-        np.testing.assert_allclose(expect[50:, 0], data[:, 0, 0])
+        np.testing.assert_allclose(expect[50:, 0], data[:, 0]['mean'])
         self.assertEqual(0, b.status()['skip_count']['value'])
 
     def test_insert_former_nan_case(self):

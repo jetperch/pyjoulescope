@@ -15,7 +15,9 @@
 from . import datafile
 from joulescope.calibration import Calibration
 from joulescope.stream_buffer import reduction_downsample, Statistics, stats_to_api, \
-    STATS_FIELDS, STATS_VALUES, I_RANGE_MISSING, SUPPRESS_SAMPLES_MAX, RawProcessor
+    stats_factory, stats_array_factory, stats_array_clear, \
+    STATS_DTYPE, STATS_FIELD_COUNT, \
+    I_RANGE_MISSING, SUPPRESS_SAMPLES_MAX, RawProcessor
 import json
 import numpy as np
 import datetime
@@ -65,9 +67,7 @@ class DataRecorder:
         self._reductions_per_tlv = self._samples_per_tlv // self._samples_per_reduction
         reduction_block_size = self._samples_per_block // self._samples_per_reduction
 
-        self._reduction = np.full((reduction_block_size, STATS_FIELDS, STATS_VALUES), 0.0, dtype=np.float32)
-        self._reduction[:] = np.nan
-
+        self._reduction = stats_array_factory(reduction_block_size)
         self._sample_id_tlv = 0  # sample id for start of next TLV
         self._sample_id_block = None  # sample id for start of current block, None if not started yet
 
@@ -110,9 +110,9 @@ class DataRecorder:
         tlv_offset = (self._sample_id_tlv - self._sample_id_block) // self._samples_per_tlv
         r_stop = tlv_offset * self._reductions_per_tlv
         log.debug('_collection_end(%s, %s)', r_stop, len(self._reduction))
-        self._writer.collection_end(collection, self._reduction[:r_stop, :, :].tobytes())
+        self._writer.collection_end(collection, self._reduction[:r_stop, :].tobytes())
         self._sample_id_block = None
-        self._reduction[:] = np.nan
+        stats_array_clear(self._reduction)
 
     def stream_notify(self, stream_buffer):
         """Process data from a stream buffer.
@@ -152,7 +152,7 @@ class DataRecorder:
             r_start = tlv_offset * self._reductions_per_tlv
             r_stop = r_start + self._reductions_per_tlv
             stream_buffer.data_get(self._sample_id_tlv, sample_id_next,
-                                   self._samples_per_reduction, out=self._reduction[r_start:r_stop, :, :])
+                                   self._samples_per_reduction, out=self._reduction[r_start:r_stop, :])
             self._sample_id_tlv = sample_id_next
 
             if self._sample_id_tlv - self._sample_id_block >= self._samples_per_block:
@@ -497,10 +497,12 @@ class DataReader:
             if tag != datafile.TAG_COLLECTION_END:
                 raise ValueError('invalid file format: not collection end')
             field_count = len(self.config['reduction_fields'])
-            data = np.frombuffer(value, dtype=np.float32).reshape((-1, field_count, STATS_VALUES))
-            if field_count != STATS_FIELDS:
-                d_nan = np.full((len(data), STATS_FIELDS - field_count, STATS_VALUES), np.nan, dtype=np.float32)
-                data = np.concatenate((data, d_nan), axis=1)
+            # todo support old files without length
+            data = np.frombuffer(value, dtype=STATS_DTYPE).reshape((-1, field_count))
+            if field_count != STATS_FIELD_COUNT:
+                missing = STATS_FIELD_COUNT - field_count
+                d_nan = stats_array_factory(len(data))
+                data = np.concatenate((data, d_nan[:, :missing]), axis=1)
             self._reduction_cache = {
                 'r_start': r_idx,
                 'r_stop': r_idx_next,
@@ -530,9 +532,9 @@ class DataReader:
         log.info('DataReader.get_reduction(r_start=%r,r_stop=%r)', r_start, r_stop)
 
         if total_length <= 0:
-            return np.empty((0, STATS_FIELDS, STATS_VALUES), dtype=np.float32)
+            return stats_array_factory(0)
         if out is None:
-            out = np.empty((total_length, STATS_FIELDS, STATS_VALUES), dtype=np.float32)
+            out = stats_array_factory(total_length)
         elif len(out) < total_length:
             raise ValueError('out too small')
 
@@ -550,7 +552,7 @@ class DataReader:
             length = min(length, out_remaining)
             if length <= 0:
                 break
-            out[out_idx:(out_idx + length), :, :] = data[b_start:(b_start + length), :, :]
+            out[out_idx:(out_idx + length), :] = data[b_start:(b_start + length), :]
             out_idx += length
             r_idx += length
         if out_idx != total_length:
@@ -590,7 +592,7 @@ class DataReader:
             if length <= 0:
                 break
             r = reduction_downsample(data, b_start, b_start + length, length)
-            s.combine(Statistics(length=length * sz, stats=r[0, :, :]))
+            s.combine(Statistics(stats=r[0, :]))
             r_idx += length
         return (r_start * sz, r_stop * sz), s
 
@@ -630,21 +632,21 @@ class DataReader:
         increment = max(1, int(np.round(increment)))
         out_len = (stop - start) // increment
         if out_len <= 0:
-            return np.empty((0, STATS_FIELDS, STATS_VALUES), dtype=np.float32)
-        out = np.empty((out_len, STATS_FIELDS, STATS_VALUES), dtype=np.float32)
+            return stats_array_factory(0)
+        out = stats_array_factory(out_len)
 
         if increment == 1:
             _, d_bits, d_cal = self.raw(start, stop)
             i, v = d_cal[:, 0], d_cal[:, 1]
-            out[:, 0, 0] = i
-            out[:, 1, 0] = v
-            out[:, 2, 0] = i * v
-            out[:, 3, 0] = np.bitwise_and(d_bits, 0x0f)
-            out[:, 4, 0] = np.bitwise_and(np.right_shift(d_bits, 4), 0x01)
-            out[:, 5, 0] = np.bitwise_and(np.right_shift(d_bits, 5), 0x01)
-            out[:, :, 1] = 0.0  # zero variance, only one sample!
-            out[:, :, 2] = np.nan  # min
-            out[:, :, 3] = np.nan  # max
+            out[:, 0]['mean'] = i
+            out[:, 1]['mean'] = v
+            out[:, 2]['mean'] = i * v
+            out[:, 3]['mean'] = np.bitwise_and(d_bits, 0x0f)
+            out[:, 4]['mean'] = np.bitwise_and(np.right_shift(d_bits, 4), 0x01)
+            out[:, 5]['mean'] = np.bitwise_and(np.right_shift(d_bits, 5), 0x01)
+            out[:, :]['variance'] = 0.0  # zero variance, only one sample!
+            out[:, :]['min'] = np.nan  # min
+            out[:, :]['max'] = np.nan  # max
         elif increment == self.config['samples_per_reduction']:
             out = self.get_reduction(start, stop, out=out)
         elif increment > self.config['samples_per_reduction']:
@@ -655,7 +657,7 @@ class DataReader:
             k_start = start
             for idx in range(out_len):
                 k_stop = k_start + increment
-                out[idx, :, :] = self._stats_get(k_start, k_stop).value
+                out[idx, :] = self._stats_get(k_start, k_stop).value
                 k_start = k_stop
         return out
 
@@ -705,28 +707,29 @@ class DataReader:
         (k1, k2), s = self._get_reduction_stats(s1, s2)
         if k1 >= k2:
             # compute directly over samples
-            stats = np.empty((STATS_FIELDS, STATS_VALUES), dtype=np.float32)
+            stats = stats_factory()
             _, d_bits, z = self.raw(s1, s2)
             i, v = z[:, 0], z[:, 1]
             p = i * v
             zi = np.isfinite(i)
             i_view = i[zi]
-            if len(i_view):
+            length = len(i_view)
+            stats[:]['length'] = length
+            if length:
                 i_range = np.bitwise_and(d_bits, 0x0f)
                 i_lsb = np.right_shift(np.bitwise_and(d_bits, 0x10), 4)
                 v_lsb = np.right_shift(np.bitwise_and(d_bits, 0x20), 5)
                 for idx, field in enumerate([i_view, v[zi], p[zi], i_range, i_lsb[zi], v_lsb[zi]]):
-                    stats[idx, 0] = np.mean(field, axis=0)
-                    stats[idx, 1] = np.var(field, axis=0)
-                    stats[idx, 2] = np.amin(field, axis=0)
-                    stats[idx, 3] = np.amax(field, axis=0)
+                    stats[idx]['mean'] = np.mean(field, axis=0)
+                    stats[idx]['variance'] = np.var(field, axis=0)
+                    stats[idx]['min'] = np.amin(field, axis=0)
+                    stats[idx]['max'] = np.amax(field, axis=0)
             else:
-                stats[:, :] = np.full((1, STATS_FIELDS, STATS_VALUES), np.nan, dtype=np.float32)
-                stats[3, 0] = I_RANGE_MISSING
-                stats[3, 1] = 0
-                stats[3, 2] = I_RANGE_MISSING
-                stats[3, 3] = I_RANGE_MISSING
-            s = Statistics(length=len(i_view), stats=stats)
+                stats[3]['mean'] = I_RANGE_MISSING
+                stats[3]['variance'] = 0
+                stats[3]['min'] = I_RANGE_MISSING
+                stats[3]['max'] = I_RANGE_MISSING
+            s = Statistics(stats=stats)
         else:
             if s1 < k1:
                 s_start = self._stats_get(s1, k1)

@@ -46,7 +46,10 @@ update_version_py()
 ext = '.pyx' if USE_CYTHON else '.c'
 extensions = [
     setuptools.Extension('joulescope.stream_buffer',
-        sources=['joulescope/stream_buffer' + ext],
+        sources=[
+            'joulescope/stream_buffer' + ext,
+            'joulescope/native/running_statistics.c'
+        ],
         include_dirs=[],
     ),
     setuptools.Extension('joulescope.pattern_buffer',
