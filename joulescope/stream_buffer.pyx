@@ -213,7 +213,7 @@ cdef uint64_t reduction_stats(js_stream_buffer_reduction_s * r, c_running_statis
             idx = 0
 
     if 0 == tgt[0].k:
-        log.warning('reduction_stats empty')
+        # log.warning('reduction_stats empty')
         _stats_invalidate(tgt)
     return tgt[0].k
 
