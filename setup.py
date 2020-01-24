@@ -52,6 +52,13 @@ extensions = [
         ],
         include_dirs=[],
     ),
+    setuptools.Extension('joulescope.filter_fir',
+        sources=[
+            'joulescope/filter_fir' + ext,
+            'joulescope/native/filter_fir.c'
+        ],
+        include_dirs=[],
+    ),
     setuptools.Extension('joulescope.pattern_buffer',
         sources=['joulescope/pattern_buffer' + ext],
         include_dirs=[],

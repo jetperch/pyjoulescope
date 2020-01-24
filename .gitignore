@@ -35,6 +35,9 @@ joulescope/version.py
 *.la
 *.lib
 
+# Compiled executables
+*.exe
+
 # Editor swap/backup file garbage
 .*.swp
 .*.swo
