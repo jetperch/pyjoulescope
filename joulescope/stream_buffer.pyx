@@ -1343,10 +1343,11 @@ cpdef usb_packet_factory_signal(packet_index, count=None, samples_total=None):
 
 
 def stats_to_api(stats, t_start, t_stop):
+    dt = t_stop - t_start
     data = {
         'time': {
             'range': [t_start, t_stop],
-            'delta': t_stop - t_start,
+            'delta': dt,
             'units': 's',  # seconds
         },
     }
@@ -1393,5 +1394,7 @@ def stats_to_api(stats, t_start, t_stop):
             v['min'] = float(stats[i]['min'])
             v['max'] = float(stats[i]['max'])
             v['p2p'] = v['max'] - v['min']
+            if data['signals'][field].get('integral_units'):
+                v['∫'] = v['μ'] / dt
 
     return data
