@@ -791,6 +791,7 @@ class WinUsbDevice:
             for endpoint in self._endpoints.values():
                 if endpoint.process_signal() or endpoint.stop_code is not None:
                     stop_endpoint_ids.append(endpoint.pipe_id)
+            pipe_id = None
             for pipe_id in stop_endpoint_ids:
                 endpoint = self._endpoints.pop(pipe_id, None)
                 if endpoint is None:

@@ -73,6 +73,15 @@ NAME_TO_COLUMN = {
     'voltage_lsb': 5,
 }
 
+_SIGNALS = [
+    # name, units, integral_units
+    ('current', 'A', 'C'),
+    ('voltage', 'V', None),
+    ('power', 'W', 'J'),
+    ('current_range', '', None),
+    ('current_lsb', '', None),
+    ('voltage_lsb', '', None),
+]
 
 ctypedef void (*js_stream_buffer_cbk)(void * user_data, c_running_statistics.statistics_s * stats)
 
@@ -1189,67 +1198,18 @@ cdef class StreamBuffer:
                 self._energy_picojoules += int(energy_picojoules)
             charge = self._charge_picocoulomb * 1e-12
             energy = self._energy_picojoules * 1e-12
-            data = {
-                'time': {
-                    'range': [0, time_interval],  # todo
-                    'delta': time_interval,
-                    'units': 's',
+            data = _stats_to_api(stats, 0, time_interval)
+            data['accumulators'] = {
+                'charge' : {
+                    'value': charge,
+                    'units': 'C',
                 },
-                'signals': {
-                    'current' : {
-                        'statistics': _to_statistics(&stats[0]),
-                        'units': 'A',
-                        'integral_units': 'C',
-                    },
-                    'voltage' : {
-                        'statistics': _to_statistics(&stats[1]),
-                        'units': 'V',
-                        'integral_units': '',
-                    },
-                    'power' : {
-                        'statistics': _to_statistics(&stats[2]),
-                        'units': 'W',
-                        'integral_units': 'J',
-                    },
-                    'current_range' : {
-                        'statistics': _to_statistics(&stats[3]),
-                        'units': '',
-                        'integral_units': '',
-                    },
-                    'current_lsb' : {
-                        'statistics': _to_statistics(&stats[4]),
-                        'units': '',
-                        'integral_units': '',
-                    },
-                    'voltage_lsb' : {
-                        'statistics': _to_statistics(&stats[5]),
-                        'units': '',
-                        'integral_units': '',
-                    },
-                },
-                'accumulators': {
-                    'charge' : {
-                        'units': 'C',
-                        'value': charge,
-                    },
-                    'energy' : {
-                        'value': energy,
-                        'units': 'J',
-                    },
+                'energy' : {
+                    'value': energy,
+                    'units': 'J',
                 },
             }
             self._callback(data)
-
-
-cdef _to_statistics(c_running_statistics.statistics_s * b):
-    return {
-        'length': b[0].k,
-        'μ': b[0].m,
-        'σ2': c_running_statistics.statistics_var(b),
-        'min': b[0].min,
-        'max': b[0].max,
-        'p2p': b[0].max - b[0].min,
-    }
 
 
 cdef void _on_cbk(void * user_data, c_running_statistics.statistics_s * stats):
@@ -1342,59 +1302,103 @@ cpdef usb_packet_factory_signal(packet_index, count=None, samples_total=None):
     return frame
 
 
-def stats_to_api(stats, t_start, t_stop):
+cpdef single_stat_to_api(v_mean, v_var, v_min, v_max, units):
+    return {
+        'μ': {'value': v_mean, 'units': units},
+        'σ2': {'value': v_var, 'units': units},
+        'min': {'value': v_min, 'units': units},
+        'max': {'value': v_max, 'units': units},
+        'p2p': {'value': v_max - v_min, 'units': units},
+    }
+
+
+cdef _stats_to_api(c_running_statistics.statistics_s * stats, t_start, t_stop):
     dt = t_stop - t_start
     data = {
         'time': {
-            'range': [t_start, t_stop],
-            'delta': dt,
-            'units': 's',  # seconds
+            'range': {'value': [t_start, t_stop], 'units': 's'},
+            'delta': {'value': dt, 'units': 's'},
+            'samples': {'value': int(stats[0].k), 'units': 'samples'},
         },
+        'signals': {},
     }
-    if stats is None:
-        data['signals'] = {}
-    else:
-        data['signals'] = {
-            'current': {
-                'statistics': {},
-                'units': 'A',  # ampere
-                'integral_units': 'C',  # coulomb
-            },
-            'voltage': {
-                'statistics': {},
-                'units': 'V',  # volt
-                'integral_units': None,
-            },
-            'power': {
-                'statistics': {},
-                'units': 'W',  # watt
-                'integral_units': 'J',  # joule
-            },
-            'current_range': {
-                'statistics': {},
-                'units': '',
-                'integral_units': None,
-            },
-            'current_lsb': {
-                'statistics': {},
-                'units': '',
-                'integral_units': None,
-            },
-            'voltage_lsb': {
-                'statistics': {},
-                'units': '',
-                'integral_units': None,
-            },
-        }
-
-        for i, field in enumerate(data['signals'].keys()):
-            v = data['signals'][field]['statistics']
-            v['μ'] = float(stats[i]['mean'])
-            v['σ'] = float(np.sqrt(c_running_statistics.statistics_var(&_stats_ptr(stats)[i])))
-            v['min'] = float(stats[i]['min'])
-            v['max'] = float(stats[i]['max'])
-            v['p2p'] = v['max'] - v['min']
-            if data['signals'][field].get('integral_units'):
-                v['∫'] = v['μ'] / dt
-
+    if stats is not NULL:
+        for i, (signal, units, integral_units) in enumerate(_SIGNALS):
+            v_mean = float(stats[i].m)
+            v_var = float(c_running_statistics.statistics_var(&stats[i]))
+            v_min, v_max = float(stats[i].min), float(stats[i].max)
+            data['signals'][signal] = single_stat_to_api(v_mean, v_var, v_min, v_max, units)
+            if integral_units is not None:
+                data['signals'][signal]['∫'] = {'value': v_mean * dt, 'units': integral_units}
     return data
+
+def stats_to_api(stats, t_start, t_stop):
+    """Convert StreamBuffer statistics to API statistics.
+
+    :param stats: The np.ndarray(FIELD_COUNT, dtype=DTYPE), such as returned
+        by :method:`StreamBuffer.stats_get`.
+    :param t_start: The start time in seconds.
+    :param t_stop: The stop time in seconds.
+    :return: The API statistics data structure.
+
+    The statistics data structure looks like:
+
+        {
+          "time": {
+            "range": {"value": [0.0, 29.999424], "units": "s"},
+            "delta": {"value": 29.999424, "units": "s"},
+            "samples": {"value": 48076, "units": "samples"}
+          },
+          "signals": {
+            "current": {
+              "μ": {"value": 0.000299379503657111, "units": "A"},
+              "σ2": {"value": 2.2021878912979553e-12, "units": "A"},
+              "min": {"value": 0.00029360855114646256, "units": "A"},
+              "max": {"value": 0.0003051375679206103, "units": "A"},
+              "p2p": {"value": 1.1529016774147749e-05, "units": "A"},
+              "\u222b": {"value": 0.008981212667119223, "units": "C"}
+            },
+            "voltage": {
+              "μ": {"value": 2.99890387873055,"units": "V"},
+              "σ2": {"value": 1.0830626821348923e-06, "units": "V"},
+              "min": {"value": 2.993824005126953, "units": "V"},
+              "max": {"value": 3.002903699874878, "units": "V"},
+              "p2p": {"value": 0.009079694747924805, "units": "V"}
+            },
+            "power": {
+              "μ": {"value": 0.000897810357252683, "units": "W"},
+              "σ2": {"value": 1.9910494110256852e-11, "units": "W"},
+              "min": {"value": 0.0008803452947176993, "units": "W"},
+              "max": {"value": 0.0009152597631327808, "units": "W"},
+              "p2p": {"value": 3.49144684150815e-05, "units": "W"},
+              "\u222b": {"value": 0.026933793578814716, "units": "J"}
+            },
+            "current_range": {
+              "μ": {"value": 4.0, "units": ""},
+              "σ2": {"value": 0.0, "units": ""},
+              "min": {"value": 4.0, "units": ""},
+              "max": {"value": 4.0, "units": ""},
+              "p2p": {"value": 0.0, "units": ""}
+            },
+            "current_lsb": {
+              "μ": {"value": 0.5333222397870035, "units": ""},
+              "σ2": {"value": 0.24889270730539995, "units": ""},
+              "min": {"value": 0.0, "units": ""},
+              "max": {"value": 1.0, "units": ""},
+              "p2p": {"value": 1.0, "units": ""}
+            },
+            "voltage_lsb": {
+              "μ": {"value": 0.5333430401863711, "units": ""},
+              "σ2": {"value": 0.24889309698100895, "units": ""},
+              "min": {"value": 0.0, "units": ""},
+              "max": {"value": 1.0, "units": ""},
+              "p2p": {"value": 1.0, "units": ""}
+            }
+          }
+        }
+    """
+    cdef c_running_statistics.statistics_s [::1] s = stats
+    if stats is None:
+        return _stats_to_api(NULL, t_start, t_stop)
+    else:
+        return _stats_to_api(&s[0], t_start, t_stop)

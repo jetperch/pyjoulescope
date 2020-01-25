@@ -48,7 +48,7 @@ class Span:
     def length(self, value):
         value = int(value)
         if self.quant * (value + 1) > self.s_limit_max:
-            raise ValueError('length too big given qunat')
+            raise ValueError('length too big given quant')
         self._length = value
 
     @property

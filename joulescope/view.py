@@ -14,7 +14,7 @@
 
 from joulescope import span
 from joulescope.stream_buffer import StreamBuffer, stats_to_api, \
-    stats_array_factory, stats_array_clear
+    stats_array_factory
 import threading
 import queue
 import numpy as np
@@ -24,18 +24,6 @@ import logging
 TIMEOUT = 10.0
 
 
-def to_view_statistics(b, idx, units):
-    length = b[:, idx]['length'].copy()
-    return {
-        'length': length,
-        'μ': b[:, idx]['mean'].copy(),
-        'σ2': b[:, idx]['variance'].copy() / (length - 1),
-        'min': b[:, idx]['min'].copy(),
-        'max': b[:, idx]['max'].copy(),
-        'units': units,
-    }
-
-
 def data_array_to_update(x_limits, x, data_array):
     """Convert raw data buffer to a view update.
 
@@ -43,26 +31,19 @@ def data_array_to_update(x_limits, x, data_array):
     :param x: The np.ndarray of x-axis times.
     :param data_array: The np.ndarray((N, STATS_FIELD_COUNT), dtype=STATS_DTYPE)
     """
-    return {
-        'time': {
-            'x': x,
-            'limits': x_limits,
-            'range': [float(x[0]), float(x[-1])],
-            'delta': float(x[-1] - x[0]),
-            'units': 's',
-        },
-        'signals': {
-            'current': to_view_statistics(data_array, 0, 'A'),
-            'voltage': to_view_statistics(data_array, 1, 'V'),
-            'power': to_view_statistics(data_array, 2, 'W'),
-            'current_range': to_view_statistics(data_array, 3, ''),
-            'current_lsb': to_view_statistics(data_array, 4, ''),
-            'voltage_lsb': to_view_statistics(data_array, 5, ''),
-        },
-        'state': {
-            'source_type': 'buffer',  # ['realtime', 'buffer']
-        }
-    }
+    s = stats_to_api(data_array[0, :], float(x[0]), float(x[-1]))
+    s['time']['x'] = {'value': x, 'units': s}
+    s['time']['limits'] = {'value': x_limits, 'units': 's'}
+    s['state'] = {'source_type': 'buffer'}  # ['realtime', 'buffer']
+    for idx, signal in enumerate(s['signals'].values()):
+        signal['μ']['value'] = data_array[:, idx]['mean'].copy()
+        length = data_array[:, idx]['length'] - 1
+        length[length < 1] = 1.0
+        signal['σ2']['value'] = data_array[:, idx]['variance'] / length
+        signal['min']['value'] = data_array[:, idx]['min'].copy()
+        signal['max']['value'] = data_array[:, idx]['max'].copy()
+        signal['p2p']['value'] = signal['max']['value'] - signal['min']['value']
+    return s
 
 
 def data_array_clear(s):
@@ -381,27 +362,27 @@ class View:
             # 'time': {},
             'signals': {
                 'current': {
-                    'value': data[:, 0, 0],
+                    'value': data[:, 0]['mean'],
                     'units': 'A',
                 },
                 'voltage': {
-                    'value': data[:, 1, 0],
+                    'value': data[:, 1]['mean'],
                     'units': 'V',
                 },
                 'power': {
-                    'value': data[:, 2, 0],
+                    'value': data[:, 2]['mean'],
                     'units': 'W',
                 },
                 'current_range': {
-                    'value': data[:, 3, 0],
+                    'value': data[:, 3]['mean'],
                     'units': '',
                 },
                 'current_lsb': {
-                    'value': data[:, 4, 0],
+                    'value': data[:, 4]['mean'],
                     'units': '',
                 },
                 'voltage_lsb': {
-                    'value': data[:, 5, 0],
+                    'value': data[:, 5]['mean'],
                     'units': '',
                 },
                 'raw': {
@@ -493,50 +474,8 @@ class View:
             data structure from the view thread.
         :return: The statistics data structure or None if callback is provided.
 
-            {
-              "time": {
-                "range": [4.2224105, 4.7224105],  # in buffer (not necessarily view) coordinates
-                "delta": 0.5,
-                "units": "s"
-              },
-              "signals": {
-                "current": {
-                  "statistics": {
-                    "μ": 1.1410409683776379e-07,
-                    "σ": 3.153094851882088e-08,
-                    "min": 2.4002097531727884e-10,
-                    "max": 2.77493541034346e-07,
-                    "p2p": 2.772535200590287e-07
-                  },
-                  "units": "A",
-                  "integral_units": "C"
-                },
-                "voltage": {
-                  "statistics": {
-                    "μ": 3.2984893321990967,
-                    "σ": 0.0010323672322556376,
-                    "min": 3.293551445007324,
-                    "max": 3.3026282787323,
-                    "p2p": 0.009076833724975586
-                  },
-                  "units": "V",
-                  "integral_units": null
-                },
-                "power": {
-                  "statistics": {
-                    "μ": 3.763720144434046e-07,
-                    "σ": 1.0400773930996365e-07,
-                    "min": 7.916107769290193e-10,
-                    "max": 9.155134534921672e-07,
-                    "p2p": 9.147218427152382e-07
-                  },
-                  "units": "W",
-                  "integral_units": "J"
-                }
-              }
-            }
-
         Note: this same format is used by the :meth:`Driver.statistics_callback`.
+        See joulescope.stream_buffer.stats_to_api for details.
         """
         args = {'start': start, 'stop': stop, 'units': units}
         if callback is None:
