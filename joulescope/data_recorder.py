@@ -146,7 +146,7 @@ class DataRecorder:
                 self._collection_start(data=collection_data)
 
             log.debug('_process() add tlv %d', self._sample_id_tlv)
-            b = stream_buffer.raw_get(self._sample_id_tlv, sample_id_next)
+            b = stream_buffer.samples_get(self._sample_id_tlv, sample_id_next, fields='raw')
             self._append_data(b.tobytes())
             tlv_offset = (self._sample_id_tlv - self._sample_id_block) // self._samples_per_tlv
             r_start = tlv_offset * self._reductions_per_tlv

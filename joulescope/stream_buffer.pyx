@@ -480,7 +480,7 @@ cdef class StreamBuffer:
 
         self.reduction_count = <uint32_t> len(reductions)
         if len(reductions):
-            self.reductions[len(reductions) - 1].cbk_fn = _on_cbk
+            self.reductions[len(reductions) - 1].cbk_fn = self._on_cbk
             self.reductions[len(reductions) - 1].cbk_user_data = <void *> self
 
         self._sample_id_max = 0  # used to automatically stop streaming
@@ -1034,21 +1034,25 @@ cdef class StreamBuffer:
               Equivalent to self.raw_get(start, stop)
             * raw_current: The raw 14-bit current data in LSBs.
             * raw_voltage: The raw 14-bit voltage data in LSBs.
-            * current: The calibrated float32 current data array.
-            * voltage: The calibrated float32 voltage data array.
+            * current: The calibrated float32 current data array in amperes.
+            * voltage: The calibrated float32 voltage data array in volts.
             * current_voltage: The calibrated float32 Nx2 array of current, voltage.
             * bits: The (voltage_lsb << 5) | (current_lsb << 4) | current_range
             * current_range: The current range. 0 = 10A, 6 = 18 uA, 7=off.
             * current_lsb: The current LSB, which can be assign to a general purpose input.
             * voltage_lsb: The voltage LSB, which can be assign to a general purpose input.
         :return: The list-like corresponding to each entry in fields.
+            If fields is a string rather than a list of strings, then
+            return the value directly, not length 1 list.
         """
         out = []
         bits = None
+        is_single_result = False
         if fields is None:
             fields = ['raw']
         elif isinstance(fields, str):
             fields = [fields]
+            is_single_result = True
 
         if stop <= start:
             log.warning('samples_get %d <= %d', start, stop)
@@ -1124,37 +1128,7 @@ cdef class StreamBuffer:
                 out.append(np.bitwise_and(np.right_shift(bits, 5), 1))
             else:
                 raise ValueError(f'Unsupported field {field}')
-        return out
-
-    def raw_get(self, start, stop):
-        """Get the raw data from Joulescope.
-
-        :param start: The starting sample id (inclusive).
-        :param stop: The ending sample id (exclusive).
-        :return: The np.ndarray((2 * N), dtype=np.uint16) data of
-            interleaved current, voltage left-shifted 14-bit samples.
-            The least significant 2 bits contain current range select
-            information.
-        """
-        if stop <= start:
-            log.warning('raw %d <= %d', start, stop)
-            return np.empty((0, 2), dtype=np.uint16)
-        total_length = self.length
-        start_idx = start % total_length
-        stop_idx = stop % total_length
-        if 0 == stop_idx:
-            stop_idx = total_length
-        if stop_idx > start_idx:
-            return self.raw[(start_idx * 2):(stop_idx * 2)].reshape((-1, 2))
-        # on wrap, have to copy
-        expected_length = stop - start
-        samples1 = self.length - start_idx
-        samples2 = expected_length - samples1
-        out = np.empty((expected_length, 2), dtype=np.uint16)
-        raw = self.raw.reshape((-1, 2))
-        out[:samples1, :] = raw[start_idx:, :]
-        out[samples1:, :] = raw[:samples2, :]
-        return out
+        return out if not is_single_result else out[0]
 
     def get_reduction(self, idx, start, stop):
         """Get reduction data directly.
@@ -1187,7 +1161,9 @@ cdef class StreamBuffer:
         else:
             return r[start:stop]
 
-    cdef _on_cbk(self, c_running_statistics.statistics_s * stats):
+    @staticmethod
+    cdef void _on_cbk(void * user_data, c_running_statistics.statistics_s * stats):
+        cdef StreamBuffer self = <object> user_data
         if callable(self._callback):
             sample_count = self.reductions[self.reduction_count - 1].samples_per_reduction_sample
             time_interval = sample_count / self.sampling_frequency  # seconds
@@ -1210,11 +1186,6 @@ cdef class StreamBuffer:
                 },
             }
             self._callback(data)
-
-
-cdef void _on_cbk(void * user_data, c_running_statistics.statistics_s * stats):
-    cdef StreamBuffer self = <object> user_data
-    self._on_cbk(stats)
 
 
 def usb_packet_factory(packet_index, count=None):
@@ -1303,6 +1274,15 @@ cpdef usb_packet_factory_signal(packet_index, count=None, samples_total=None):
 
 
 cpdef single_stat_to_api(v_mean, v_var, v_min, v_max, units):
+    """Create statistics for a single field.
+    
+    :param v_mean: The mean.
+    :param v_var: The variance.
+    :param v_min: The minimum value.
+    :param v_max: The maximum value.
+    :param units: The units for v_mean, v_var, v_min, and v_max.
+    :return: The dict suitable for use in the statistics data structure.
+    """
     return {
         'μ': {'value': v_mean, 'units': units},
         'σ2': {'value': v_var, 'units': units},
@@ -1345,8 +1325,8 @@ def stats_to_api(stats, t_start, t_stop):
 
         {
           "time": {
-            "range": {"value": [0.0, 29.999424], "units": "s"},
-            "delta": {"value": 29.999424, "units": "s"},
+            "range": {"value": [29.975386, 29.999424], "units": "s"},
+            "delta": {"value": 0.024038, "units": "s"},
             "samples": {"value": 48076, "units": "samples"}
           },
           "signals": {
@@ -1356,7 +1336,7 @@ def stats_to_api(stats, t_start, t_stop):
               "min": {"value": 0.00029360855114646256, "units": "A"},
               "max": {"value": 0.0003051375679206103, "units": "A"},
               "p2p": {"value": 1.1529016774147749e-05, "units": "A"},
-              "\u222b": {"value": 0.008981212667119223, "units": "C"}
+              "∫": {"value": 0.008981212667119223, "units": "C"}
             },
             "voltage": {
               "μ": {"value": 2.99890387873055,"units": "V"},
@@ -1371,7 +1351,7 @@ def stats_to_api(stats, t_start, t_stop):
               "min": {"value": 0.0008803452947176993, "units": "W"},
               "max": {"value": 0.0009152597631327808, "units": "W"},
               "p2p": {"value": 3.49144684150815e-05, "units": "W"},
-              "\u222b": {"value": 0.026933793578814716, "units": "J"}
+              "∫": {"value": 0.026933793578814716, "units": "J"}
             },
             "current_range": {
               "μ": {"value": 4.0, "units": ""},

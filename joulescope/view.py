@@ -386,7 +386,7 @@ class View:
                     'units': '',
                 },
                 'raw': {
-                    'value': self._stream_buffer.raw_get(start=start, stop=stop),
+                    'value': self._stream_buffer.samples_get(start=start, stop=stop, fields='raw'),
                     'units': 'LSBs',
                 },
             },

@@ -744,9 +744,9 @@ class Device:
         log.info('read actual %s, %s', start_id, end_id)
 
         if out_format == 'raw':
-            return self.stream_buffer.raw_get(start_id, end_id).reshape((-1, 2))
+            return self.stream_buffer.samples_get(start_id, end_id, fields='raw').reshape((-1, 2))
         else:
-            return self.stream_buffer.samples_get(start_id, end_id, fields=['current_voltage'])[0]
+            return self.stream_buffer.samples_get(start_id, end_id, fields='current_voltage')
 
     @property
     def is_streaming(self):

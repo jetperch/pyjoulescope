@@ -199,5 +199,7 @@ cdef class PatternBuffer:
     def sample_id_range(self):
         return 0, self._sample_id
 
-    def raw_get(self, start, stop):
+    def samples_get(self, start, stop, fields=None):
+        if fields != 'raw':
+            raise RuntimeError(f'Invalid fields {fields}')
         return np.empty((0, 2), dtype=np.uint16)

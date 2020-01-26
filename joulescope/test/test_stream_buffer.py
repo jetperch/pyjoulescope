@@ -269,7 +269,7 @@ class TestStreamBuffer(unittest.TestCase):
         self.assertEqual(b.limits_time[0], b.sample_id_to_time(b.limits_samples[0]))
         self.assertEqual(b.limits_time[1], b.sample_id_to_time(b.limits_samples[1]))
         self.assertEqual(126, b.status()['sample_id']['value'])
-        data = b.raw_get(0, 126)
+        data = b.samples_get(0, 126, 'raw')
         expect = np.arange(126*2, dtype=np.uint16).reshape((126, 2))
         np.testing.assert_allclose(expect, np.right_shift(data, 2))
         np.testing.assert_allclose(expect, b.data_buffer[0:126*2].reshape((126, 2)))
@@ -283,7 +283,7 @@ class TestStreamBuffer(unittest.TestCase):
         b.insert(frame)
         b.process()
         self.assertEqual((SAMPLES_PER * 2, SAMPLES_PER * 4), b.sample_id_range)
-        data = b.raw_get(SAMPLES_PER * 2, SAMPLES_PER * 4)
+        data = b.samples_get(SAMPLES_PER * 2, SAMPLES_PER * 4, 'raw')
         data = np.right_shift(data, 2)
         expect = np.arange(SAMPLES_PER * 4, SAMPLES_PER * 8, dtype=np.uint16).reshape((SAMPLES_PER * 2, 2))
         np.testing.assert_allclose(expect, data)
@@ -298,7 +298,7 @@ class TestStreamBuffer(unittest.TestCase):
         b.insert(frame)
         b.process()
         self.assertEqual(SAMPLES_PER * 4, b.sample_id_range[1])
-        data = np.right_shift(b.raw_get(SAMPLES_PER * 2, SAMPLES_PER * 4), 2)
+        data = np.right_shift(b.samples_get(SAMPLES_PER * 2, SAMPLES_PER * 4, 'raw'), 2)
         expect = np.arange(SAMPLES_PER * 4, SAMPLES_PER * 8, dtype=np.uint16).reshape((SAMPLES_PER * 2, 2))
         np.testing.assert_allclose(expect, data)
 
@@ -519,6 +519,7 @@ class TestStreamBuffer(unittest.TestCase):
         b.insert_raw(raw)
         b.process()
         self.assertEqual(0, b.samples_get(0, 8, fields=['current'])[0][-1])
+        self.assertEqual(0, b.samples_get(0, 8, fields='current')[-1])
 
     def test_voltage_range(self):
         b = StreamBuffer(200, [], 1000.0)
