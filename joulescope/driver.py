@@ -226,8 +226,8 @@ class Device:
         """Set the statistics callback.
 
         :param cbk: The callable(data) where data is a statistics data
-            structure.  See :meth:`joulescope.View.statistics_get` for details
-            on the data format.
+            structure.  See :func:`joulescope.stream_buffer.stats_to_api` for
+            details on the data format.
             This function will be called from the USB processing thread.
             Any calls back into self MUST BE resynchronized.
         """

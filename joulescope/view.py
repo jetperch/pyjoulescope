@@ -399,7 +399,7 @@ class View:
         """
         s1, s2 = self._convert_time_range_to_samples(start, stop, units)
         # self._log.debug('buffer %s, %s, %s => %s, %s', start, stop, units, s1, s2)
-        d = self._stream_buffer.stats_get(start=s1, stop=s2)
+        d = self._stream_buffer.statistics_get(start=s1, stop=s2)
         t_start = s1 / self.sampling_frequency
         t_stop = s2 / self.sampling_frequency
         return stats_to_api(d, t_start, t_stop)

@@ -888,7 +888,7 @@ cdef class StreamBuffer:
             _stats_invalidate(stats_accum)
         return _stats_length(stats_accum)
 
-    def stats_get(self, start, stop, out=None):
+    def statistics_get(self, start, stop, out=None):
         """Get exact statistics over the specified range.
 
         :param start: The starting sample_id (inclusive).

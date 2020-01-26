@@ -657,7 +657,7 @@ class DataReader:
             k_start = start
             for idx in range(out_len):
                 k_stop = k_start + increment
-                out[idx, :] = self._stats_get(k_start, k_stop).value
+                out[idx, :] = self._statistics_get(k_start, k_stop).value
                 k_start = k_stop
         return out
 
@@ -702,7 +702,7 @@ class DataReader:
             raise ValueError(f'start sample out of range: {s2}')
         return s1, s2
 
-    def _stats_get(self, start, stop):
+    def _statistics_get(self, start, stop):
         s1, s2 = start, stop
         (k1, k2), s = self._get_reduction_stats(s1, s2)
         if k1 >= k2:
@@ -732,10 +732,10 @@ class DataReader:
             s = Statistics(stats=stats)
         else:
             if s1 < k1:
-                s_start = self._stats_get(s1, k1)
+                s_start = self._statistics_get(s1, k1)
                 s.combine(s_start)
             if s2 > k2:
-                s_stop = self._stats_get(k2, s2)
+                s_stop = self._statistics_get(k2, s2)
                 s.combine(s_stop)
         return s
 
@@ -747,14 +747,14 @@ class DataReader:
         :param units: The units for start and stop.
             'seconds' is in floating point seconds relative to the view.
             'samples' or None is in stream buffer sample indices.
-        :return: The statistics data structure.  See :meth:`joulescope.driver.Driver.statistics_get`
-            for details.
+        :return: The statistics data structure.
+            See :func:`joulescope.stream_buffer.stats_to_api` for details.
         """
         log.debug('statistics_get(%s, %s, %s)', start, stop, units)
         s1, s2 = self.normalize_time_arguments(start, stop, units)
         if s1 == s2:
             s2 = s1 + 1  # always try to produce valid statistics
-        s = self._stats_get(s1, s2)
+        s = self._statistics_get(s1, s2)
         t_start = s1 / self.sampling_frequency
         t_stop = s2 / self.sampling_frequency
         return stats_to_api(s.value, t_start, t_stop)

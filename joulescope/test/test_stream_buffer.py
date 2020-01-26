@@ -391,10 +391,10 @@ class TestStreamBuffer(unittest.TestCase):
 
     def test_stats_direct(self):
         b = self.stream_buffer_01()
-        s = b.stats_get(13, 13)
+        s = b.statistics_get(13, 13)
         self.assertEqual(0, s[0]['length'])
-        np.testing.assert_allclose(b.data_get(13, 14, 1)[0, 0]['mean'], b.stats_get(13, 14)[0]['mean'])
-        np.testing.assert_allclose(np.mean(b.data_get(13, 29, 1)[:, 0]['mean']), b.stats_get(13, 29)[0]['mean'])
+        np.testing.assert_allclose(b.data_get(13, 14, 1)[0, 0]['mean'], b.statistics_get(13, 14)[0]['mean'])
+        np.testing.assert_allclose(np.mean(b.data_get(13, 29, 1)[:, 0]['mean']), b.statistics_get(13, 29)[0]['mean'])
         self.assertEqual(0, b.status()['skip_count']['value'])
 
     def test_stats_direct_nan(self):
@@ -405,53 +405,53 @@ class TestStreamBuffer(unittest.TestCase):
         self.assertTrue(np.all(np.isnan(d[126:252])))
         self.assertTrue(np.all(np.logical_not(np.isnan(d[252:]))))
 
-        self.assertFalse(np.isnan(b.stats_get(121, 126)[0]['mean']))
-        self.assertFalse(np.isnan(b.stats_get(124, 129)[0]['mean']))
-        self.assertTrue(np.isnan(b.stats_get(130, 135)[0]['mean']))
-        self.assertTrue(np.isnan(b.stats_get(247, 252)[0]['mean']))
-        self.assertFalse(np.isnan(b.stats_get(249, 254)[0]['mean']))
+        self.assertFalse(np.isnan(b.statistics_get(121, 126)[0]['mean']))
+        self.assertFalse(np.isnan(b.statistics_get(124, 129)[0]['mean']))
+        self.assertTrue(np.isnan(b.statistics_get(130, 135)[0]['mean']))
+        self.assertTrue(np.isnan(b.statistics_get(247, 252)[0]['mean']))
+        self.assertFalse(np.isnan(b.statistics_get(249, 254)[0]['mean']))
         self.assertEqual(1, b.status()['skip_count']['value'])
         self.assertEqual(126, b.status()['sample_missing_count']['value'])
 
     def test_stats_over_single_reduction_exact(self):
         b = self.stream_buffer_01()
-        np.testing.assert_allclose(np.mean(b.data_get(10, 20, 1)[:, 0]['mean']), b.stats_get(10, 20)[0]['mean'])
+        np.testing.assert_allclose(np.mean(b.data_get(10, 20, 1)[:, 0]['mean']), b.statistics_get(10, 20)[0]['mean'])
 
     def test_stats_over_single_reduction_leading(self):
         b = self.stream_buffer_01()
-        np.testing.assert_allclose(np.mean(b.data_get(9, 20, 1)[:, 0]['mean']), b.stats_get(9, 20)[0]['mean'])
-        np.testing.assert_allclose(np.mean(b.data_get(8, 20, 1)[:, 0]['mean']), b.stats_get(8, 20)[0]['mean'])
+        np.testing.assert_allclose(np.mean(b.data_get(9, 20, 1)[:, 0]['mean']), b.statistics_get(9, 20)[0]['mean'])
+        np.testing.assert_allclose(np.mean(b.data_get(8, 20, 1)[:, 0]['mean']), b.statistics_get(8, 20)[0]['mean'])
 
     def test_stats_over_single_reduction_trailing(self):
         b = self.stream_buffer_01()
-        np.testing.assert_allclose(np.mean(b.data_get(10, 21, 1)[:, 0]['mean']), b.stats_get(10, 21)[0]['mean'])
-        np.testing.assert_allclose(np.mean(b.data_get(10, 22, 1)[:, 0]['mean']), b.stats_get(10, 22)[0]['mean'])
+        np.testing.assert_allclose(np.mean(b.data_get(10, 21, 1)[:, 0]['mean']), b.statistics_get(10, 21)[0]['mean'])
+        np.testing.assert_allclose(np.mean(b.data_get(10, 22, 1)[:, 0]['mean']), b.statistics_get(10, 22)[0]['mean'])
 
     def test_stats_over_single_reduction_extended(self):
         b = self.stream_buffer_01()
-        np.testing.assert_allclose(np.mean(b.data_get(9, 21, 1)[:, 0]['mean']), b.stats_get(9, 21)[0]['mean'])
-        np.testing.assert_allclose(np.mean(b.data_get(5, 25, 1)[:, 0]['mean']), b.stats_get(5, 25)[0]['mean'])
+        np.testing.assert_allclose(np.mean(b.data_get(9, 21, 1)[:, 0]['mean']), b.statistics_get(9, 21)[0]['mean'])
+        np.testing.assert_allclose(np.mean(b.data_get(5, 25, 1)[:, 0]['mean']), b.statistics_get(5, 25)[0]['mean'])
 
     def test_stats_over_single_reductions(self):
         b = self.stream_buffer_01()
-        np.testing.assert_allclose(np.mean(b.data_get(9, 20, 1)[:, 0]['mean']), b.stats_get(9, 20)[0]['mean'])
-        np.testing.assert_allclose(np.mean(b.data_get(10, 21, 1)[:, 0]['mean']), b.stats_get(10, 21)[0]['mean'])
-        np.testing.assert_allclose(np.mean(b.data_get(9, 21, 1)[:, 0]['mean']), b.stats_get(9, 21)[0]['mean'])
-        np.testing.assert_allclose(np.mean(b.data_get(9, 101, 1)[:, 0]['mean']), b.stats_get(9, 101)[0]['mean'])
-        np.testing.assert_allclose(np.mean(b.data_get(5, 105, 1)[:, 0]['mean']), b.stats_get(5, 105)[0]['mean'])
+        np.testing.assert_allclose(np.mean(b.data_get(9, 20, 1)[:, 0]['mean']), b.statistics_get(9, 20)[0]['mean'])
+        np.testing.assert_allclose(np.mean(b.data_get(10, 21, 1)[:, 0]['mean']), b.statistics_get(10, 21)[0]['mean'])
+        np.testing.assert_allclose(np.mean(b.data_get(9, 21, 1)[:, 0]['mean']), b.statistics_get(9, 21)[0]['mean'])
+        np.testing.assert_allclose(np.mean(b.data_get(9, 101, 1)[:, 0]['mean']), b.statistics_get(9, 101)[0]['mean'])
+        np.testing.assert_allclose(np.mean(b.data_get(5, 105, 1)[:, 0]['mean']), b.statistics_get(5, 105)[0]['mean'])
         self.assertEqual(0, b.status()['skip_count']['value'])
 
     def test_stats_over_single_reduction_nan(self):
         b = self.stream_buffer_02()
-        np.testing.assert_allclose(np.mean(b.data_get(120, 126, 1)[:, 0]['mean']), b.stats_get(120, 130)[0]['mean'])
-        np.testing.assert_allclose(np.mean(b.data_get(120, 126, 1)[:, 0]['mean']), b.stats_get(120, 140)[0]['mean'])
-        np.testing.assert_allclose(np.mean(b.data_get(110, 126, 1)[:, 0]['mean']), b.stats_get(110, 130)[0]['mean'])
+        np.testing.assert_allclose(np.mean(b.data_get(120, 126, 1)[:, 0]['mean']), b.statistics_get(120, 130)[0]['mean'])
+        np.testing.assert_allclose(np.mean(b.data_get(120, 126, 1)[:, 0]['mean']), b.statistics_get(120, 140)[0]['mean'])
+        np.testing.assert_allclose(np.mean(b.data_get(110, 126, 1)[:, 0]['mean']), b.statistics_get(110, 130)[0]['mean'])
         self.assertEqual(1, b.status()['skip_count']['value'])
         self.assertEqual(126, b.status()['sample_missing_count']['value'])
 
     def test_stats_over_reductions_nan(self):
         b = self.stream_buffer_02()
-        np.testing.assert_allclose(np.mean(b.data_get(0, 126, 1)[:, 0]['mean']), b.stats_get(0, 200)[0]['mean'])
+        np.testing.assert_allclose(np.mean(b.data_get(0, 126, 1)[:, 0]['mean']), b.statistics_get(0, 200)[0]['mean'])
         self.assertEqual(1, b.status()['skip_count']['value'])
         self.assertEqual(126, b.status()['sample_missing_count']['value'])
 
