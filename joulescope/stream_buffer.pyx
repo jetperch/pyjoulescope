@@ -240,7 +240,7 @@ cdef _reduction_downsample(js_stream_buffer_reduction_s * r,
 def reduction_downsample(reduction, idx_start, idx_stop, increment):
     """Downsample a data reduction.
 
-    :param reduction: The np.array(n, dtype=DTYPE)
+    :param reduction: The np.array((N, STATS_FIELD_COUNT), dtype=DTYPE)
     :param idx_start: The starting index (inclusive) in reduction.
     :param idx_stop: The stopping index (exclusive) in reduction.
     :param increment: The increment value
@@ -893,9 +893,9 @@ cdef class StreamBuffer:
 
         :param start: The starting sample_id (inclusive).
         :param stop: The ending sample_id (exclusive).
-        :param out: The optional output np.ndarray(FIELD_COUNT, dtype=DTYPE).
+        :param out: The optional output np.ndarray(STATS_FIELD_COUNT, dtype=DTYPE).
             None (default) creates and outputs a new record.
-        :return: The np.ndarray(FIELD_COUNT, dtype=DTYPE).
+        :return: The np.ndarray(STATS_FIELD_COUNT, dtype=DTYPE).
         """
         cdef c_running_statistics.statistics_s * out_ptr
         if out is None:
@@ -1005,9 +1005,9 @@ cdef class StreamBuffer:
         :param start: The starting sample id (inclusive).
         :param stop: The ending sample id (exclusive).
         :param increment: The number of raw samples.
-        :param out: The optional output np.ndarray(N, dtype=DTYPE) to populate with
+        :param out: The optional output np.ndarray((N, STATS_FIELD_COUNT), dtype=DTYPE) to populate with
             the result.  None (default) will construct and return a new array.
-        :return: The np.ndarray(N, dtype=DTYPE) data.
+        :return: The np.ndarray((N, STATS_FIELD_COUNT), dtype=DTYPE) data.
         """
         cdef c_running_statistics.statistics_s * out_ptr
         increment = 1 if increment is None else int(increment)
