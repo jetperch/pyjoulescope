@@ -52,7 +52,7 @@ class TestDataRecorder(unittest.TestCase):
         d.close()
 
     def _create_file(self, packet_index, count=None):
-        stream_buffer = StreamBuffer(2000, [10], 1000.0)
+        stream_buffer = StreamBuffer(2.0, [10], 1000.0)
         stream_buffer.suppress_mode = 'off'
         if packet_index > 0:
             data = usb_packet_factory(0, packet_index - 1)
@@ -156,7 +156,7 @@ class TestDataRecorder(unittest.TestCase):
         samples_total = sample_rate * 2
         packets_per_burst = 128
         bursts = int(np.ceil(samples / (SAMPLES_PER_PACKET * packets_per_burst)))
-        stream_buffer = StreamBuffer(sample_rate, [100], sample_rate)
+        stream_buffer = StreamBuffer(1.0, [100], sample_rate)
 
         fh = io.BytesIO()
         d = DataRecorder(fh, sampling_frequency=sample_rate)
@@ -206,7 +206,7 @@ class TestDataRecorder(unittest.TestCase):
         fh = io.BytesIO()
         d = DataRecorder(fh, sampling_frequency=sample_rate, calibration=cal)
 
-        stream_buffer = StreamBuffer(sample_rate, [100], sample_rate)
+        stream_buffer = StreamBuffer(1.0, [100], sample_rate)
         stream_buffer.calibration_set(cal.current_offset, cal.current_gain, cal.voltage_offset, cal.voltage_gain)
         d.stream_notify(stream_buffer)
         data = self.create_sinusoid_data(sample_rate, samples)

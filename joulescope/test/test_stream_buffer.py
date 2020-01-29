@@ -240,7 +240,7 @@ class TestRawProcessor(unittest.TestCase):
 class TestStreamBuffer(unittest.TestCase):
 
     def test_init(self):
-        b = StreamBuffer(1000, [10, 10], 1000.0)
+        b = StreamBuffer(1.0, [10, 10], 1000.0)
         self.assertIsNotNone(b)
         self.assertEqual(1000, len(b))
         self.assertEqual(1000.0, b.sampling_frequency)
@@ -252,7 +252,7 @@ class TestStreamBuffer(unittest.TestCase):
         del b
 
     def test_insert_process(self):
-        b = StreamBuffer(1000, [100, 10], 1000.0)
+        b = StreamBuffer(1.0, [100, 10], 1000.0)
         b.suppress_mode = 'off'
         frame = usb_packet_factory(0, 1)
         self.assertEqual(0, b.status()['device_sample_id']['value'])
@@ -278,7 +278,7 @@ class TestStreamBuffer(unittest.TestCase):
 
     def test_wrap_aligned(self):
         frame = usb_packet_factory(0, 4)
-        b = StreamBuffer(2 * SAMPLES_PER, [], 1000.0)
+        b = StreamBuffer(2.0 * SAMPLES_PER / 1000.0, [], 1000.0)
         b.suppress_mode = 'off'
         b.insert(frame)
         b.process()
@@ -294,7 +294,7 @@ class TestStreamBuffer(unittest.TestCase):
 
     def test_wrap_unaligned(self):
         frame = usb_packet_factory(0, 4)
-        b = StreamBuffer(2 * SAMPLES_PER + 2, [], 1000.0)
+        b = StreamBuffer((2 * SAMPLES_PER + 2) / 1000.0, [], 1000.0)
         b.insert(frame)
         b.process()
         self.assertEqual(SAMPLES_PER * 4, b.sample_id_range[1])
@@ -303,7 +303,7 @@ class TestStreamBuffer(unittest.TestCase):
         np.testing.assert_allclose(expect, data)
 
     def test_get_over_samples(self):
-        b = StreamBuffer(2000, [10, 10], 1000.0)
+        b = StreamBuffer(2.0, [10, 10], 1000.0)
         b.suppress_mode = 'off'
         frame = usb_packet_factory(0, 1)
         b.insert(frame)
@@ -316,7 +316,7 @@ class TestStreamBuffer(unittest.TestCase):
         np.testing.assert_allclose([5.0, 15.0, 25.0, 35.0], data[:, 1]['mean'])
 
     def test_get_over_reduction_direct(self):
-        b = StreamBuffer(2000, [10, 10], 1000.0)
+        b = StreamBuffer(2.0, [10, 10], 1000.0)
         b.suppress_mode = 'off'
         frame = usb_packet_factory(0, 1)
         b.insert(frame)
@@ -329,7 +329,7 @@ class TestStreamBuffer(unittest.TestCase):
         np.testing.assert_allclose([10, 30.0, 330.0, 21.0, 39.0], single_stat_as_array(data[1, 1]))
 
     def test_get_over_reduction(self):
-        b = StreamBuffer(2000, [10, 10], 1000.0)
+        b = StreamBuffer(2.0, [10, 10], 1000.0)
         b.suppress_mode = 'off'
         frame = usb_packet_factory(0, 1)
         b.insert(frame)
@@ -341,7 +341,7 @@ class TestStreamBuffer(unittest.TestCase):
         assert_single_stat_close([20, 59.0, 1660.0, 40.0, 78.0], data[1, 0])
 
     def test_get_over_reduction_direct_with_raw_nan(self):
-        b = StreamBuffer(2000, [10, 10], 1000.0)
+        b = StreamBuffer(2.0, [10, 10], 1000.0)
         frame = usb_packet_factory(0, 1)
         frame[8+11*4:8+15*4:] = 0xff
         b.insert(frame)
@@ -350,7 +350,7 @@ class TestStreamBuffer(unittest.TestCase):
         self.assertTrue(all(np.isfinite(r[:, 0]['mean'])))
 
     def test_get_over_reduction_direct_with_reduction0_nan(self):
-        b = StreamBuffer(2000, [10, 10], 1000.0)
+        b = StreamBuffer(2.0, [10, 10], 1000.0)
         frame = usb_packet_factory(0, 1)
         frame[8+10*4:8+22*4:] = 0xff
         b.insert(frame)
@@ -361,7 +361,7 @@ class TestStreamBuffer(unittest.TestCase):
         self.assertTrue(np.isfinite(r0[0, 0]['mean']))
 
     def test_calibration(self):
-        b = StreamBuffer(2000, [10, 10], 1000.0)
+        b = StreamBuffer(2.0, [10, 10], 1000.0)
         b.suppress_mode = 'off'
         self.assertEqual('off', b.suppress_mode)
         b.calibration_set([-10.0] * 7, [2.0] * 7, [-2.0, 1.0], [4.0, 1.0])
@@ -374,7 +374,7 @@ class TestStreamBuffer(unittest.TestCase):
         np.testing.assert_allclose([12.,  60., 720., 0, 0, 1], data[8, :]['mean'])
 
     def stream_buffer_01(self):
-        b = StreamBuffer(2000, [10, 10], 1000.0)
+        b = StreamBuffer(2.0, [10, 10], 1000.0)
         b.suppress_mode = 'off'
         frame = usb_packet_factory(0, 1)
         b.insert(frame)
@@ -382,7 +382,7 @@ class TestStreamBuffer(unittest.TestCase):
         return b
 
     def stream_buffer_02(self):
-        b = StreamBuffer(2000, [10, 10], 1000.0)
+        b = StreamBuffer(2.0, [10, 10], 1000.0)
         b.suppress_mode = 'off'
         b.insert(usb_packet_factory(0))
         b.insert(usb_packet_factory(2))
@@ -456,7 +456,7 @@ class TestStreamBuffer(unittest.TestCase):
         self.assertEqual(126, b.status()['sample_missing_count']['value'])
 
     def test_insert_raw_simple(self):
-        b = StreamBuffer(1000, [100, 100, 100], 1000.0)
+        b = StreamBuffer(1.0, [100, 100, 100], 1000.0)
         b.suppress_mode = 'off'
         expect = np.arange(126 * 2, dtype=np.uint16).reshape((126, 2))
         raw = np.left_shift(expect, 2)
@@ -468,7 +468,7 @@ class TestStreamBuffer(unittest.TestCase):
         self.assertEqual(0, b.status()['skip_count']['value'])
 
     def test_insert_raw_wrap(self):
-        b = StreamBuffer(200, [], 1000.0)
+        b = StreamBuffer(0.2, [], 1000.0)
         expect = np.arange(250 * 2, dtype=np.uint16).reshape((250, 2))
         raw = np.left_shift(expect, 2)
         raw[1::2, 1] = np.bitwise_or(raw[1::2, 1], 0x0002)
@@ -500,7 +500,7 @@ class TestStreamBuffer(unittest.TestCase):
             [12733, 16946],
             [12613, 16940],
             [12561, 16930]], dtype=np.uint16)
-        b = StreamBuffer(200, [], 1000.0)
+        b = StreamBuffer(0.2, [], 1000.0)
         b.insert_raw(raw)
         b.process()
         self.assertEqual(0, b.status()['skip_count']['value'])
@@ -515,14 +515,14 @@ class TestStreamBuffer(unittest.TestCase):
             [0x1003, 0x1003],
             [0x1003, 0x1001],
             [0x1003, 0x1003]], dtype=np.uint16)
-        b = StreamBuffer(200, [], 1000.0)
+        b = StreamBuffer(0.2, [], 1000.0)
         b.insert_raw(raw)
         b.process()
         self.assertEqual(0, b.samples_get(0, 8, fields=['current'])[0][-1])
         self.assertEqual(0, b.samples_get(0, 8, fields='current')[-1])
 
     def test_voltage_range(self):
-        b = StreamBuffer(200, [], 1000.0)
+        b = StreamBuffer(0.2, [], 1000.0)
         self.assertEqual(0, b.voltage_range)
         b.voltage_range = 1
         self.assertEqual(1, b.voltage_range)

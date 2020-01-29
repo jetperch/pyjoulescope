@@ -6,7 +6,7 @@ This file contains the list of changes made to pyjoulescope.
 
 ## 0.8.0
 
-2020 Jan 26 [in progress]
+2020 Jan 29 [in progress]
 
 *   Refactored StreamBuffer to split out UsbBulkProcessor.
 *   Added running statistics computation.
@@ -14,6 +14,8 @@ This file contains the list of changes made to pyjoulescope.
     need to be updated!
 *   Added downsampling filter implementation.
 *   Removed StreamBuffer.raw_get.  Use StreamBuffer.samples_get.
+*   Changed StreamBuffer.__init__() to take duration rather than sample length.
+    Allows future compatibility with downsampling buffer length specification.
 
 
 ## 0.7.0

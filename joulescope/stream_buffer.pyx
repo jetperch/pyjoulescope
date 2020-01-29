@@ -426,7 +426,8 @@ cdef class StreamBuffer:
     cdef object _charge_picocoulomb  # python integer for infinite precision
     cdef object _energy_picojoules  # python integer for infinite precision
 
-    def __cinit__(self, length, reductions, sampling_frequency):
+    def __cinit__(self, duration, reductions, sampling_frequency):
+        length = int(sampling_frequency * duration)
         self._usb_bulk_processor = UsbBulkProcessor()
         self._usb_bulk_processor.callback_set(<usb_bulk_data_processor_cbk_fn> self._process_samples, self)
         self._raw_processor = RawProcessor()
@@ -1245,7 +1246,7 @@ cpdef usb_packet_factory_signal(packet_index, count=None, samples_total=None):
     sample_rate = 2000000
     samples_total = sample_rate * 100 if samples_total is None else int(samples_total)
     slope = (2 ** 14 - 1) / samples_total
-    stream_buffer = StreamBuffer(sample_rate // 10, [100], sample_rate)
+    stream_buffer = StreamBuffer(0.1, [100], sample_rate)
 
     cdef frame = np.empty(512 * count, dtype=np.uint8)
     for i in range(count):

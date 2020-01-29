@@ -34,7 +34,7 @@ class TestViewOpenClose(unittest.TestCase):
 class TestView(unittest.TestCase):
 
     def setUp(self):
-        self.b = StreamBuffer(2000, [10, 10], sampling_frequency=1000)
+        self.b = StreamBuffer(2.0, [10, 10], sampling_frequency=1000)
         self.v = View(stream_buffer=self.b, calibration=None)
         self.b.insert(usb_packet_factory(0, 2))
         self.b.process()

@@ -129,7 +129,7 @@ class StreamProcessApi:
     will call close() when streaming is stopped.
     """
 
-    def start(self, stream_buffer: StreamBuffer):
+    def start(self, stream_buffer):
         """Start a new streaming session. [optional]
 
         :param stream_buffer: The :class:`StreamBuffer` instance which contains
@@ -149,7 +149,7 @@ class StreamProcessApi:
         """
         raise NotImplementedError()
 
-    def stream_notify(self, stream_buffer: StreamBuffer):
+    def stream_notify(self, stream_buffer):
         """Notify that new data is available from the Joulescope.
 
         :param stream_buffer: The :class:`StreamBuffer` instance which contains
@@ -364,8 +364,7 @@ class Device:
         if self.stream_buffer:
             self.close()
         self._usb.open(event_callback_fn)
-        sb_len = self._sampling_frequency * self._stream_buffer_duration
-        self.stream_buffer = StreamBuffer(sb_len, self._reductions, self._sampling_frequency)
+        self.stream_buffer = StreamBuffer(self._stream_buffer_duration, self._reductions, self._sampling_frequency)
         self._current_ranging_set()
         try:
             info = self.info()
