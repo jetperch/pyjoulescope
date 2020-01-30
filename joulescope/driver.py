@@ -17,7 +17,7 @@ from joulescope.usb.device_thread import DeviceThread
 from .parameters_v1 import PARAMETERS, PARAMETERS_DICT, PARAMETERS_DEFAULTS, name_to_value, value_to_name
 from . import datafile
 from . import bootloader
-from joulescope.stream_buffer import StreamBuffer
+from joulescope.stream_buffer import StreamBuffer, DownsamplingStreamBuffer
 from joulescope.calibration import Calibration
 from joulescope.view import View
 import struct
@@ -188,7 +188,7 @@ class Device:
         self._parameters = {}
         self._reductions = REDUCTIONS
         self._stream_buffer_duration = STREAM_BUFFER_DURATION
-        self._sampling_frequency = SAMPLING_FREQUENCY
+        self._sampling_frequency = SAMPLING_FREQUENCY  #  // 10  # todo
         self.stream_buffer = None
         self._streaming = False
         self._stop_fn = None
@@ -364,7 +364,10 @@ class Device:
         if self.stream_buffer:
             self.close()
         self._usb.open(event_callback_fn)
-        self.stream_buffer = StreamBuffer(self._stream_buffer_duration, self._reductions, self._sampling_frequency)
+        if SAMPLING_FREQUENCY != self._sampling_frequency:
+            self.stream_buffer = DownsamplingStreamBuffer(self._stream_buffer_duration, self._reductions, SAMPLING_FREQUENCY, self._sampling_frequency)
+        else:
+            self.stream_buffer = StreamBuffer(self._stream_buffer_duration, self._reductions, self._sampling_frequency)
         self._current_ranging_set()
         try:
             info = self.info()

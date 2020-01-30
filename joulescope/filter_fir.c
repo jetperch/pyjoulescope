@@ -3,7 +3,12 @@
 /* BEGIN: Cython Metadata
 {
     "distutils": {
-        "depends": [],
+        "depends": [
+            "joulescope\\native\\filter_fir.h"
+        ],
+        "include_dirs": [
+            ".\\joulescope"
+        ],
         "name": "joulescope.filter_fir",
         "sources": [
             "joulescope/filter_fir.pyx",
@@ -1221,7 +1226,7 @@ typedef npy_cdouble __pyx_t_5numpy_complex_t;
  * 
  * cdef class FilterFir:             # <<<<<<<<<<<<<<
  * 
- *     cdef c_filter_fir.filter_fir_s ** _filters
+ *     cdef filter_fir_s ** _filters
  */
 struct __pyx_obj_10joulescope_10filter_fir_FilterFir {
   PyObject_HEAD
@@ -2131,6 +2136,9 @@ __pyx_memoryview_copy_new_contig(const __Pyx_memviewslice *from_mvs,
 static CYTHON_INLINE uint32_t __Pyx_PyInt_As_uint32_t(PyObject *);
 
 /* CIntFromPy.proto */
+static CYTHON_INLINE uint64_t __Pyx_PyInt_As_uint64_t(PyObject *);
+
+/* CIntFromPy.proto */
 static CYTHON_INLINE int __Pyx_PyInt_As_int(PyObject *);
 
 /* CIntFromPy.proto */
@@ -2165,6 +2173,12 @@ static int __Pyx_ValidateAndInit_memviewslice(
 /* ObjectToMemviewSlice.proto */
 static CYTHON_INLINE __Pyx_memviewslice __Pyx_PyObject_to_MemoryviewSlice_dc_nn___pyx_t_5numpy_float64_t(PyObject *, int writable_flag);
 
+/* ObjectToMemviewSlice.proto */
+static CYTHON_INLINE __Pyx_memviewslice __Pyx_PyObject_to_MemoryviewSlice_dc_double(PyObject *, int writable_flag);
+
+/* ObjectToMemviewSlice.proto */
+static CYTHON_INLINE __Pyx_memviewslice __Pyx_PyObject_to_MemoryviewSlice_d_dc_double(PyObject *, int writable_flag);
+
 /* CheckBinaryVersion.proto */
 static int __Pyx_check_binary_version(void);
 
@@ -2185,11 +2199,11 @@ static PyObject *__pyx_memoryview_assign_item_from_object(struct __pyx_memoryvie
 static PyObject *__pyx_memoryviewslice_convert_item_to_object(struct __pyx_memoryviewslice_obj *__pyx_v_self, char *__pyx_v_itemp); /* proto*/
 static PyObject *__pyx_memoryviewslice_assign_item_from_object(struct __pyx_memoryviewslice_obj *__pyx_v_self, char *__pyx_v_itemp, PyObject *__pyx_v_value); /* proto*/
 
-/* Module declarations from 'joulescope' */
-
 /* Module declarations from 'libc.stdint' */
 
 /* Module declarations from 'joulescope.c_filter_fir' */
+
+/* Module declarations from 'joulescope' */
 
 /* Module declarations from 'cpython.mem' */
 
@@ -2271,6 +2285,7 @@ static void __pyx_memoryview_slice_assign_scalar(__Pyx_memviewslice *, int, size
 static void __pyx_memoryview__slice_assign_scalar(char *, Py_ssize_t *, Py_ssize_t *, int, size_t, void *); /*proto*/
 static PyObject *__pyx_unpickle_Enum__set_state(struct __pyx_MemviewEnum_obj *, PyObject *); /*proto*/
 static __Pyx_TypeInfo __Pyx_TypeInfo_nn___pyx_t_5numpy_float64_t = { "float64_t", NULL, sizeof(__pyx_t_5numpy_float64_t), { 0 }, 0, 'R', 0, 0 };
+static __Pyx_TypeInfo __Pyx_TypeInfo_double = { "double", NULL, sizeof(double), { 0 }, 0, 'R', 0, 0 };
 #define __Pyx_MODULE_NAME "joulescope.filter_fir"
 extern int __pyx_module_is_main_joulescope__filter_fir;
 int __pyx_module_is_main_joulescope__filter_fir = 0;
@@ -3711,7 +3726,7 @@ static void __pyx_f_10joulescope_10filter_fir_9FilterFir_c_process(struct __pyx_
 
 /* Python wrapper */
 static PyObject *__pyx_pw_10joulescope_10filter_fir_9FilterFir_11process(PyObject *__pyx_v_self, PyObject *__pyx_v_x); /*proto*/
-static char __pyx_doc_10joulescope_10filter_fir_9FilterFir_10process[] = "Process the new data.\n\n        :param x: The new data as either:\n            * a single numerical value\n            * an np.ndarray with dtype=np.float64.  The length must match width.\n        ";
+static char __pyx_doc_10joulescope_10filter_fir_9FilterFir_10process[] = "Process the new data.\n\n        :param x: The new data as either:\n            * a single numerical value\n            * a 1D np.ndarray with dtype=np.float64.  The length must match width.\n            * a NxW 2D np.ndarray with dtype=np.float64.  W must match width \n        ";
 static PyObject *__pyx_pw_10joulescope_10filter_fir_9FilterFir_11process(PyObject *__pyx_v_self, PyObject *__pyx_v_x) {
   PyObject *__pyx_r = 0;
   __Pyx_RefNannyDeclarations
@@ -3724,27 +3739,33 @@ static PyObject *__pyx_pw_10joulescope_10filter_fir_9FilterFir_11process(PyObjec
 }
 
 static PyObject *__pyx_pf_10joulescope_10filter_fir_9FilterFir_10process(struct __pyx_obj_10joulescope_10filter_fir_FilterFir *__pyx_v_self, PyObject *__pyx_v_x) {
-  uint32_t __pyx_v_idx;
+  __Pyx_memviewslice __pyx_v_x1d_view = { 0, 0, { 0 }, { 0 }, { 0 } };
+  __Pyx_memviewslice __pyx_v_x2d_view = { 0, 0, { 0 }, { 0 }, { 0 } };
+  uint64_t __pyx_v_idx;
   PyObject *__pyx_r = NULL;
   __Pyx_RefNannyDeclarations
   int __pyx_t_1;
   int __pyx_t_2;
   int __pyx_t_3;
   double __pyx_t_4;
-  Py_ssize_t __pyx_t_5;
-  PyObject *__pyx_t_6 = NULL;
+  PyObject *__pyx_t_5 = NULL;
+  Py_ssize_t __pyx_t_6;
   Py_UCS4 __pyx_t_7;
   Py_ssize_t __pyx_t_8;
   PyObject *__pyx_t_9 = NULL;
   PyObject *__pyx_t_10 = NULL;
-  uint32_t __pyx_t_11;
-  uint32_t __pyx_t_12;
-  uint32_t __pyx_t_13;
+  __Pyx_memviewslice __pyx_t_11 = { 0, 0, { 0 }, { 0 }, { 0 } };
+  Py_ssize_t __pyx_t_12;
+  int __pyx_t_13;
+  __Pyx_memviewslice __pyx_t_14 = { 0, 0, { 0 }, { 0 }, { 0 } };
+  uint64_t __pyx_t_15;
+  uint64_t __pyx_t_16;
+  Py_ssize_t __pyx_t_17;
   __Pyx_RefNannySetupContext("process", 0);
 
-  /* "joulescope/filter_fir.pyx":100
- *             * an np.ndarray with dtype=np.float64.  The length must match width.
- *         """
+  /* "joulescope/filter_fir.pyx":105
+ *         cdef uint64_t idx
+ * 
  *         if isinstance(x, (float, int)):             # <<<<<<<<<<<<<<
  *             self._data[0] = x
  *             self.c_process(&self._data[0], 1)
@@ -3763,28 +3784,28 @@ static PyObject *__pyx_pf_10joulescope_10filter_fir_9FilterFir_10process(struct 
   __pyx_t_2 = (__pyx_t_1 != 0);
   if (__pyx_t_2) {
 
-    /* "joulescope/filter_fir.pyx":101
- *         """
+    /* "joulescope/filter_fir.pyx":106
+ * 
  *         if isinstance(x, (float, int)):
  *             self._data[0] = x             # <<<<<<<<<<<<<<
  *             self.c_process(&self._data[0], 1)
- *         else:
+ *         elif len(x.shape) == 1:
  */
-    __pyx_t_4 = __pyx_PyFloat_AsDouble(__pyx_v_x); if (unlikely((__pyx_t_4 == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 101, __pyx_L1_error)
+    __pyx_t_4 = __pyx_PyFloat_AsDouble(__pyx_v_x); if (unlikely((__pyx_t_4 == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 106, __pyx_L1_error)
     (__pyx_v_self->_data[0]) = __pyx_t_4;
 
-    /* "joulescope/filter_fir.pyx":102
+    /* "joulescope/filter_fir.pyx":107
  *         if isinstance(x, (float, int)):
  *             self._data[0] = x
  *             self.c_process(&self._data[0], 1)             # <<<<<<<<<<<<<<
- *         else:
+ *         elif len(x.shape) == 1:
  *             if len(x) != self._filters_width:
  */
     ((struct __pyx_vtabstruct_10joulescope_10filter_fir_FilterFir *)__pyx_v_self->__pyx_vtab)->c_process(__pyx_v_self, (&(__pyx_v_self->_data[0])), 1);
 
-    /* "joulescope/filter_fir.pyx":100
- *             * an np.ndarray with dtype=np.float64.  The length must match width.
- *         """
+    /* "joulescope/filter_fir.pyx":105
+ *         cdef uint64_t idx
+ * 
  *         if isinstance(x, (float, int)):             # <<<<<<<<<<<<<<
  *             self._data[0] = x
  *             self.c_process(&self._data[0], 1)
@@ -3792,104 +3813,267 @@ static PyObject *__pyx_pf_10joulescope_10filter_fir_9FilterFir_10process(struct 
     goto __pyx_L3;
   }
 
-  /* "joulescope/filter_fir.pyx":104
+  /* "joulescope/filter_fir.pyx":108
+ *             self._data[0] = x
  *             self.c_process(&self._data[0], 1)
- *         else:
+ *         elif len(x.shape) == 1:             # <<<<<<<<<<<<<<
+ *             if len(x) != self._filters_width:
+ *                 raise RuntimeError(f'Invalid width: {len(x)} != {self._filters_width}')
+ */
+  __pyx_t_5 = __Pyx_PyObject_GetAttrStr(__pyx_v_x, __pyx_n_s_shape); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 108, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_5);
+  __pyx_t_6 = PyObject_Length(__pyx_t_5); if (unlikely(__pyx_t_6 == ((Py_ssize_t)-1))) __PYX_ERR(0, 108, __pyx_L1_error)
+  __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+  __pyx_t_2 = ((__pyx_t_6 == 1) != 0);
+  if (__pyx_t_2) {
+
+    /* "joulescope/filter_fir.pyx":109
+ *             self.c_process(&self._data[0], 1)
+ *         elif len(x.shape) == 1:
  *             if len(x) != self._filters_width:             # <<<<<<<<<<<<<<
  *                 raise RuntimeError(f'Invalid width: {len(x)} != {self._filters_width}')
- *             for idx in range(self._filters_width):
+ *             x1d_view = x
  */
-  /*else*/ {
-    __pyx_t_5 = PyObject_Length(__pyx_v_x); if (unlikely(__pyx_t_5 == ((Py_ssize_t)-1))) __PYX_ERR(0, 104, __pyx_L1_error)
-    __pyx_t_2 = ((__pyx_t_5 != __pyx_v_self->_filters_width) != 0);
+    __pyx_t_6 = PyObject_Length(__pyx_v_x); if (unlikely(__pyx_t_6 == ((Py_ssize_t)-1))) __PYX_ERR(0, 109, __pyx_L1_error)
+    __pyx_t_2 = ((__pyx_t_6 != __pyx_v_self->_filters_width) != 0);
     if (unlikely(__pyx_t_2)) {
 
-      /* "joulescope/filter_fir.pyx":105
- *         else:
+      /* "joulescope/filter_fir.pyx":110
+ *         elif len(x.shape) == 1:
  *             if len(x) != self._filters_width:
  *                 raise RuntimeError(f'Invalid width: {len(x)} != {self._filters_width}')             # <<<<<<<<<<<<<<
- *             for idx in range(self._filters_width):
- *                 self._data[idx] = x[idx]
+ *             x1d_view = x
+ *             self.c_process(&x1d_view[0], self._filters_width)
  */
-      __pyx_t_6 = PyTuple_New(4); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 105, __pyx_L1_error)
-      __Pyx_GOTREF(__pyx_t_6);
-      __pyx_t_5 = 0;
+      __pyx_t_5 = PyTuple_New(4); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 110, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_5);
+      __pyx_t_6 = 0;
       __pyx_t_7 = 127;
       __Pyx_INCREF(__pyx_kp_u_Invalid_width);
-      __pyx_t_5 += 15;
+      __pyx_t_6 += 15;
       __Pyx_GIVEREF(__pyx_kp_u_Invalid_width);
-      PyTuple_SET_ITEM(__pyx_t_6, 0, __pyx_kp_u_Invalid_width);
-      __pyx_t_8 = PyObject_Length(__pyx_v_x); if (unlikely(__pyx_t_8 == ((Py_ssize_t)-1))) __PYX_ERR(0, 105, __pyx_L1_error)
-      __pyx_t_9 = __Pyx_PyUnicode_From_Py_ssize_t(__pyx_t_8, 0, ' ', 'd'); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 105, __pyx_L1_error)
+      PyTuple_SET_ITEM(__pyx_t_5, 0, __pyx_kp_u_Invalid_width);
+      __pyx_t_8 = PyObject_Length(__pyx_v_x); if (unlikely(__pyx_t_8 == ((Py_ssize_t)-1))) __PYX_ERR(0, 110, __pyx_L1_error)
+      __pyx_t_9 = __Pyx_PyUnicode_From_Py_ssize_t(__pyx_t_8, 0, ' ', 'd'); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 110, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_9);
-      __pyx_t_5 += __Pyx_PyUnicode_GET_LENGTH(__pyx_t_9);
+      __pyx_t_6 += __Pyx_PyUnicode_GET_LENGTH(__pyx_t_9);
       __Pyx_GIVEREF(__pyx_t_9);
-      PyTuple_SET_ITEM(__pyx_t_6, 1, __pyx_t_9);
+      PyTuple_SET_ITEM(__pyx_t_5, 1, __pyx_t_9);
       __pyx_t_9 = 0;
       __Pyx_INCREF(__pyx_kp_u__2);
-      __pyx_t_5 += 4;
+      __pyx_t_6 += 4;
       __Pyx_GIVEREF(__pyx_kp_u__2);
-      PyTuple_SET_ITEM(__pyx_t_6, 2, __pyx_kp_u__2);
-      __pyx_t_9 = __Pyx_PyInt_From_uint32_t(__pyx_v_self->_filters_width); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 105, __pyx_L1_error)
+      PyTuple_SET_ITEM(__pyx_t_5, 2, __pyx_kp_u__2);
+      __pyx_t_9 = __Pyx_PyInt_From_uint32_t(__pyx_v_self->_filters_width); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 110, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_9);
-      __pyx_t_10 = __Pyx_PyObject_FormatSimple(__pyx_t_9, __pyx_empty_unicode); if (unlikely(!__pyx_t_10)) __PYX_ERR(0, 105, __pyx_L1_error)
+      __pyx_t_10 = __Pyx_PyObject_FormatSimple(__pyx_t_9, __pyx_empty_unicode); if (unlikely(!__pyx_t_10)) __PYX_ERR(0, 110, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_10);
       __Pyx_DECREF(__pyx_t_9); __pyx_t_9 = 0;
       __pyx_t_7 = (__Pyx_PyUnicode_MAX_CHAR_VALUE(__pyx_t_10) > __pyx_t_7) ? __Pyx_PyUnicode_MAX_CHAR_VALUE(__pyx_t_10) : __pyx_t_7;
-      __pyx_t_5 += __Pyx_PyUnicode_GET_LENGTH(__pyx_t_10);
+      __pyx_t_6 += __Pyx_PyUnicode_GET_LENGTH(__pyx_t_10);
       __Pyx_GIVEREF(__pyx_t_10);
-      PyTuple_SET_ITEM(__pyx_t_6, 3, __pyx_t_10);
+      PyTuple_SET_ITEM(__pyx_t_5, 3, __pyx_t_10);
       __pyx_t_10 = 0;
-      __pyx_t_10 = __Pyx_PyUnicode_Join(__pyx_t_6, 4, __pyx_t_5, __pyx_t_7); if (unlikely(!__pyx_t_10)) __PYX_ERR(0, 105, __pyx_L1_error)
+      __pyx_t_10 = __Pyx_PyUnicode_Join(__pyx_t_5, 4, __pyx_t_6, __pyx_t_7); if (unlikely(!__pyx_t_10)) __PYX_ERR(0, 110, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_10);
-      __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
-      __pyx_t_6 = __Pyx_PyObject_CallOneArg(__pyx_builtin_RuntimeError, __pyx_t_10); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 105, __pyx_L1_error)
-      __Pyx_GOTREF(__pyx_t_6);
+      __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+      __pyx_t_5 = __Pyx_PyObject_CallOneArg(__pyx_builtin_RuntimeError, __pyx_t_10); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 110, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_5);
       __Pyx_DECREF(__pyx_t_10); __pyx_t_10 = 0;
-      __Pyx_Raise(__pyx_t_6, 0, 0, 0);
-      __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
-      __PYX_ERR(0, 105, __pyx_L1_error)
+      __Pyx_Raise(__pyx_t_5, 0, 0, 0);
+      __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+      __PYX_ERR(0, 110, __pyx_L1_error)
 
-      /* "joulescope/filter_fir.pyx":104
+      /* "joulescope/filter_fir.pyx":109
  *             self.c_process(&self._data[0], 1)
- *         else:
+ *         elif len(x.shape) == 1:
  *             if len(x) != self._filters_width:             # <<<<<<<<<<<<<<
  *                 raise RuntimeError(f'Invalid width: {len(x)} != {self._filters_width}')
- *             for idx in range(self._filters_width):
+ *             x1d_view = x
  */
     }
 
-    /* "joulescope/filter_fir.pyx":106
+    /* "joulescope/filter_fir.pyx":111
  *             if len(x) != self._filters_width:
  *                 raise RuntimeError(f'Invalid width: {len(x)} != {self._filters_width}')
- *             for idx in range(self._filters_width):             # <<<<<<<<<<<<<<
- *                 self._data[idx] = x[idx]
- *             self.c_process(&self._data[0], self._filters_width)
+ *             x1d_view = x             # <<<<<<<<<<<<<<
+ *             self.c_process(&x1d_view[0], self._filters_width)
+ *         elif len(x.shape) == 2:
  */
-    __pyx_t_11 = __pyx_v_self->_filters_width;
-    __pyx_t_12 = __pyx_t_11;
-    for (__pyx_t_13 = 0; __pyx_t_13 < __pyx_t_12; __pyx_t_13+=1) {
-      __pyx_v_idx = __pyx_t_13;
+    __pyx_t_11 = __Pyx_PyObject_to_MemoryviewSlice_dc_double(__pyx_v_x, PyBUF_WRITABLE); if (unlikely(!__pyx_t_11.memview)) __PYX_ERR(0, 111, __pyx_L1_error)
+    __pyx_v_x1d_view = __pyx_t_11;
+    __pyx_t_11.memview = NULL;
+    __pyx_t_11.data = NULL;
 
-      /* "joulescope/filter_fir.pyx":107
+    /* "joulescope/filter_fir.pyx":112
  *                 raise RuntimeError(f'Invalid width: {len(x)} != {self._filters_width}')
- *             for idx in range(self._filters_width):
- *                 self._data[idx] = x[idx]             # <<<<<<<<<<<<<<
- *             self.c_process(&self._data[0], self._filters_width)
+ *             x1d_view = x
+ *             self.c_process(&x1d_view[0], self._filters_width)             # <<<<<<<<<<<<<<
+ *         elif len(x.shape) == 2:
+ *             if x.shape[1] != self._filters_width:
  */
-      __pyx_t_6 = __Pyx_GetItemInt(__pyx_v_x, __pyx_v_idx, uint32_t, 0, __Pyx_PyInt_From_uint32_t, 0, 0, 1); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 107, __pyx_L1_error)
-      __Pyx_GOTREF(__pyx_t_6);
-      __pyx_t_4 = __pyx_PyFloat_AsDouble(__pyx_t_6); if (unlikely((__pyx_t_4 == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 107, __pyx_L1_error)
-      __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
-      (__pyx_v_self->_data[__pyx_v_idx]) = __pyx_t_4;
+    __pyx_t_12 = 0;
+    __pyx_t_13 = -1;
+    if (__pyx_t_12 < 0) {
+      __pyx_t_12 += __pyx_v_x1d_view.shape[0];
+      if (unlikely(__pyx_t_12 < 0)) __pyx_t_13 = 0;
+    } else if (unlikely(__pyx_t_12 >= __pyx_v_x1d_view.shape[0])) __pyx_t_13 = 0;
+    if (unlikely(__pyx_t_13 != -1)) {
+      __Pyx_RaiseBufferIndexError(__pyx_t_13);
+      __PYX_ERR(0, 112, __pyx_L1_error)
     }
+    ((struct __pyx_vtabstruct_10joulescope_10filter_fir_FilterFir *)__pyx_v_self->__pyx_vtab)->c_process(__pyx_v_self, (&(*((double *) ( /* dim=0 */ ((char *) (((double *) __pyx_v_x1d_view.data) + __pyx_t_12)) )))), __pyx_v_self->_filters_width);
 
     /* "joulescope/filter_fir.pyx":108
- *             for idx in range(self._filters_width):
- *                 self._data[idx] = x[idx]
- *             self.c_process(&self._data[0], self._filters_width)             # <<<<<<<<<<<<<<
+ *             self._data[0] = x
+ *             self.c_process(&self._data[0], 1)
+ *         elif len(x.shape) == 1:             # <<<<<<<<<<<<<<
+ *             if len(x) != self._filters_width:
+ *                 raise RuntimeError(f'Invalid width: {len(x)} != {self._filters_width}')
  */
-    ((struct __pyx_vtabstruct_10joulescope_10filter_fir_FilterFir *)__pyx_v_self->__pyx_vtab)->c_process(__pyx_v_self, (&(__pyx_v_self->_data[0])), __pyx_v_self->_filters_width);
+    goto __pyx_L3;
+  }
+
+  /* "joulescope/filter_fir.pyx":113
+ *             x1d_view = x
+ *             self.c_process(&x1d_view[0], self._filters_width)
+ *         elif len(x.shape) == 2:             # <<<<<<<<<<<<<<
+ *             if x.shape[1] != self._filters_width:
+ *                 raise RuntimeError(f'Invalid width: {len(x)} != {self._filters_width}')
+ */
+  __pyx_t_5 = __Pyx_PyObject_GetAttrStr(__pyx_v_x, __pyx_n_s_shape); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 113, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_5);
+  __pyx_t_6 = PyObject_Length(__pyx_t_5); if (unlikely(__pyx_t_6 == ((Py_ssize_t)-1))) __PYX_ERR(0, 113, __pyx_L1_error)
+  __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+  __pyx_t_2 = ((__pyx_t_6 == 2) != 0);
+  if (__pyx_t_2) {
+
+    /* "joulescope/filter_fir.pyx":114
+ *             self.c_process(&x1d_view[0], self._filters_width)
+ *         elif len(x.shape) == 2:
+ *             if x.shape[1] != self._filters_width:             # <<<<<<<<<<<<<<
+ *                 raise RuntimeError(f'Invalid width: {len(x)} != {self._filters_width}')
+ *             x2d_view = x
+ */
+    __pyx_t_5 = __Pyx_PyObject_GetAttrStr(__pyx_v_x, __pyx_n_s_shape); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 114, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_5);
+    __pyx_t_10 = __Pyx_GetItemInt(__pyx_t_5, 1, long, 1, __Pyx_PyInt_From_long, 0, 0, 1); if (unlikely(!__pyx_t_10)) __PYX_ERR(0, 114, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_10);
+    __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+    __pyx_t_5 = __Pyx_PyInt_From_uint32_t(__pyx_v_self->_filters_width); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 114, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_5);
+    __pyx_t_9 = PyObject_RichCompare(__pyx_t_10, __pyx_t_5, Py_NE); __Pyx_XGOTREF(__pyx_t_9); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 114, __pyx_L1_error)
+    __Pyx_DECREF(__pyx_t_10); __pyx_t_10 = 0;
+    __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+    __pyx_t_2 = __Pyx_PyObject_IsTrue(__pyx_t_9); if (unlikely(__pyx_t_2 < 0)) __PYX_ERR(0, 114, __pyx_L1_error)
+    __Pyx_DECREF(__pyx_t_9); __pyx_t_9 = 0;
+    if (unlikely(__pyx_t_2)) {
+
+      /* "joulescope/filter_fir.pyx":115
+ *         elif len(x.shape) == 2:
+ *             if x.shape[1] != self._filters_width:
+ *                 raise RuntimeError(f'Invalid width: {len(x)} != {self._filters_width}')             # <<<<<<<<<<<<<<
+ *             x2d_view = x
+ *             for idx in range(len(x)):
+ */
+      __pyx_t_9 = PyTuple_New(4); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 115, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_9);
+      __pyx_t_6 = 0;
+      __pyx_t_7 = 127;
+      __Pyx_INCREF(__pyx_kp_u_Invalid_width);
+      __pyx_t_6 += 15;
+      __Pyx_GIVEREF(__pyx_kp_u_Invalid_width);
+      PyTuple_SET_ITEM(__pyx_t_9, 0, __pyx_kp_u_Invalid_width);
+      __pyx_t_8 = PyObject_Length(__pyx_v_x); if (unlikely(__pyx_t_8 == ((Py_ssize_t)-1))) __PYX_ERR(0, 115, __pyx_L1_error)
+      __pyx_t_5 = __Pyx_PyUnicode_From_Py_ssize_t(__pyx_t_8, 0, ' ', 'd'); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 115, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_5);
+      __pyx_t_6 += __Pyx_PyUnicode_GET_LENGTH(__pyx_t_5);
+      __Pyx_GIVEREF(__pyx_t_5);
+      PyTuple_SET_ITEM(__pyx_t_9, 1, __pyx_t_5);
+      __pyx_t_5 = 0;
+      __Pyx_INCREF(__pyx_kp_u__2);
+      __pyx_t_6 += 4;
+      __Pyx_GIVEREF(__pyx_kp_u__2);
+      PyTuple_SET_ITEM(__pyx_t_9, 2, __pyx_kp_u__2);
+      __pyx_t_5 = __Pyx_PyInt_From_uint32_t(__pyx_v_self->_filters_width); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 115, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_5);
+      __pyx_t_10 = __Pyx_PyObject_FormatSimple(__pyx_t_5, __pyx_empty_unicode); if (unlikely(!__pyx_t_10)) __PYX_ERR(0, 115, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_10);
+      __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+      __pyx_t_7 = (__Pyx_PyUnicode_MAX_CHAR_VALUE(__pyx_t_10) > __pyx_t_7) ? __Pyx_PyUnicode_MAX_CHAR_VALUE(__pyx_t_10) : __pyx_t_7;
+      __pyx_t_6 += __Pyx_PyUnicode_GET_LENGTH(__pyx_t_10);
+      __Pyx_GIVEREF(__pyx_t_10);
+      PyTuple_SET_ITEM(__pyx_t_9, 3, __pyx_t_10);
+      __pyx_t_10 = 0;
+      __pyx_t_10 = __Pyx_PyUnicode_Join(__pyx_t_9, 4, __pyx_t_6, __pyx_t_7); if (unlikely(!__pyx_t_10)) __PYX_ERR(0, 115, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_10);
+      __Pyx_DECREF(__pyx_t_9); __pyx_t_9 = 0;
+      __pyx_t_9 = __Pyx_PyObject_CallOneArg(__pyx_builtin_RuntimeError, __pyx_t_10); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 115, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_9);
+      __Pyx_DECREF(__pyx_t_10); __pyx_t_10 = 0;
+      __Pyx_Raise(__pyx_t_9, 0, 0, 0);
+      __Pyx_DECREF(__pyx_t_9); __pyx_t_9 = 0;
+      __PYX_ERR(0, 115, __pyx_L1_error)
+
+      /* "joulescope/filter_fir.pyx":114
+ *             self.c_process(&x1d_view[0], self._filters_width)
+ *         elif len(x.shape) == 2:
+ *             if x.shape[1] != self._filters_width:             # <<<<<<<<<<<<<<
+ *                 raise RuntimeError(f'Invalid width: {len(x)} != {self._filters_width}')
+ *             x2d_view = x
+ */
+    }
+
+    /* "joulescope/filter_fir.pyx":116
+ *             if x.shape[1] != self._filters_width:
+ *                 raise RuntimeError(f'Invalid width: {len(x)} != {self._filters_width}')
+ *             x2d_view = x             # <<<<<<<<<<<<<<
+ *             for idx in range(len(x)):
+ *                 c_filter_fir.filter_fir_single(self._filters[0], &x2d_view[idx, 0], self._filters_width)
+ */
+    __pyx_t_14 = __Pyx_PyObject_to_MemoryviewSlice_d_dc_double(__pyx_v_x, PyBUF_WRITABLE); if (unlikely(!__pyx_t_14.memview)) __PYX_ERR(0, 116, __pyx_L1_error)
+    __pyx_v_x2d_view = __pyx_t_14;
+    __pyx_t_14.memview = NULL;
+    __pyx_t_14.data = NULL;
+
+    /* "joulescope/filter_fir.pyx":117
+ *                 raise RuntimeError(f'Invalid width: {len(x)} != {self._filters_width}')
+ *             x2d_view = x
+ *             for idx in range(len(x)):             # <<<<<<<<<<<<<<
+ *                 c_filter_fir.filter_fir_single(self._filters[0], &x2d_view[idx, 0], self._filters_width)
+ */
+    __pyx_t_6 = PyObject_Length(__pyx_v_x); if (unlikely(__pyx_t_6 == ((Py_ssize_t)-1))) __PYX_ERR(0, 117, __pyx_L1_error)
+    __pyx_t_8 = __pyx_t_6;
+    for (__pyx_t_15 = 0; __pyx_t_15 < __pyx_t_8; __pyx_t_15+=1) {
+      __pyx_v_idx = __pyx_t_15;
+
+      /* "joulescope/filter_fir.pyx":118
+ *             x2d_view = x
+ *             for idx in range(len(x)):
+ *                 c_filter_fir.filter_fir_single(self._filters[0], &x2d_view[idx, 0], self._filters_width)             # <<<<<<<<<<<<<<
+ */
+      __pyx_t_16 = __pyx_v_idx;
+      __pyx_t_17 = 0;
+      __pyx_t_13 = -1;
+      if (unlikely(__pyx_t_16 >= (size_t)__pyx_v_x2d_view.shape[0])) __pyx_t_13 = 0;
+      if (__pyx_t_17 < 0) {
+        __pyx_t_17 += __pyx_v_x2d_view.shape[1];
+        if (unlikely(__pyx_t_17 < 0)) __pyx_t_13 = 1;
+      } else if (unlikely(__pyx_t_17 >= __pyx_v_x2d_view.shape[1])) __pyx_t_13 = 1;
+      if (unlikely(__pyx_t_13 != -1)) {
+        __Pyx_RaiseBufferIndexError(__pyx_t_13);
+        __PYX_ERR(0, 118, __pyx_L1_error)
+      }
+      filter_fir_single((__pyx_v_self->_filters[0]), (&(*((double *) ( /* dim=1 */ ((char *) (((double *) ( /* dim=0 */ (__pyx_v_x2d_view.data + __pyx_t_16 * __pyx_v_x2d_view.strides[0]) )) + __pyx_t_17)) )))), __pyx_v_self->_filters_width);
+    }
+
+    /* "joulescope/filter_fir.pyx":113
+ *             x1d_view = x
+ *             self.c_process(&x1d_view[0], self._filters_width)
+ *         elif len(x.shape) == 2:             # <<<<<<<<<<<<<<
+ *             if x.shape[1] != self._filters_width:
+ *                 raise RuntimeError(f'Invalid width: {len(x)} != {self._filters_width}')
+ */
   }
   __pyx_L3:;
 
@@ -3905,12 +4089,16 @@ static PyObject *__pyx_pf_10joulescope_10filter_fir_9FilterFir_10process(struct 
   __pyx_r = Py_None; __Pyx_INCREF(Py_None);
   goto __pyx_L0;
   __pyx_L1_error:;
-  __Pyx_XDECREF(__pyx_t_6);
+  __Pyx_XDECREF(__pyx_t_5);
   __Pyx_XDECREF(__pyx_t_9);
   __Pyx_XDECREF(__pyx_t_10);
+  __PYX_XDEC_MEMVIEW(&__pyx_t_11, 1);
+  __PYX_XDEC_MEMVIEW(&__pyx_t_14, 1);
   __Pyx_AddTraceback("joulescope.filter_fir.FilterFir.process", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __pyx_r = NULL;
   __pyx_L0:;
+  __PYX_XDEC_MEMVIEW(&__pyx_v_x1d_view, 1);
+  __PYX_XDEC_MEMVIEW(&__pyx_v_x2d_view, 1);
   __Pyx_XGIVEREF(__pyx_r);
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
@@ -20294,7 +20482,7 @@ static __Pyx_StringTabEntry __pyx_string_tab[] = {
 static CYTHON_SMALL_CODE int __Pyx_InitCachedBuiltins(void) {
   __pyx_builtin_enumerate = __Pyx_GetBuiltinName(__pyx_n_s_enumerate); if (!__pyx_builtin_enumerate) __PYX_ERR(0, 50, __pyx_L1_error)
   __pyx_builtin_range = __Pyx_GetBuiltinName(__pyx_n_s_range); if (!__pyx_builtin_range) __PYX_ERR(0, 57, __pyx_L1_error)
-  __pyx_builtin_RuntimeError = __Pyx_GetBuiltinName(__pyx_n_s_RuntimeError); if (!__pyx_builtin_RuntimeError) __PYX_ERR(0, 105, __pyx_L1_error)
+  __pyx_builtin_RuntimeError = __Pyx_GetBuiltinName(__pyx_n_s_RuntimeError); if (!__pyx_builtin_RuntimeError) __PYX_ERR(0, 110, __pyx_L1_error)
   __pyx_builtin_TypeError = __Pyx_GetBuiltinName(__pyx_n_s_TypeError); if (!__pyx_builtin_TypeError) __PYX_ERR(1, 2, __pyx_L1_error)
   __pyx_builtin_ValueError = __Pyx_GetBuiltinName(__pyx_n_s_ValueError); if (!__pyx_builtin_ValueError) __PYX_ERR(2, 272, __pyx_L1_error)
   __pyx_builtin_ImportError = __Pyx_GetBuiltinName(__pyx_n_s_ImportError); if (!__pyx_builtin_ImportError) __PYX_ERR(2, 1038, __pyx_L1_error)
@@ -24742,6 +24930,195 @@ raise_neg_overflow:
 }
 
 /* CIntFromPy */
+static CYTHON_INLINE uint64_t __Pyx_PyInt_As_uint64_t(PyObject *x) {
+    const uint64_t neg_one = (uint64_t) ((uint64_t) 0 - (uint64_t) 1), const_zero = (uint64_t) 0;
+    const int is_unsigned = neg_one > const_zero;
+#if PY_MAJOR_VERSION < 3
+    if (likely(PyInt_Check(x))) {
+        if (sizeof(uint64_t) < sizeof(long)) {
+            __PYX_VERIFY_RETURN_INT(uint64_t, long, PyInt_AS_LONG(x))
+        } else {
+            long val = PyInt_AS_LONG(x);
+            if (is_unsigned && unlikely(val < 0)) {
+                goto raise_neg_overflow;
+            }
+            return (uint64_t) val;
+        }
+    } else
+#endif
+    if (likely(PyLong_Check(x))) {
+        if (is_unsigned) {
+#if CYTHON_USE_PYLONG_INTERNALS
+            const digit* digits = ((PyLongObject*)x)->ob_digit;
+            switch (Py_SIZE(x)) {
+                case  0: return (uint64_t) 0;
+                case  1: __PYX_VERIFY_RETURN_INT(uint64_t, digit, digits[0])
+                case 2:
+                    if (8 * sizeof(uint64_t) > 1 * PyLong_SHIFT) {
+                        if (8 * sizeof(unsigned long) > 2 * PyLong_SHIFT) {
+                            __PYX_VERIFY_RETURN_INT(uint64_t, unsigned long, (((((unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
+                        } else if (8 * sizeof(uint64_t) >= 2 * PyLong_SHIFT) {
+                            return (uint64_t) (((((uint64_t)digits[1]) << PyLong_SHIFT) | (uint64_t)digits[0]));
+                        }
+                    }
+                    break;
+                case 3:
+                    if (8 * sizeof(uint64_t) > 2 * PyLong_SHIFT) {
+                        if (8 * sizeof(unsigned long) > 3 * PyLong_SHIFT) {
+                            __PYX_VERIFY_RETURN_INT(uint64_t, unsigned long, (((((((unsigned long)digits[2]) << PyLong_SHIFT) | (unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
+                        } else if (8 * sizeof(uint64_t) >= 3 * PyLong_SHIFT) {
+                            return (uint64_t) (((((((uint64_t)digits[2]) << PyLong_SHIFT) | (uint64_t)digits[1]) << PyLong_SHIFT) | (uint64_t)digits[0]));
+                        }
+                    }
+                    break;
+                case 4:
+                    if (8 * sizeof(uint64_t) > 3 * PyLong_SHIFT) {
+                        if (8 * sizeof(unsigned long) > 4 * PyLong_SHIFT) {
+                            __PYX_VERIFY_RETURN_INT(uint64_t, unsigned long, (((((((((unsigned long)digits[3]) << PyLong_SHIFT) | (unsigned long)digits[2]) << PyLong_SHIFT) | (unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
+                        } else if (8 * sizeof(uint64_t) >= 4 * PyLong_SHIFT) {
+                            return (uint64_t) (((((((((uint64_t)digits[3]) << PyLong_SHIFT) | (uint64_t)digits[2]) << PyLong_SHIFT) | (uint64_t)digits[1]) << PyLong_SHIFT) | (uint64_t)digits[0]));
+                        }
+                    }
+                    break;
+            }
+#endif
+#if CYTHON_COMPILING_IN_CPYTHON
+            if (unlikely(Py_SIZE(x) < 0)) {
+                goto raise_neg_overflow;
+            }
+#else
+            {
+                int result = PyObject_RichCompareBool(x, Py_False, Py_LT);
+                if (unlikely(result < 0))
+                    return (uint64_t) -1;
+                if (unlikely(result == 1))
+                    goto raise_neg_overflow;
+            }
+#endif
+            if (sizeof(uint64_t) <= sizeof(unsigned long)) {
+                __PYX_VERIFY_RETURN_INT_EXC(uint64_t, unsigned long, PyLong_AsUnsignedLong(x))
+#ifdef HAVE_LONG_LONG
+            } else if (sizeof(uint64_t) <= sizeof(unsigned PY_LONG_LONG)) {
+                __PYX_VERIFY_RETURN_INT_EXC(uint64_t, unsigned PY_LONG_LONG, PyLong_AsUnsignedLongLong(x))
+#endif
+            }
+        } else {
+#if CYTHON_USE_PYLONG_INTERNALS
+            const digit* digits = ((PyLongObject*)x)->ob_digit;
+            switch (Py_SIZE(x)) {
+                case  0: return (uint64_t) 0;
+                case -1: __PYX_VERIFY_RETURN_INT(uint64_t, sdigit, (sdigit) (-(sdigit)digits[0]))
+                case  1: __PYX_VERIFY_RETURN_INT(uint64_t,  digit, +digits[0])
+                case -2:
+                    if (8 * sizeof(uint64_t) - 1 > 1 * PyLong_SHIFT) {
+                        if (8 * sizeof(unsigned long) > 2 * PyLong_SHIFT) {
+                            __PYX_VERIFY_RETURN_INT(uint64_t, long, -(long) (((((unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
+                        } else if (8 * sizeof(uint64_t) - 1 > 2 * PyLong_SHIFT) {
+                            return (uint64_t) (((uint64_t)-1)*(((((uint64_t)digits[1]) << PyLong_SHIFT) | (uint64_t)digits[0])));
+                        }
+                    }
+                    break;
+                case 2:
+                    if (8 * sizeof(uint64_t) > 1 * PyLong_SHIFT) {
+                        if (8 * sizeof(unsigned long) > 2 * PyLong_SHIFT) {
+                            __PYX_VERIFY_RETURN_INT(uint64_t, unsigned long, (((((unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
+                        } else if (8 * sizeof(uint64_t) - 1 > 2 * PyLong_SHIFT) {
+                            return (uint64_t) ((((((uint64_t)digits[1]) << PyLong_SHIFT) | (uint64_t)digits[0])));
+                        }
+                    }
+                    break;
+                case -3:
+                    if (8 * sizeof(uint64_t) - 1 > 2 * PyLong_SHIFT) {
+                        if (8 * sizeof(unsigned long) > 3 * PyLong_SHIFT) {
+                            __PYX_VERIFY_RETURN_INT(uint64_t, long, -(long) (((((((unsigned long)digits[2]) << PyLong_SHIFT) | (unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
+                        } else if (8 * sizeof(uint64_t) - 1 > 3 * PyLong_SHIFT) {
+                            return (uint64_t) (((uint64_t)-1)*(((((((uint64_t)digits[2]) << PyLong_SHIFT) | (uint64_t)digits[1]) << PyLong_SHIFT) | (uint64_t)digits[0])));
+                        }
+                    }
+                    break;
+                case 3:
+                    if (8 * sizeof(uint64_t) > 2 * PyLong_SHIFT) {
+                        if (8 * sizeof(unsigned long) > 3 * PyLong_SHIFT) {
+                            __PYX_VERIFY_RETURN_INT(uint64_t, unsigned long, (((((((unsigned long)digits[2]) << PyLong_SHIFT) | (unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
+                        } else if (8 * sizeof(uint64_t) - 1 > 3 * PyLong_SHIFT) {
+                            return (uint64_t) ((((((((uint64_t)digits[2]) << PyLong_SHIFT) | (uint64_t)digits[1]) << PyLong_SHIFT) | (uint64_t)digits[0])));
+                        }
+                    }
+                    break;
+                case -4:
+                    if (8 * sizeof(uint64_t) - 1 > 3 * PyLong_SHIFT) {
+                        if (8 * sizeof(unsigned long) > 4 * PyLong_SHIFT) {
+                            __PYX_VERIFY_RETURN_INT(uint64_t, long, -(long) (((((((((unsigned long)digits[3]) << PyLong_SHIFT) | (unsigned long)digits[2]) << PyLong_SHIFT) | (unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
+                        } else if (8 * sizeof(uint64_t) - 1 > 4 * PyLong_SHIFT) {
+                            return (uint64_t) (((uint64_t)-1)*(((((((((uint64_t)digits[3]) << PyLong_SHIFT) | (uint64_t)digits[2]) << PyLong_SHIFT) | (uint64_t)digits[1]) << PyLong_SHIFT) | (uint64_t)digits[0])));
+                        }
+                    }
+                    break;
+                case 4:
+                    if (8 * sizeof(uint64_t) > 3 * PyLong_SHIFT) {
+                        if (8 * sizeof(unsigned long) > 4 * PyLong_SHIFT) {
+                            __PYX_VERIFY_RETURN_INT(uint64_t, unsigned long, (((((((((unsigned long)digits[3]) << PyLong_SHIFT) | (unsigned long)digits[2]) << PyLong_SHIFT) | (unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
+                        } else if (8 * sizeof(uint64_t) - 1 > 4 * PyLong_SHIFT) {
+                            return (uint64_t) ((((((((((uint64_t)digits[3]) << PyLong_SHIFT) | (uint64_t)digits[2]) << PyLong_SHIFT) | (uint64_t)digits[1]) << PyLong_SHIFT) | (uint64_t)digits[0])));
+                        }
+                    }
+                    break;
+            }
+#endif
+            if (sizeof(uint64_t) <= sizeof(long)) {
+                __PYX_VERIFY_RETURN_INT_EXC(uint64_t, long, PyLong_AsLong(x))
+#ifdef HAVE_LONG_LONG
+            } else if (sizeof(uint64_t) <= sizeof(PY_LONG_LONG)) {
+                __PYX_VERIFY_RETURN_INT_EXC(uint64_t, PY_LONG_LONG, PyLong_AsLongLong(x))
+#endif
+            }
+        }
+        {
+#if CYTHON_COMPILING_IN_PYPY && !defined(_PyLong_AsByteArray)
+            PyErr_SetString(PyExc_RuntimeError,
+                            "_PyLong_AsByteArray() not available in PyPy, cannot convert large numbers");
+#else
+            uint64_t val;
+            PyObject *v = __Pyx_PyNumber_IntOrLong(x);
+ #if PY_MAJOR_VERSION < 3
+            if (likely(v) && !PyLong_Check(v)) {
+                PyObject *tmp = v;
+                v = PyNumber_Long(tmp);
+                Py_DECREF(tmp);
+            }
+ #endif
+            if (likely(v)) {
+                int one = 1; int is_little = (int)*(unsigned char *)&one;
+                unsigned char *bytes = (unsigned char *)&val;
+                int ret = _PyLong_AsByteArray((PyLongObject *)v,
+                                              bytes, sizeof(val),
+                                              is_little, !is_unsigned);
+                Py_DECREF(v);
+                if (likely(!ret))
+                    return val;
+            }
+#endif
+            return (uint64_t) -1;
+        }
+    } else {
+        uint64_t val;
+        PyObject *tmp = __Pyx_PyNumber_IntOrLong(x);
+        if (!tmp) return (uint64_t) -1;
+        val = __Pyx_PyInt_As_uint64_t(tmp);
+        Py_DECREF(tmp);
+        return val;
+    }
+raise_overflow:
+    PyErr_SetString(PyExc_OverflowError,
+        "value too large to convert to uint64_t");
+    return (uint64_t) -1;
+raise_neg_overflow:
+    PyErr_SetString(PyExc_OverflowError,
+        "can't convert negative value to uint64_t");
+    return (uint64_t) -1;
+}
+
+/* CIntFromPy */
 static CYTHON_INLINE int __Pyx_PyInt_As_int(PyObject *x) {
     const int neg_one = (int) ((int) 0 - (int) 1), const_zero = (int) 0;
     const int is_unsigned = neg_one > const_zero;
@@ -26058,6 +26435,52 @@ no_fail:
     retcode = __Pyx_ValidateAndInit_memviewslice(axes_specs, __Pyx_IS_C_CONTIG,
                                                  (PyBUF_C_CONTIGUOUS | PyBUF_FORMAT) | writable_flag, 1,
                                                  &__Pyx_TypeInfo_nn___pyx_t_5numpy_float64_t, stack,
+                                                 &result, obj);
+    if (unlikely(retcode == -1))
+        goto __pyx_fail;
+    return result;
+__pyx_fail:
+    result.memview = NULL;
+    result.data = NULL;
+    return result;
+}
+
+/* ObjectToMemviewSlice */
+  static CYTHON_INLINE __Pyx_memviewslice __Pyx_PyObject_to_MemoryviewSlice_dc_double(PyObject *obj, int writable_flag) {
+    __Pyx_memviewslice result = { 0, 0, { 0 }, { 0 }, { 0 } };
+    __Pyx_BufFmt_StackElem stack[1];
+    int axes_specs[] = { (__Pyx_MEMVIEW_DIRECT | __Pyx_MEMVIEW_CONTIG) };
+    int retcode;
+    if (obj == Py_None) {
+        result.memview = (struct __pyx_memoryview_obj *) Py_None;
+        return result;
+    }
+    retcode = __Pyx_ValidateAndInit_memviewslice(axes_specs, __Pyx_IS_C_CONTIG,
+                                                 (PyBUF_C_CONTIGUOUS | PyBUF_FORMAT) | writable_flag, 1,
+                                                 &__Pyx_TypeInfo_double, stack,
+                                                 &result, obj);
+    if (unlikely(retcode == -1))
+        goto __pyx_fail;
+    return result;
+__pyx_fail:
+    result.memview = NULL;
+    result.data = NULL;
+    return result;
+}
+
+/* ObjectToMemviewSlice */
+  static CYTHON_INLINE __Pyx_memviewslice __Pyx_PyObject_to_MemoryviewSlice_d_dc_double(PyObject *obj, int writable_flag) {
+    __Pyx_memviewslice result = { 0, 0, { 0 }, { 0 }, { 0 } };
+    __Pyx_BufFmt_StackElem stack[1];
+    int axes_specs[] = { (__Pyx_MEMVIEW_DIRECT | __Pyx_MEMVIEW_FOLLOW), (__Pyx_MEMVIEW_DIRECT | __Pyx_MEMVIEW_CONTIG) };
+    int retcode;
+    if (obj == Py_None) {
+        result.memview = (struct __pyx_memoryview_obj *) Py_None;
+        return result;
+    }
+    retcode = __Pyx_ValidateAndInit_memviewslice(axes_specs, __Pyx_IS_C_CONTIG,
+                                                 (PyBUF_C_CONTIGUOUS | PyBUF_FORMAT) | writable_flag, 2,
+                                                 &__Pyx_TypeInfo_double, stack,
                                                  &result, obj);
     if (unlikely(retcode == -1))
         goto __pyx_fail;

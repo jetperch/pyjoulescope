@@ -20,7 +20,7 @@ Optimized Cython native Joulescope code for FIR filtering.
 
 # cython: boundscheck=True, wraparound=True, nonecheck=True, overflowcheck=True, cdivision=True
 
-from libc.stdint cimport uint32_t
+from libc.stdint cimport uint32_t, uint64_t
 from . cimport c_filter_fir
 from cpython.mem cimport PyMem_Malloc, PyMem_Free
 from libc.string cimport memcpy
@@ -95,14 +95,24 @@ cdef class FilterFir:
 
         :param x: The new data as either:
             * a single numerical value
-            * an np.ndarray with dtype=np.float64.  The length must match width.
+            * a 1D np.ndarray with dtype=np.float64.  The length must match width.
+            * a NxW 2D np.ndarray with dtype=np.float64.  W must match width 
         """
+        cdef double [::1] x1d_view
+        cdef double [:, ::1] x2d_view
+        cdef uint64_t idx
+
         if isinstance(x, (float, int)):
             self._data[0] = x
             self.c_process(&self._data[0], 1)
-        else:
+        elif len(x.shape) == 1:
             if len(x) != self._filters_width:
                 raise RuntimeError(f'Invalid width: {len(x)} != {self._filters_width}')
-            for idx in range(self._filters_width):
-                self._data[idx] = x[idx]
-            self.c_process(&self._data[0], self._filters_width)
+            x1d_view = x
+            self.c_process(&x1d_view[0], self._filters_width)
+        elif len(x.shape) == 2:
+            if x.shape[1] != self._filters_width:
+                raise RuntimeError(f'Invalid width: {len(x)} != {self._filters_width}')
+            x2d_view = x
+            for idx in range(len(x)):
+                c_filter_fir.filter_fir_single(self._filters[0], &x2d_view[idx, 0], self._filters_width)

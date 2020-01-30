@@ -15,6 +15,7 @@
 import unittest
 from joulescope.filter_fir import FilterFir
 import numpy as np
+import time
 
 
 filter_ma3 = [1.0/3, 1.0/3, 1.0/3]
@@ -55,3 +56,16 @@ class TestFilterFir(unittest.TestCase):
             f.process(x)
         expect = np.array(data_y1[1:]).reshape((5, 2))
         np.testing.assert_allclose(expect, self.y)
+
+    def test_performance(self):
+        taps = np.ones(504)
+        taps /= np.sum(taps)
+        width = 1
+        f = FilterFir([{'M': 10, 'taps': taps}], width=width)
+        x = np.random.randn(2000000, width)
+        time_start = time.time()
+        f.process(x)
+        f.process(x)
+        f.process(x)
+        time_stop = time.time()
+        print(f'duration = {time_stop - time_start}')

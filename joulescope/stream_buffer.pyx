@@ -390,10 +390,13 @@ cdef class UsbBulkProcessor:
             length -= PACKET_TOTAL_SIZE
 
 
+ctypedef void (*stream_buffer_process_fn)(void * user_data, float cal_i, float cal_v, uint8_t bits)
+
+
 cdef class StreamBuffer:
     """Efficient real-time Joulescope data buffering.
 
-    :param length: The total length of the buffering in samples.
+    :param duration: The total length of the buffering in seconds.
     :param reductions: The list of reduction integers.  Each integer represents
         the reduction amount for each resuting sample in units of samples
         of the previous reduction.  Reduction 0 is in raw sample units.
@@ -402,7 +405,7 @@ cdef class StreamBuffer:
     cdef RawProcessor _raw_processor
     cdef uint32_t reduction_step
     cdef uint32_t length # in samples
-    cdef uint64_t device_sample_id      # exclusive (last received is processed_sample_id - 1)
+    cdef uint64_t device_sample_id      # exclusive (last received is device_sample_id - 1)
     cdef uint64_t _preprocessed_sample_id
     cdef uint64_t processed_sample_id   # exclusive (last processed is processed_sample_id - 1)
     cdef uint16_t *raw_ptr  # raw[length][2]   as i, v
@@ -411,6 +414,8 @@ cdef class StreamBuffer:
     cdef js_stream_buffer_reduction_s reductions[REDUCTION_MAX]
     cdef uint32_t reduction_count
     cdef double _sampling_frequency
+    cdef stream_buffer_process_fn _process_stats_cbk_fn
+    cdef void * _process_stats_cbk_user_data
 
     cdef uint32_t stats_counter  # excludes NAN for mean
     cdef uint32_t stats_remaining
@@ -432,6 +437,8 @@ cdef class StreamBuffer:
         self._usb_bulk_processor.callback_set(<usb_bulk_data_processor_cbk_fn> self._process_samples, self)
         self._raw_processor = RawProcessor()
         self._raw_processor.callback_set(<raw_processor_cbk_fn> self._process_stats, self)
+        self._process_stats_cbk_fn = NULL
+        self._process_stats_cbk_user_data = NULL
         cdef uint32_t r_samples = 1
         self._sampling_frequency = sampling_frequency
         if length < SAMPLES_PER_PACKET:
@@ -490,7 +497,7 @@ cdef class StreamBuffer:
         self._charge_picocoulomb = 0
         self._energy_picojoules = 0  # integer for infinite precision
 
-    def __init__(self, length, reductions, sampling_frequency):
+    def __init__(self, duration, reductions, sampling_frequency):
         self.reset()
 
     def __len__(self):
@@ -548,6 +555,10 @@ cdef class StreamBuffer:
     @callback.setter
     def callback(self, value):
         self._callback = value
+
+    cdef process_stats_callback_set(self, stream_buffer_process_fn fn, void * user_data):
+        self._process_stats_cbk_fn = fn
+        self._process_stats_cbk_user_data = user_data
 
     @property
     def voltage_range(self):
@@ -787,6 +798,8 @@ cdef class StreamBuffer:
         self.data_ptr[idx + 0] = cal_i
         self.data_ptr[idx + 1] = cal_v
         self.processed_sample_id += 1
+        if self._process_stats_cbk_fn:
+            self._process_stats_cbk_fn(self._process_stats_cbk_user_data, cal_i, cal_v, bits)
         if 0 == self.reductions[0].enabled:
             return
         if isfinite(cal_i):
@@ -938,14 +951,14 @@ cdef class StreamBuffer:
             # round to floor, absolute value
             fill_count_tmp = ((-start + increment - 1) // increment)
             start += fill_count_tmp * increment
-            #log.info('_data_get start < 0: %d [%d] => %d', start_orig, fill_count_tmp, start)
+            log.info('_data_get start < 0: %d [%d] => %d', start_orig, fill_count_tmp, start)
             fill_count += fill_count_tmp
 
         if not self.range_check(start, stop):
             return 0
 
-        if (start + self.length) < (<int64_t> self.device_sample_id):
-            fill_count_tmp = (self.device_sample_id - (start + self.length)) // increment
+        if (start + self.length) < (<int64_t> self.processed_sample_id):
+            fill_count_tmp = (self.processed_sample_id - (start + self.length)) // increment
             start += fill_count_tmp * increment
             #log.info('_data_get behind < 0: %d [%d] => %d', start_orig, fill_count_tmp, start)
             fill_count += fill_count_tmp
@@ -1187,6 +1200,9 @@ cdef class StreamBuffer:
                 },
             }
             self._callback(data)
+
+
+include "downsampling_stream_buffer.pxi"
 
 
 def usb_packet_factory(packet_index, count=None):

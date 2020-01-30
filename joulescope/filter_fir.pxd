@@ -13,13 +13,13 @@
 # limitations under the License.
 
 
-from . cimport c_filter_fir
+from .c_filter_fir cimport filter_fir_s, filter_fir_cbk
 from libc.stdint cimport uint32_t
 
 
 cdef class FilterFir:
 
-    cdef c_filter_fir.filter_fir_s ** _filters
+    cdef filter_fir_s ** _filters
     cdef uint32_t _filters_length
     cdef uint32_t _filters_width
     cdef object _data_np
@@ -27,7 +27,7 @@ cdef class FilterFir:
     cdef object _py_callback
     cdef object _filter_taps
 
-    cdef void c_callback_set(self, c_filter_fir.filter_fir_cbk fn, void * user_data)
+    cdef void c_callback_set(self, filter_fir_cbk fn, void * user_data)
     cdef void c_process(self, const double * x, uint32_t x_length)
 
     @staticmethod

@@ -88,40 +88,39 @@ void filter_fir_callback_set(struct filter_fir_s * self, filter_fir_cbk fn, void
 void filter_fir_single(struct filter_fir_s * self, double const * x, uint32_t x_length) {
     double const * taps;
     double const * taps_end;
-
-    if (x_length != self->width) {
-        // MISMATCH!
-        return;
-    }
+    double y;
+    double * buffer;
+    const uint32_t width = self->width;
 
     // add to buffer
-    double * b = &self->buffer[self->buffer_offset * self->width];
-    for (uint32_t idx = 0; idx < self->width; ++idx) {
+    double * b = &self->buffer[self->buffer_offset * width];
+    for (uint32_t idx = 0; idx < width; ++idx) {
         *b++ = *x++;
     }
 
     if (++self->M_counter >= self->M) {
         // downsampled interval, compute filtered output
+        buffer = self->buffer;
         taps_end = self->taps + self->taps_length;
-        for (uint32_t idx = 0; idx < self->width; ++idx) {
-            self->y[idx] = 0.0;
+        for (uint32_t idx = 0; idx < width; ++idx) {
+            y = 0.0;
             taps = self->taps;
-            b = &self->buffer[self->buffer_offset * self->width + idx];
-            while (b >= self->buffer) {
-                self->y[idx] += *b * *taps++;
-                b -= self->width;
+            b = &buffer[self->buffer_offset * width + idx];
+            while (b >= buffer) {
+                y += *b * *taps++;
+                b -= width;
             }
-            b += (self->taps_length) * self->width;
+            b += (self->taps_length) * width;
             while (taps < taps_end) {
-                self->y[idx] += *b * *taps++;
-                b -= self->width;
+                y += *b * *taps++;
+                b -= width;
             }
-
+            self->y[idx] = y;
         }
 
         self->M_counter = 0;
         if (self->cbk_fn) {
-            self->cbk_fn(self->cbk_user_data, self->y, self->width);
+            self->cbk_fn(self->cbk_user_data, self->y, width);
         }
     }
 
