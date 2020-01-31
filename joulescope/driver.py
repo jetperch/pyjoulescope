@@ -188,7 +188,8 @@ class Device:
         self._parameters = {}
         self._reductions = REDUCTIONS
         self._stream_buffer_duration = STREAM_BUFFER_DURATION
-        self._sampling_frequency = SAMPLING_FREQUENCY  #  // 10  # todo
+        self._input_sampling_frequency = SAMPLING_FREQUENCY
+        self._output_sampling_frequency = SAMPLING_FREQUENCY  # // 10  # todo
         self.stream_buffer = None
         self._streaming = False
         self._stop_fn = None
@@ -215,7 +216,7 @@ class Device:
 
     @property
     def sampling_frequency(self):
-        return self._sampling_frequency
+        return self._output_sampling_frequency
 
     @property
     def statistics_callback(self):
@@ -250,7 +251,7 @@ class Device:
 
     @property
     def reduction_frequency(self):
-        return self.sampling_frequency / np.prod(self._reductions)
+        return self._output_sampling_frequency / np.prod(self._reductions)
 
     @reduction_frequency.setter
     def reduction_frequency(self, frequency):
@@ -364,10 +365,13 @@ class Device:
         if self.stream_buffer:
             self.close()
         self._usb.open(event_callback_fn)
-        if SAMPLING_FREQUENCY != self._sampling_frequency:
-            self.stream_buffer = DownsamplingStreamBuffer(self._stream_buffer_duration, self._reductions, SAMPLING_FREQUENCY, self._sampling_frequency)
+        if self._input_sampling_frequency == self._output_sampling_frequency:
+            self.stream_buffer = StreamBuffer(self._stream_buffer_duration, self._reductions,
+                                              self._input_sampling_frequency)
         else:
-            self.stream_buffer = StreamBuffer(self._stream_buffer_duration, self._reductions, self._sampling_frequency)
+            self.stream_buffer = DownsamplingStreamBuffer(self._stream_buffer_duration, self._reductions,
+                                                          self._input_sampling_frequency,
+                                                          self._output_sampling_frequency)
         self._current_ranging_set()
         try:
             info = self.info()
@@ -658,9 +662,9 @@ class Device:
 
         self._stop_fn = stop_fn
         if duration is not None:
-            self.stream_buffer.sample_id_max = int(duration * self.sampling_frequency)
+            self.stream_buffer.sample_id_max = int(duration * self._input_sampling_frequency)
         if contiguous_duration is not None:
-            c = int(contiguous_duration * self.sampling_frequency)
+            c = int(contiguous_duration * self._input_sampling_frequency)
             c += self._reductions[0]
             self.stream_buffer.contiguous_max = c
             log.info('contiguous_samples=%s', c)
@@ -721,7 +725,7 @@ class Device:
                  duration, contiguous_duration, out_format)
         if duration is None and contiguous_duration is None:
             raise ValueError('Must specify duration or contiguous_duration')
-        duration_max = len(self.stream_buffer) / self.sampling_frequency
+        duration_max = len(self.stream_buffer) / self._output_sampling_frequency
         if contiguous_duration is not None and contiguous_duration > duration_max:
             raise ValueError(f'contiguous_duration {contiguous_duration} > {duration_max} max seconds')
         if duration is not None and duration > duration_max:
@@ -738,9 +742,9 @@ class Device:
         start_id, end_id = self.stream_buffer.sample_id_range
         log.info('read available range %s, %s', start_id, end_id)
         if contiguous_duration is not None:
-            start_id = end_id - int(contiguous_duration * self.sampling_frequency)
+            start_id = end_id - int(contiguous_duration * self._output_sampling_frequency)
         elif duration is not None:
-            start_id = end_id - int(duration * self.sampling_frequency)
+            start_id = end_id - int(duration * self._output_sampling_frequency)
         if start_id < 0:
             start_id = 0
         log.info('read actual %s, %s', start_id, end_id)

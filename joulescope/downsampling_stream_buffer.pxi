@@ -66,7 +66,7 @@ cdef class DownsamplingStreamBuffer:
         length = ((length + reduction_step - 1) // reduction_step) * reduction_step
         self._length = length
 
-        self._buffer_npy = np.zeros(length, dtype=DS_VALUE_DTYPE)
+        self._buffer_npy = np.full(length, 0, dtype=DS_VALUE_DTYPE)
         cdef ds_value_s [::1] _buffer_view = self._buffer_npy
         self._buffer_ptr = &_buffer_view[0]
 
@@ -80,7 +80,7 @@ cdef class DownsamplingStreamBuffer:
         self.reset()
 
     def __len__(self):
-        return len(self._stream_buffer)
+        return int(self._length)
 
     def __str__(self):
         return 'DownsamplingStreamBuffer(length=%d)' % (self._length)
@@ -166,13 +166,16 @@ cdef class DownsamplingStreamBuffer:
     def calibration_set(self, current_offset, current_gain, voltage_offset, voltage_gain):
         return self._stream_buffer.calibration_set(current_offset, current_gain, voltage_offset, voltage_gain)
 
+    cdef _reset_accum(self):
+        for idx in range(len(self._accum)):
+            self._accum[idx] = 0
+
     def reset(self):
         self._processed_sample_id = 0
         self._process_idx = 0
         self._stream_buffer.reset()
         self._filter_fir.reset()
-        for idx in range(len(self._accum)):
-            self._accum[idx] = 0
+        self._reset_accum()
 
     cpdef insert(self, data):
         return self._stream_buffer.insert(data)
@@ -201,6 +204,7 @@ cdef class DownsamplingStreamBuffer:
         v.current_range = <uint8_t> ((self._accum[0] * 16) / self._downsample_m)
         v.current_lsb = <uint8_t> ((self._accum[1] * 255) / self._downsample_m)
         v.voltage_lsb = <uint8_t>((self._accum[2] * 255) / self._downsample_m)
+        self._reset_accum()
         self._process_idx += 1
         self._processed_sample_id += 1
         if self._process_idx >= self._length:
@@ -243,6 +247,8 @@ cdef class DownsamplingStreamBuffer:
         cdef uint64_t buffer_samples_orig = buffer_samples
         cdef uint8_t i
         cdef int64_t idx
+        cdef int64_t idx_outer
+        cdef int64_t idx_inner
         cdef int64_t data_offset
         cdef c_running_statistics.statistics_s stats[_STATS_FIELDS]
         cdef uint64_t fill_count = 0
@@ -287,6 +293,7 @@ cdef class DownsamplingStreamBuffer:
         if buffer_samples != buffer_samples_orig:
             log.debug('_data_get filled %s', buffer_samples_orig - buffer_samples)
 
+        # print(f'data_get({start}, {stop}, {increment}), {self._length}')
         if increment <= 1:
             # direct copy
             idx = start % self._length
@@ -309,6 +316,25 @@ cdef class DownsamplingStreamBuffer:
                 buffer += _STATS_FIELDS
                 if idx >= <int64_t> self._length:
                     idx = 0
+        else:
+            idx = (start % self._length)
+            for idx_outer in range(start, stop, increment):
+                if buffer_samples == 0:
+                    break
+                _stats_reset(buffer)
+                for idx_inner in range(increment):
+                    v = self._buffer_ptr + idx
+                    c_running_statistics.statistics_add(buffer + 0, v.current)
+                    c_running_statistics.statistics_add(buffer + 1, v.voltage)
+                    c_running_statistics.statistics_add(buffer + 2, v.power)
+                    c_running_statistics.statistics_add(buffer + 3, (<double> v.current_range) * (1.0 / 16))
+                    c_running_statistics.statistics_add(buffer + 4, (<double> v.current_lsb) * (1.0 / 255))
+                    c_running_statistics.statistics_add(buffer + 5, (<double> v.voltage_lsb) * (1.0 / 255))
+                    idx += 1
+                    if idx >= <int64_t> self._length:
+                        idx = 0
+                buffer_samples -= 1
+                buffer += _STATS_FIELDS
         return buffer_samples_orig - buffer_samples
 
     def data_get(self, start, stop, increment=None, out=None):

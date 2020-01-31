@@ -26,7 +26,6 @@ import logging
 log = logging.getLogger(__name__)
 
 DATA_RECORDER_FORMAT_VERSION = '1'
-SAMPLING_FREQUENCY = 2000000
 SAMPLES_PER_BLOCK = 100000
 
 
