@@ -225,12 +225,40 @@ cdef class DownsamplingStreamBuffer:
             return 0
         return 1
 
+    cdef uint64_t _stats_get(self, int64_t start, int64_t stop, c_running_statistics.statistics_s * stats_accum):
+        """Get exact statistics over the specified range.
+
+        :param start: The starting sample_id (inclusive).
+        :param stop: The ending sample_id (exclusive).
+        :param stats_accum: The output computed statistics.
+        :return: The number of sample used to compute the statistic
+        """
+        cdef uint64_t idx = (start % self._length)
+        cdef uint64_t count = stop - start
+        _stats_reset(stats_accum)
+        for idx_inner in range(count):
+            v = self._buffer_ptr + idx
+            c_running_statistics.statistics_add(stats_accum + 0, v.current)
+            c_running_statistics.statistics_add(stats_accum + 1, v.voltage)
+            c_running_statistics.statistics_add(stats_accum + 2, v.power)
+            c_running_statistics.statistics_add(stats_accum + 3, (<double> v.current_range) * (1.0 / 16))
+            c_running_statistics.statistics_add(stats_accum + 4, (<double> v.current_lsb) * (1.0 / 255))
+            c_running_statistics.statistics_add(stats_accum + 5, (<double> v.voltage_lsb) * (1.0 / 255))
+            idx += 1
+            if idx >= <int64_t> self._length:
+                idx = 0
+        return count
+
     def statistics_get(self, start, stop, out=None):
         cdef c_running_statistics.statistics_s * out_ptr
         if out is None:
             out = _stats_factory(NULL)
         out_ptr = _stats_ptr(out)
-        # todo populate
+        if start < 0 or stop < 0 or not self._range_check(start, stop):
+            log.warning('start, stop invalid: %d, %d', start, stop)
+            _stats_invalidate(out_ptr)
+            return out
+        self._stats_get(start, stop, out_ptr)
         return out
 
     cdef uint64_t _data_get(self, c_running_statistics.statistics_s *buffer, uint64_t buffer_samples,
@@ -321,18 +349,7 @@ cdef class DownsamplingStreamBuffer:
             for idx_outer in range(start, stop, increment):
                 if buffer_samples == 0:
                     break
-                _stats_reset(buffer)
-                for idx_inner in range(increment):
-                    v = self._buffer_ptr + idx
-                    c_running_statistics.statistics_add(buffer + 0, v.current)
-                    c_running_statistics.statistics_add(buffer + 1, v.voltage)
-                    c_running_statistics.statistics_add(buffer + 2, v.power)
-                    c_running_statistics.statistics_add(buffer + 3, (<double> v.current_range) * (1.0 / 16))
-                    c_running_statistics.statistics_add(buffer + 4, (<double> v.current_lsb) * (1.0 / 255))
-                    c_running_statistics.statistics_add(buffer + 5, (<double> v.voltage_lsb) * (1.0 / 255))
-                    idx += 1
-                    if idx >= <int64_t> self._length:
-                        idx = 0
+                self._stats_get(idx_outer, idx_outer + increment, buffer)
                 buffer_samples -= 1
                 buffer += _STATS_FIELDS
         return buffer_samples_orig - buffer_samples
