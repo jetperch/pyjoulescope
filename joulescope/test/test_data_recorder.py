@@ -17,7 +17,7 @@ Test the data recorder
 """
 
 import unittest
-from joulescope.data_recorder import DataRecorder, DataReader, Statistics, stats_to_api
+from joulescope.data_recorder import DataRecorder, DataReader, Statistics, stats_to_api, datafile
 from joulescope.stream_buffer import StreamBuffer, usb_packet_factory, usb_packet_factory_signal
 from joulescope.calibration import Calibration
 import io
@@ -52,7 +52,7 @@ class TestDataRecorder(unittest.TestCase):
         d.close()
 
     def _create_file(self, packet_index, count=None):
-        stream_buffer = StreamBuffer(2.0, [10], 1000.0)
+        stream_buffer = StreamBuffer(10.0, [10], 1000.0)
         stream_buffer.suppress_mode = 'off'
         if packet_index > 0:
             data = usb_packet_factory(0, packet_index - 1)
@@ -69,7 +69,6 @@ class TestDataRecorder(unittest.TestCase):
         d.close()
         fh.seek(0)
 
-        # from joulescope import datafile
         # dfr = datafile.DataFileReader(fh)
         # dfr.pretty_print()
         # fh.seek(0)
@@ -78,17 +77,18 @@ class TestDataRecorder(unittest.TestCase):
     def test_write_read_direct(self):
         fh = self._create_file(0, 2)
         r = DataReader().open(fh)
+        self.assertEqual([0, 252], r.sample_id_range)
         r.raw_processor.suppress_mode = 'off'
-        data = r.get(0, 10, 1)
-        np.testing.assert_allclose(np.arange(0, 20, 2), data[:, 0]['mean'])
+        data = r.get(0, 252, 1)
+        np.testing.assert_allclose(np.arange(0, 252 * 2, 2), data[:, 0]['mean'])
 
     def test_time_conversion(self):
         fh = self._create_file(0, 2)
         r = DataReader().open(fh)
-        self.assertEqual([0, 200], r.sample_id_range)
+        self.assertEqual([0, 252], r.sample_id_range)
         self.assertEqual(1000, r.sampling_frequency)
-        self.assertEqual(1000 / 10, r.reduction_frequency)
-        self.assertEqual(0.2, r.duration)
+        self.assertEqual(1000 / 200, r.reduction_frequency)
+        self.assertEqual(0.252, r.duration)
         self.assertEqual(0.0, r.sample_id_to_time(0))
         self.assertEqual(0, r.time_to_sample_id(0))
         self.assertEqual(0.2, r.sample_id_to_time(200))
@@ -119,44 +119,48 @@ class TestDataRecorder(unittest.TestCase):
     def test_write_read_stats_over_samples_offset(self):
         fh = self._create_file(0, 2)
         r = DataReader().open(fh)
-        data = r.get(5, 50, 10)
-        np.testing.assert_allclose(np.arange(9, 70, 20), data[:, 0]['mean'])
+        data = r.get(7, 50, 10)
+        np.testing.assert_allclose(np.arange(23, 90, 20), data[:, 0]['mean'])
 
     def test_write_read_get_reduction(self):
-        fh = self._create_file(0, 2)
+        fh = self._create_file(0, 8)
+        dfr = datafile.DataFileReader(fh)
+        dfr.pretty_print()
+        fh.seek(0)
         r = DataReader().open(fh)
-        data = r.get_reduction(0, 100)
-        np.testing.assert_allclose(np.arange(9, 200, 20), data[:, 0]['mean'])
+        data = r.get_reduction(0, 1000)
+        np.testing.assert_allclose(np.arange(199, 1800, 400), data[:, 0]['mean'])
 
     def test_write_read_get_reduction_offset(self):
-        fh = self._create_file(0, 2)
+        fh = self._create_file(0, 8)
         r = DataReader().open(fh)
-        data = r.get_reduction(30, 95)
-        np.testing.assert_allclose(np.arange(69, 180, 20), data[:, 0]['mean'])
+        data = r.get_reduction(400, 800)
+        np.testing.assert_allclose([999, 1399], data[:, 0]['mean'])
 
     def test_write_read_reduction_direct(self):
-        fh = self._create_file(0, 2)
+        fh = self._create_file(0, 8)
         r = DataReader().open(fh)
-        data = r.get(0, 100, 10)
-        np.testing.assert_allclose(np.arange(9, 200, 20), data[:, 0]['mean'])
+        data = r.get(0, 800, 200)
+        np.testing.assert_allclose(np.arange(199, 1400, 400), data[:, 0]['mean'])
 
     def test_write_read_reduction_indirect(self):
-        fh = self._create_file(0, 2)
+        fh = self._create_file(0, 8)
         r = DataReader().open(fh)
-        data = r.get(0, 200, 20)
-        np.testing.assert_allclose(np.arange(19, 400, 40), data[:, 0]['mean'])
+        data = r.get(0, 1000, 400)
+        np.testing.assert_allclose([399, 1199], data[:, 0]['mean'])
 
     def _create_large_file(self, samples=None):
         """Create a large file.
 
         :param samples: The total number of samples which will be rounded
             to a full USB packet.
+        :return: (BytesIO file, samples)
         """
         sample_rate = 2000000
-        samples_total = sample_rate * 2
         packets_per_burst = 128
         bursts = int(np.ceil(samples / (SAMPLES_PER_PACKET * packets_per_burst)))
         stream_buffer = StreamBuffer(1.0, [100], sample_rate)
+        samples_total = SAMPLES_PER_PACKET * packets_per_burst * bursts
 
         fh = io.BytesIO()
         d = DataRecorder(fh, sampling_frequency=sample_rate)
@@ -174,15 +178,15 @@ class TestDataRecorder(unittest.TestCase):
         # dfr.pretty_print()
         # fh.seek(0)
 
-        return fh
+        return fh, samples_total
 
     def test_large_file_from_usb(self):
         sample_count = 2000000 * 2
-        fh = self._create_large_file(sample_count)
+        fh, sample_count = self._create_large_file(sample_count)
         r = DataReader().open(fh)
         self.assertEqual([0, sample_count], r.sample_id_range)
         reduction = r.get_reduction()
-        self.assertEqual(sample_count / 20000, len(reduction))
+        self.assertEqual(sample_count // 20000, len(reduction))
 
     def create_sinusoid_data(self, sample_rate, samples):
         x = np.arange(samples, dtype=np.float)

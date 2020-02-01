@@ -27,6 +27,7 @@ log = logging.getLogger(__name__)
 
 DATA_RECORDER_FORMAT_VERSION = '1'
 SAMPLES_PER_BLOCK = 100000
+_REDUCTION_SAMPLES_MINIMUM = 200
 
 
 def construct_record_filename():
@@ -54,13 +55,12 @@ class DataRecorder:
             self._fh = None
 
         self._sampling_frequency = sampling_frequency
-        # constraints:
-        #    int1 * _samples_per_reduction = _samples_per_block
-        #    int2 * _samples_per_reduction = _samples_per_tlv
-        #    int3 * _samples_per_tlv = _samples_per_block
-        self._samples_per_reduction = int(sampling_frequency) // 100  # ~100 Hz
-        self._samples_per_tlv = self._samples_per_reduction * 20  # ~ 5 Hz
-        self._samples_per_block = self._samples_per_tlv * 5  # ~1 Hz
+        if sampling_frequency > 100 * _REDUCTION_SAMPLES_MINIMUM:
+            self._samples_per_reduction = int(self._sampling_frequency) // 100  # 100 Hz @ 2 MSPS
+        else:
+            self._samples_per_reduction = _REDUCTION_SAMPLES_MINIMUM
+        self._samples_per_tlv = self._samples_per_reduction * 20  # ~ 5 Hz @ 2 MSPS
+        self._samples_per_block = self._samples_per_tlv * 5  # ~1 Hz @ 2 MSPS
 
         # dependent vars
         self._reductions_per_tlv = self._samples_per_tlv // self._samples_per_reduction
@@ -106,8 +106,7 @@ class DataRecorder:
         self._sample_id_block = self._sample_id_tlv
 
     def _collection_end(self, collection):
-        tlv_offset = (self._sample_id_tlv - self._sample_id_block) // self._samples_per_tlv
-        r_stop = tlv_offset * self._reductions_per_tlv
+        r_stop = (self._sample_id_tlv - self._sample_id_block) // self._samples_per_reduction
         log.debug('_collection_end(%s, %s)', r_stop, len(self._reduction))
         self._writer.collection_end(collection, self._reduction[:r_stop, :].tobytes())
         self._sample_id_block = None
@@ -116,30 +115,46 @@ class DataRecorder:
     def stream_notify(self, stream_buffer):
         """Process data from a stream buffer.
 
-        :param stream_buffer: The stream_buffer instance which has a
-            "sample_id_range" member, "voltage_range" member,
-            raw(start_sample_id, stop_sample_id) and
-            get_reduction(reduction_idx, start_sample_id, stop_sample_id).
+        :param stream_buffer: The stream_buffer instance which has:
+            * "sample_id_range" member
+            * "voltage_range" member
+            * samples_get(start_sample_id, stop_sample_id, dtype)
+            * data_get(start_sample_id, stop_sample_id, increment, out)
         """
+        finalize = False
+        if stream_buffer is None:
+            if self._stream_buffer is None:
+                return
+            finalize = True
+            stream_buffer = self._stream_buffer
         sb_start, sb_stop = stream_buffer.sample_id_range
         if self._stream_buffer is None:
             self._stream_buffer = stream_buffer
             self._sample_id_tlv = sb_stop
             self._sample_id_block = None
-        elif self._stream_buffer != stream_buffer:
-            raise ValueError('Supports only a single stream_buffer instance')
-
-        sample_id_next = self._sample_id_tlv + self._samples_per_tlv
-        while sb_stop >= sample_id_next:  # have at least one block
             if self._samples_per_tlv > len(stream_buffer):
                 raise ValueError('stream_buffer length too small.  %s > %s' %
                                  (self._samples_per_tlv, len(stream_buffer)))
+        elif self._stream_buffer != stream_buffer:
+            raise ValueError('Supports only a single stream_buffer instance')
+        if sb_start > self._sample_id_tlv:
+            raise ValueError('stream_buffer does not contain sample_id')
+
+        while True:
+            finalize_now = False
+            sample_id_next = self._sample_id_tlv + self._samples_per_tlv
+            if sb_stop < sample_id_next:
+                if finalize and self._sample_id_tlv < sb_stop:
+                    finalize_now = True
+                    sample_id_next = sb_stop
+                else:
+                    break
 
             self._voltage_range = stream_buffer.voltage_range
             if self._sample_id_block is None:
                 collection_data = {
                     'v_range': stream_buffer.voltage_range,
-                    'sample_id': sample_id_next,
+                    'sample_id': self._sample_id_tlv,
                 }
                 collection_data = json.dumps(collection_data).encode('utf-8')
                 self._collection_start(data=collection_data)
@@ -153,18 +168,12 @@ class DataRecorder:
             stream_buffer.data_get(self._sample_id_tlv, sample_id_next,
                                    self._samples_per_reduction, out=self._reduction[r_start:r_stop, :])
             self._sample_id_tlv = sample_id_next
-
-            if self._sample_id_tlv - self._sample_id_block >= self._samples_per_block:
+            if finalize_now or self._sample_id_tlv - self._sample_id_block >= self._samples_per_block:
                 self._collection_end(self._writer.collections[-1])
-
-            sample_id_next += self._samples_per_tlv
 
     def _append_data(self, data):
         if self._closed:
             return
-        expected_len = self._samples_per_tlv * 2 * 2  # two uint16's per sample
-        if expected_len != len(data):
-            raise ValueError('invalid data length: %d != %d', expected_len, len(data))
         self._writer.append(datafile.TAG_DATA_BINARY, data, compress=False)
         self._total_size += len(data) // 4
 
@@ -179,6 +188,7 @@ class DataRecorder:
     def close(self):
         if self._closed:
             return
+        self.stream_notify(None)
         self._closed = True
         while len(self._writer.collections):
             collection = self._writer.collections[-1]
