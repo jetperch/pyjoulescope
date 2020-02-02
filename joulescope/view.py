@@ -14,7 +14,7 @@
 
 from joulescope import span
 from joulescope.stream_buffer import StreamBuffer, stats_to_api, \
-    stats_array_factory
+    stats_array_factory, stats_array_invalidate
 import threading
 import queue
 import numpy as np
@@ -44,15 +44,6 @@ def data_array_to_update(x_limits, x, data_array):
         signal['max']['value'] = data_array[:, idx]['max'].copy()
         signal['p2p']['value'] = signal['max']['value'] - signal['min']['value']
     return s
-
-
-def data_array_clear(s):
-    s[:, :]['length'] = 0
-    s[:, :]['mean'] = np.nan
-    s[:, :]['variance'] = np.nan
-    s[:, :]['min'] = np.nan
-    s[:, :]['max'] = np.nan
-
 
 
 class View:
@@ -220,7 +211,7 @@ class View:
         elif not self._changed and 0 == delta:
             return
         elif self._changed or delta >= length:  # perform full recompute
-            data_array_clear(self._data)
+            stats_array_invalidate(self._data)
             if data_idx_view_end > 0:
                 start_idx = (data_idx_view_end - length) * self._samples_per
                 # self.log.debug('recompute(start=%s, stop=%s, increment=%s)', start_idx, sample_id_end, self.samples_per)
@@ -231,7 +222,7 @@ class View:
             self._data = np.roll(self._data, -delta, axis=0)
             buffer.data_get(start_idx, sample_id_end, self._samples_per, self._data[-delta:, :])
         else:
-            data_array_clear(self._data)
+            stats_array_invalidate(self._data)
         self._data_idx = data_idx_view_end
         self._changed = False
 
@@ -257,7 +248,7 @@ class View:
         self._refresh_requested = True
         self._data_idx = 0
         if self._data is not None:
-            data_array_clear(self._data)
+            stats_array_invalidate(self._data)
 
     def _start(self):
         self._log.debug('start')

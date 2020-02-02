@@ -202,6 +202,14 @@ def stats_array_clear(s):
     s[:, :]['max'] = -DBL_MAX
 
 
+def stats_array_invalidate(s):
+    s[:, :]['length'] = 0
+    s[:, :]['mean'] = NAN
+    s[:, :]['variance'] = NAN
+    s[:, :]['min'] = NAN
+    s[:, :]['max'] = NAN
+
+
 cdef uint64_t reduction_stats(js_stream_buffer_reduction_s * r, c_running_statistics.statistics_s * tgt,
                               uint32_t idx_start, uint32_t length):
     cdef c_running_statistics.statistics_s * src
@@ -1145,13 +1153,17 @@ cdef class StreamBuffer:
         return out if not is_single_result else out[0]
 
     def get_reduction(self, idx, start, stop):
-        """Get reduction data directly.
+        """Get reduction data directly (for testing only).
 
         :param idx: The reduction index.
         :param start: The starting sample_id (inclusive).
         :param stop: The ending sample_id (exclusive).
-        :return: The reduction data which normally is memory mapped to the
-            underlying data, but will be copied on rollover.
+        :return: The The np.ndarray((N, STATS_FIELD_COUNT), dtype=DTYPE)
+            reduction data which normally is memory mapped to the underlying
+            data, but will be copied on rollover.
+
+        This method should not be used by production code.  Use
+        :meth:`data_get` or :meth:`samples_get`.
         """
         total_length = self.length
         if stop - start > total_length:
