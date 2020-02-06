@@ -1194,16 +1194,18 @@ cdef class StreamBuffer:
             sample_count = self.reductions[self.reduction_count - 1].samples_per_reduction_sample
             end_id = self.processed_sample_id
             start_id = end_id - sample_count
-            time_interval = sample_count / self.sampling_frequency  # seconds
-            charge_picocoulomb = (stats[0].m * 1e12)  * time_interval
-            energy_picojoules = (stats[2].m * 1e12) * time_interval
+            duration = sample_count / self.sampling_frequency  # seconds
+            start_time = start_id / self.sampling_frequency
+            end_time = start_time + duration
+            charge_picocoulomb = (stats[0].m * 1e12)  * duration
+            energy_picojoules = (stats[2].m * 1e12) * duration
             if isfinite(charge_picocoulomb) and isfinite(energy_picojoules):
                 self._charge_picocoulomb += int(charge_picocoulomb)
                 self._energy_picojoules += int(energy_picojoules)
             charge = self._charge_picocoulomb * 1e-12
             energy = self._energy_picojoules * 1e-12
-            data = _stats_to_api(stats, 0, time_interval)
-            data['time']['sample_range'] = {'value': [start_id, end_id], 'units': 'samples'}
+            data = _stats_to_api(stats, start_time, end_time)
+            data['time']['sample_range'] = {'value': [start_id, end_id], 'units': 'input_samples'}
             data['accumulators'] = {
                 'charge' : {
                     'value': charge,

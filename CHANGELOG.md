@@ -18,6 +18,7 @@ This file contains the list of changes made to pyjoulescope.
     Allows future compatibility with downsampling buffer length specification.
 *   Added ['time']['sample_range'] to StreamBuffer statistics callback data
     to allow for least-squares time fitting on host computer.
+*   Fixed ['time']['range'] in StreamBuffer statistics callback data.
 *   Added arbitrary JSON-serializable user data storage to JLS files.
 
 
