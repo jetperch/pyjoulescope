@@ -86,6 +86,10 @@ cdef class DownsamplingStreamBuffer:
         return 'DownsamplingStreamBuffer(length=%d)' % (self._length)
 
     @property
+    def has_raw(self):
+        return False
+
+    @property
     def sample_id_range(self):
         s_end = int(self._processed_sample_id)
         s_start = s_end - int(self._length)

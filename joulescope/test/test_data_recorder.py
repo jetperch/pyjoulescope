@@ -41,20 +41,20 @@ class TestDataRecorder(unittest.TestCase):
 
     def test_init_with_file_handle(self):
         fh = io.BytesIO()
-        d = DataRecorder(fh, 2000)
+        d = DataRecorder(fh)
         d.close()
         self.assertGreater(len(fh.getbuffer()), 0)
 
     def test_init_with_filename(self):
         self.assertFalse(os.path.isfile(self._filename1))
-        d = DataRecorder(self._filename1, 2000)
+        d = DataRecorder(self._filename1)
         self.assertTrue(os.path.isfile(self._filename1))
         d.close()
 
     def test_user_data(self):
         expect = ['hello', {'there': 'world'}]
         fh = io.BytesIO()
-        d = DataRecorder(fh, 2000, user_data=expect)
+        d = DataRecorder(fh, user_data=expect)
         d.close()
         fh.seek(0)
         r = DataReader().open(fh)
@@ -69,7 +69,7 @@ class TestDataRecorder(unittest.TestCase):
             stream_buffer.process()
 
         fh = io.BytesIO()
-        d = DataRecorder(fh, sampling_frequency=1000)
+        d = DataRecorder(fh)
         d.stream_notify(stream_buffer)
         data = usb_packet_factory(packet_index, count)
         stream_buffer.insert(data)
@@ -93,7 +93,7 @@ class TestDataRecorder(unittest.TestCase):
         r = DataReader().open(fh)
         self.assertEqual([0, 252], r.sample_id_range)
         r.raw_processor.suppress_mode = 'off'
-        data = r.get(0, 252, 1)
+        data = r.data_get(0, 252, 1)
         np.testing.assert_allclose(np.arange(0, 252 * 2, 2), data[:, 0]['mean'])
 
     def test_time_conversion(self):
@@ -113,27 +113,27 @@ class TestDataRecorder(unittest.TestCase):
         r = DataReader().open(fh)
         r.raw_processor.suppress_mode = 'off'
         # d = np.right_shift(r.raw(5, 10), 2)
-        data = r.get(5, 10, 1)
+        data = r.data_get(5, 10, 1)
         np.testing.assert_allclose(np.arange(10, 20, 2), data[:, 0]['mean'])
 
     def test_write_read_direct_with_sample_overscan_before(self):
         fh = self._create_file(1, 3)  # will be samples 120 to 250 (not 126 to 252)
         r = DataReader().open(fh)
         r.raw_processor.suppress_mode = 'off'
-        data = r.get(0, 140, 1)
+        data = r.data_get(0, 140, 1)
         np.testing.assert_allclose(np.arange(252, 532, 2), data[:, 0]['mean'])
 
     def test_write_read_stats_over_samples(self):
         fh = self._create_file(0, 2)
         r = DataReader().open(fh)
         r.raw_processor.suppress_mode = 'off'
-        data = r.get(0, 50, 5)
+        data = r.data_get(0, 50, 5)
         np.testing.assert_allclose(np.arange(4, 100, 10), data[:, 0]['mean'])
 
     def test_write_read_stats_over_samples_offset(self):
         fh = self._create_file(0, 2)
         r = DataReader().open(fh)
-        data = r.get(7, 50, 10)
+        data = r.data_get(7, 50, 10)
         np.testing.assert_allclose(np.arange(23, 90, 20), data[:, 0]['mean'])
 
     def test_write_read_get_reduction(self):
@@ -154,13 +154,13 @@ class TestDataRecorder(unittest.TestCase):
     def test_write_read_reduction_direct(self):
         fh = self._create_file(0, 8)
         r = DataReader().open(fh)
-        data = r.get(0, 800, 200)
+        data = r.data_get(0, 800, 200)
         np.testing.assert_allclose(np.arange(199, 1400, 400), data[:, 0]['mean'])
 
     def test_write_read_reduction_indirect(self):
         fh = self._create_file(0, 8)
         r = DataReader().open(fh)
-        data = r.get(0, 1000, 400)
+        data = r.data_get(0, 1000, 400)
         np.testing.assert_allclose([399, 1199], data[:, 0]['mean'])
 
     def _create_large_file(self, samples=None):
@@ -177,7 +177,7 @@ class TestDataRecorder(unittest.TestCase):
         samples_total = SAMPLES_PER_PACKET * packets_per_burst * bursts
 
         fh = io.BytesIO()
-        d = DataRecorder(fh, sampling_frequency=sample_rate)
+        d = DataRecorder(fh)
         d.stream_notify(stream_buffer)
         for burst_index in range(bursts):
             packet_index = burst_index * packets_per_burst
@@ -222,7 +222,7 @@ class TestDataRecorder(unittest.TestCase):
         cal.data = cal.save(bytes([0] * 32))
 
         fh = io.BytesIO()
-        d = DataRecorder(fh, sampling_frequency=sample_rate, calibration=cal)
+        d = DataRecorder(fh, calibration=cal)
 
         stream_buffer = StreamBuffer(1.0, [100], sample_rate)
         stream_buffer.calibration_set(cal.current_offset, cal.current_gain, cal.voltage_offset, cal.voltage_gain)
@@ -260,8 +260,8 @@ class TestDataRecorder(unittest.TestCase):
         for k_start, k_stop in ranges:
             # print(f'range {k_start}:{k_stop}')
             s1 = r.statistics_get(k_start, k_stop, units='samples')
-            _, _, data = r.raw(k_start, k_stop)
-            i_mean = np.mean(data[:, 0])
+            k = r.samples_get(k_start, k_stop, units='samples', fields=['current'])
+            i_mean = np.mean(k['signals']['current']['value'])
             np.testing.assert_allclose(s1['signals']['current']['μ']['value'], i_mean, rtol=0.0005)
         r.close()
 
@@ -275,8 +275,8 @@ class TestDataRecorder(unittest.TestCase):
             for i in range(0, sample_count - step_size, step_size):
                 r.raw_processor.reset()
                 s1 = r.statistics_get(i, i + step_size, units='samples')
-                _, _, data = r.raw(i, i + step_size)
-                i_mean = np.mean(data[:, 0])
+                k = r.samples_get(i, i + step_size, units='samples', fields=['current'])
+                i_mean = np.mean(k['signals']['current']['value'])
                 np.testing.assert_allclose(s1['signals']['current']['μ']['value'], i_mean, rtol=0.0005)
         r.close()
 
@@ -284,5 +284,6 @@ class TestDataRecorder(unittest.TestCase):
         fh = self.create_sinusoid_file(2000000, 400000)
         r = DataReader().open(fh)
         s1 = r.statistics_get(20, 20, units='samples')
-        i_mean = r.raw(20, 21)[2][0, 0]
+        k = r.samples_get(20, 21, units='samples', fields=['current'])
+        i_mean = k['signals']['current']['value'][0]
         np.testing.assert_allclose(s1['signals']['current']['μ']['value'], i_mean, rtol=0.0005)

@@ -519,6 +519,14 @@ cdef class StreamBuffer:
         return 'StreamBuffer(length=%d, reductions=%r)' % (self.length, reductions)
 
     @property
+    def has_raw(self):
+        """Query if this instance provides raw sample data.
+
+        :return: True if samples_get supports 'raw', False otherwise.
+        """
+        return True
+
+    @property
     def sample_id_range(self):
         """Get the range of sample ids currently available in the buffer.
 

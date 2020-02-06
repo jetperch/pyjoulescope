@@ -67,6 +67,20 @@ _DTYPE_MAP = {
 }
 
 
+_SIGNALS_UNITS = {
+    'current': 'A',
+    'voltage': 'V',
+    'power': 'W',
+    'raw_current': 'LSBs',
+    'raw_voltage': 'LSBs',
+    'raw': '',
+    'bits': '',
+    'current_range': '',
+    'current_lsb': '',
+    'voltage_lsb': '',
+}
+
+
 def construct_record_filename():
     time_start = datetime.datetime.utcnow()
     timestamp_str = time_start.strftime('%Y%m%d_%H%M%S')
@@ -76,11 +90,10 @@ def construct_record_filename():
 class DataRecorder:
     """Record Joulescope data to a file."""
 
-    def __init__(self, filehandle, sampling_frequency, calibration=None, user_data=None):
+    def __init__(self, filehandle, calibration=None, user_data=None):
         """Create a new instance.
 
         :param filehandle: The file-like object or file name.
-        :param sampling_frequency: The sampling frequency in Hertz.
         :param calibration: The calibration bytes in datafile format.
             None (default) uses the unit gain calibration.
         :param user_data: Arbitrary JSON-serializable user data that is
@@ -93,8 +106,35 @@ class DataRecorder:
         else:
             self._fh = None
 
-        self._sampling_frequency = sampling_frequency
-        if sampling_frequency > 100 * _REDUCTION_SAMPLES_MINIMUM:
+        self._sampling_frequency = 0
+        self._samples_per_tlv = 0
+        self._samples_per_block = 0
+        self._samples_per_reduction = 0
+        self._reductions_per_tlv = 0
+        self._reduction = None
+
+        self._sample_id_tlv = 0  # sample id for start of next TLV
+        self._sample_id_block = None  # sample id for start of current block, None if not started yet
+
+        self._stream_buffer = None  # to ensure same
+        self._sb_sample_id_last = None
+        self._voltage_range = None
+
+        self._writer = datafile.DataFileWriter(filehandle)
+        self._closed = False
+        self._total_size = 0
+
+        if user_data is not None:
+            b = json.dumps(user_data).encode('utf-8')
+            self._writer.append(datafile.TAG_USER_JSON, b)
+        if calibration is not None:
+            if isinstance(calibration, Calibration):
+                calibration = calibration.data
+            self._writer.append_subfile('calibration', calibration)
+
+    def _initialize(self):
+        self._sampling_frequency = self._stream_buffer.sampling_frequency
+        if self._sampling_frequency > 100 * _REDUCTION_SAMPLES_MINIMUM:
             self._samples_per_reduction = int(self._sampling_frequency) // 100  # 100 Hz @ 2 MSPS
         else:
             self._samples_per_reduction = _REDUCTION_SAMPLES_MINIMUM
@@ -106,27 +146,16 @@ class DataRecorder:
         reduction_block_size = self._samples_per_block // self._samples_per_reduction
 
         self._reduction = stats_array_factory(reduction_block_size)
-        self._sample_id_tlv = 0  # sample id for start of next TLV
-        self._sample_id_block = None  # sample id for start of current block, None if not started yet
-
-        self._stream_buffer = None  # to ensure same
-        self._sb_sample_id_last = None
-        self._voltage_range = None
-
-        self._writer = datafile.DataFileWriter(filehandle)
-        self._closed = False
-        self._total_size = 0
         self._append_configuration()
-        if calibration is not None:
-            if isinstance(calibration, Calibration):
-                calibration = calibration.data
-            self._writer.append_subfile('calibration', calibration)
-        if user_data is not None:
-            b = json.dumps(user_data).encode('utf-8')
-            self._writer.append(datafile.TAG_USER_JSON, b)
         self._writer.collection_start(0, 0)
 
     def _append_configuration(self):
+        if self._stream_buffer is None:
+            data_format = 'none'
+        elif self._stream_buffer.has_raw:
+            data_format = 'raw'
+        else:
+            data_format = 'float32_v1'
         config = {
             'type': 'config',
             'data_recorder_format_version': DATA_RECORDER_FORMAT_VERSION,
@@ -136,7 +165,7 @@ class DataRecorder:
             'samples_per_block': self._samples_per_block,
             'reduction_fields': ['current', 'voltage', 'power',
                                  'current_range', 'current_lsb', 'voltage_lsb'],
-            'data_format': 'raw',
+            'data_format': data_format,
             'reduction_format': 'v2',
         }
         cfg_data = json.dumps(config).encode('utf-8')
@@ -183,6 +212,7 @@ class DataRecorder:
         sb_start, sb_stop = stream_buffer.sample_id_range
         if self._stream_buffer is None:
             self._stream_buffer = stream_buffer
+            self._initialize()
             self._sample_id_tlv = sb_stop
             self._sample_id_block = None
             if self._samples_per_tlv > len(stream_buffer):
@@ -310,6 +340,8 @@ class DataRecorder:
     def close(self):
         if self._closed:
             return
+        if self._stream_buffer is None:
+            self._append_configuration()
         self.stream_notify(None)
         self._closed = True
         while len(self._writer.collections):
@@ -337,8 +369,10 @@ class DataReader:
         self._data_start_position = 0
         self._voltage_range = 0
         self._sample_cache = None
-        self._data_handler = None
+        self._data_get_handler = None
         self._reduction_handler = None
+        self._samples_get_handler = None
+        self._statistics_get_handler = None
         self.raw_processor = RawProcessor()
         self.user_data = None
 
@@ -393,9 +427,11 @@ class DataReader:
             elif tag == datafile.TAG_USER_JSON:
                 self.user_data = json.loads(value.decode('utf-8'))
             self._f.skip()
-        if self._data_start_position == 0 or self.config is None or self.footer is None:
+        if self.config is None or self.footer is None:
             raise ValueError('could not read file')
         log.info('DataReader with %d samples:\n%s', self.footer['size'], json.dumps(self.config, indent=2))
+        if self._data_start_position == 0 and self.footer['size']:
+            raise ValueError(f"data not found, but expect {self.footer['size']} samples")
         if int(self.config['data_recorder_format_version']) > int(DATA_RECORDER_FORMAT_VERSION):
             raise ValueError('Invalid file format')
         self.config.setdefault('reduction_fields', ['current', 'voltage', 'power'])
@@ -407,7 +443,9 @@ class DataReader:
         config.setdefault('data_format', 'raw')
         config.setdefault('reduction_format', 'v1')
         self.config = config
-        self._data_handler = getattr(self, '_data_handler_' + config['data_format'])
+        self._samples_get_handler = getattr(self, '_samples_get_handler_' + config['data_format'])
+        self._data_get_handler = getattr(self, '_data_get_handler_' + config['data_format'])
+        self._statistics_get_handler = getattr(self, '_statistics_get_handler_' + config['data_format'])
         self._reduction_handler = getattr(self, '_reduction_handler_' + config['reduction_format'])
 
     @property
@@ -454,6 +492,12 @@ class DataReader:
                              (idx_start, stop, idx_end, increment))
 
     def _sample_tlv(self, sample_idx):
+        """Get the sample data entry for the TLV containing sample_idx.
+
+        :param sample_idx: The sample index.
+        :return: The dict containing the data.
+        """
+
         if self._sample_cache and self._sample_cache['start'] <= sample_idx < self._sample_cache['stop']:
             # cache hit
             return self._sample_cache
@@ -515,12 +559,11 @@ class DataReader:
                     # found it!
                     tlv_pos = self._f.tell()
                     tag, value = next(self._f)
-                    data = self._data_handler_raw(value)
                     self._sample_cache = {
                         'voltage_range': voltage_range,
                         'start': current_sample_idx,
                         'stop': tlv_stop,
-                        'buffer': data,
+                        'value': value,
                         'tlv_pos': tlv_pos,
                         'block_pos': block_fh_pos,
                     }
@@ -531,23 +574,14 @@ class DataReader:
             else:
                 self._f.advance()
 
-    def _data_handler_raw(self, value):
-        return np.frombuffer(value, dtype=np.uint16).reshape((-1, 2))
-
-    def raw(self, start=None, stop=None, units=None):
+    def _raw(self, start=None, stop=None):
         """Get the raw data.
 
-        :param start: The starting time relative to the first sample.
-        :param stop: The ending time.
-        :param units: The units for start and stop: ['seconds', 'samples'].  None (default) is 'samples'.
+        :param start: The starting sample (must already be validated).
+        :param stop: The ending sample (must already be validated).
         :return: The output which is (out_raw, bits, out_cal).
         """
-        start, stop = self.normalize_time_arguments(start, stop, units)
         x_start, x_stop = self.sample_id_range
-        if start is None:
-            start = x_start
-        if stop is None:
-            stop = x_stop
         self._fh.seek(self._data_start_position)
         self._validate_range(start, stop)
         length = stop - start
@@ -572,7 +606,8 @@ class DataReader:
             sample_cache = self._sample_tlv(sample_idx)
             if sample_cache is None:
                 break
-            data = sample_cache['buffer']
+            value = sample_cache['value']
+            data = np.frombuffer(value, dtype=np.uint16).reshape((-1, 2))
             b_start = sample_idx - sample_cache['start']
             length = sample_cache['stop'] - sample_cache['start'] - b_start
             out_remaining = end_idx - sample_idx
@@ -787,47 +822,13 @@ class DataReader:
             r_idx += length
         return (r_start * sz, r_stop * sz), s
 
-    def get_calibrated(self, start=None, stop=None, units=None):
-        """Get the calibrated data (no statistics).
+    def _data_get_handler_none(self, start, stop, increment, out):
+        return out
 
-        :param start: The starting sample identifier (inclusive).
-        :param stop: The ending sample identifier (exclusive).
-        :param units: The units for start and stop.
-            'seconds' or None is in floating point seconds relative to the view.
-            'samples' is in stream buffer sample indices.
-        :return: The tuple of (current, voltage), each as np.ndarray
-            with dtype=np.float32.
-        """
-        log.debug('get_calibrated(%s, %s, %s)', start, stop, units)
-        _, _, d = self.raw(start, stop)
-        i, v = d[:, 0], d[:, 1]
-        return i, v
-
-    def get(self, start=None, stop=None, increment=None, units=None):
-        """Get the calibrated data with statistics.
-
-        :param start: The starting sample identifier (inclusive).
-        :param stop: The ending sample identifier (exclusive).
-        :param increment: The number of raw samples per output sample.
-        :param units: The units for start and stop.
-            'seconds' or None is in floating point seconds relative to the view.
-            'samples' is in stream buffer sample indices.
-        :return: The Nx3x4 sample data.
-        """
-        log.debug('DataReader.get(start=%r,stop=%r,increment=%r)', start, stop, increment)
-        start, stop = self.normalize_time_arguments(start, stop, units)
-        if increment is None:
-            increment = 1
-        if self._fh is None:
-            raise IOError('file not open')
-        increment = max(1, int(np.round(increment)))
-        out_len = (stop - start) // increment
-        if out_len <= 0:
-            return stats_array_factory(0)
-        out = stats_array_factory(out_len)
-
+    def _data_get_handler_raw(self, start, stop, increment, out):
+        out_len = len(out)
         if increment == 1:
-            _, d_bits, d_cal = self.raw(start, stop)
+            _, d_bits, d_cal = self._raw(start, stop)
             i, v = d_cal[:, 0], d_cal[:, 1]
             out[:, 0]['mean'] = i
             out[:, 1]['mean'] = v
@@ -848,9 +849,39 @@ class DataReader:
             k_start = start
             for idx in range(out_len):
                 k_stop = k_start + increment
-                out[idx, :] = self._statistics_get(k_start, k_stop).value
+                out[idx, :] = self._statistics_get_handler(k_start, k_stop).value
                 k_start = k_stop
         return out
+
+    def data_get(self, start, stop, increment=None, units=None, out=None):
+        """Get the samples with statistics.
+
+        :param start: The starting sample id (inclusive).
+        :param stop: The ending sample id (exclusive).
+        :param increment: The number of raw samples.
+        :param units: The units for start and stop.
+            'seconds' or None is in floating point seconds relative to the view.
+            'samples' is in stream buffer sample indices.
+        :param out: The optional output np.ndarray((N, STATS_FIELD_COUNT), dtype=DTYPE) to populate with
+            the result.  None (default) will construct and return a new array.
+        :return: The np.ndarray((N, STATS_FIELD_COUNT), dtype=DTYPE) data.
+        """
+        log.debug('DataReader.get(start=%r,stop=%r,increment=%r)', start, stop, increment)
+        start, stop = self.normalize_time_arguments(start, stop, units)
+        if increment is None:
+            increment = 1
+        if self._fh is None:
+            raise IOError('file not open')
+        increment = max(1, int(np.round(increment)))
+        out_len = (stop - start) // increment
+        if out_len <= 0:
+            return stats_array_factory(0)
+        if out is not None:
+            if len(out) < len(out_len):
+                raise ValueError('out too small')
+        else:
+            out = stats_array_factory(out_len)
+        return self._data_get_handler(start, stop, increment, out)
 
     def summary_string(self):
         s = [str(self)]
@@ -893,13 +924,16 @@ class DataReader:
             raise ValueError(f'start sample out of range: {s2}')
         return s1, s2
 
-    def _statistics_get(self, start, stop):
+    def _statistics_get_handler_none(self, start, stop):
+        return None
+
+    def _statistics_get_handler_raw(self, start, stop):
         s1, s2 = start, stop
         (k1, k2), s = self._get_reduction_stats(s1, s2)
         if k1 >= k2:
             # compute directly over samples
             stats = stats_factory()
-            _, d_bits, z = self.raw(s1, s2)
+            _, d_bits, z = self._raw(s1, s2)
             i, v = z[:, 0], z[:, 1]
             p = i * v
             zi = np.isfinite(i)
@@ -923,12 +957,71 @@ class DataReader:
             s = Statistics(stats=stats)
         else:
             if s1 < k1:
-                s_start = self._statistics_get(s1, k1)
+                s_start = self._statistics_get_handler(s1, k1)
                 s.combine(s_start)
             if s2 > k2:
-                s_stop = self._statistics_get(k2, s2)
+                s_stop = self._statistics_get_handler(k2, s2)
                 s.combine(s_stop)
         return s
+
+    def _samples_get_handler_none(self, start, stop, fields, rv):
+        return rv
+
+    def _samples_get_handler_raw(self, start, stop, fields, rv):
+        raw, bits, cal = self._raw(start, stop)
+        signals = rv['signals']
+        for field in fields:
+            units = _SIGNALS_UNITS.get(field, '')
+            if field == 'current':
+                v = cal[:, 0]
+            elif field == 'voltage':
+                v = cal[:, 1]
+            elif field == 'power':
+                v = cal[:, 0] * cal[:, 1]
+            elif field == 'raw':
+                v = raw
+            elif field == 'raw_current':
+                v = np.right_shift(raw[0::2], 2)
+            elif field == 'raw_voltage':
+                v = np.right_shift(raw[1::2], 2)
+            elif field == 'bits':
+                v = bits
+            elif field == 'current_range':
+                v = np.bitwise_and(bits, 0x0f)
+            elif field == 'current_lsb':
+                v = np.bitwise_and(np.right_shift(bits, 4), 1)
+            elif field == 'voltage_lsb':
+                v = np.bitwise_and(np.right_shift(bits, 5), 1)
+            else:
+                log.warning('Unsupported field %s', field)
+                v = np.array([])
+            signals[field] = {'value': v, 'units': units}
+        return rv
+
+    def samples_get(self, start=None, stop=None, units=None, fields=None):
+        """Get exact samples over a range.
+
+        :param start: The starting time.
+        :param stop: The ending time.
+        :param units: The units for start and stop.
+            'seconds' or None is in floating point seconds relative to the view.
+            'samples' is in stream buffer sample indicies.
+        :param fields: The fields to get.
+        """
+        log.debug('samples_get(%s, %s, %s)', start, stop, units)
+        s1, s2 = self.normalize_time_arguments(start, stop, units)
+        t1, t2 = start / self.sampling_frequency, stop / self.sampling_frequency
+        rv = {
+            'time': {
+                'range': {'value': [t1, t2], 'units': 's'},
+                'delta':  {'value': t2 - t1, 'units': 's'},
+                'sample_id_range':  {'value': [start, stop], 'units': 'samples'},
+                'sample_id_limits': {'value': self.sample_id_range, 'units': 'samples'},
+                'sampling_frequency': {'value': self.sampling_frequency, 'units': 'Hz'},
+            },
+            'signals': {},
+        }
+        return self._samples_get_handler(s1, s2, fields, rv)
 
     def statistics_get(self, start=None, stop=None, units=None):
         """Get the statistics for the collected sample data over a time range.
@@ -945,7 +1038,7 @@ class DataReader:
         s1, s2 = self.normalize_time_arguments(start, stop, units)
         if s1 == s2:
             s2 = s1 + 1  # always try to produce valid statistics
-        s = self._statistics_get(s1, s2)
+        s = self._statistics_get_handler(s1, s2)
         t_start = s1 / self.sampling_frequency
         t_stop = s2 / self.sampling_frequency
         return stats_to_api(s.value, t_start, t_stop)

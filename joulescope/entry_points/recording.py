@@ -53,7 +53,9 @@ def on_cmd(args):
         stop = r.sample_id_range[1] + 1 + stop
 
     if args.export is not None:
-        i, v = r.get_calibrated(start, stop, units='samples')
+        k = r.samples_get(start, stop, units='samples', fields=['current', 'voltage'])
+        i = k['signals']['current']['value']
+        v = k['signals']['voltage']['value']
         data = np.hstack((i.reshape((-1, 1)), (v.reshape((-1, 1)))))
         if args.export.endswith('npy'):
             np.save(args.export, data)
@@ -78,7 +80,9 @@ def on_cmd(args):
 
     if args.plot:
         import matplotlib.pyplot as plt
-        i, v = r.get_calibrated(start, stop)
+        k = r.samples_get(start, stop, units='samples', fields=['current', 'voltage'])
+        i = k['signals']['current']['value']
+        v = k['signals']['voltage']['value']
         x = np.arange(len(i)) * (1.0 / r.config['sampling_frequency'])
         f = plt.figure()
 
