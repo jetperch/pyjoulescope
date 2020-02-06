@@ -76,13 +76,15 @@ def construct_record_filename():
 class DataRecorder:
     """Record Joulescope data to a file."""
 
-    def __init__(self, filehandle, sampling_frequency, calibration=None):
+    def __init__(self, filehandle, sampling_frequency, calibration=None, user_data=None):
         """Create a new instance.
 
         :param filehandle: The file-like object or file name.
         :param sampling_frequency: The sampling frequency in Hertz.
         :param calibration: The calibration bytes in datafile format.
             None (default) uses the unit gain calibration.
+        :param user_data: Arbitrary JSON-serializable user data that is
+            added to the file.
         """
         log.info('init')
         if isinstance(filehandle, str):
@@ -119,6 +121,9 @@ class DataRecorder:
             if isinstance(calibration, Calibration):
                 calibration = calibration.data
             self._writer.append_subfile('calibration', calibration)
+        if user_data is not None:
+            b = json.dumps(user_data).encode('utf-8')
+            self._writer.append(datafile.TAG_USER_JSON, b)
         self._writer.collection_start(0, 0)
 
     def _append_configuration(self):
@@ -335,6 +340,7 @@ class DataReader:
         self._data_handler = None
         self._reduction_handler = None
         self.raw_processor = RawProcessor()
+        self.user_data = None
 
     def __str__(self):
         if self._f is not None:
@@ -384,6 +390,8 @@ class DataReader:
                     break
                 else:
                     log.warning('Unknown JSON section type=%s', type_)
+            elif tag == datafile.TAG_USER_JSON:
+                self.user_data = json.loads(value.decode('utf-8'))
             self._f.skip()
         if self._data_start_position == 0 or self.config is None or self.footer is None:
             raise ValueError('could not read file')

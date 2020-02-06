@@ -51,6 +51,15 @@ class TestDataRecorder(unittest.TestCase):
         self.assertTrue(os.path.isfile(self._filename1))
         d.close()
 
+    def test_user_data(self):
+        expect = ['hello', {'there': 'world'}]
+        fh = io.BytesIO()
+        d = DataRecorder(fh, 2000, user_data=expect)
+        d.close()
+        fh.seek(0)
+        r = DataReader().open(fh)
+        self.assertEqual(r.user_data, expect)
+
     def _create_file(self, packet_index, count=None):
         stream_buffer = StreamBuffer(10.0, [10], 1000.0)
         stream_buffer.suppress_mode = 'off'
@@ -73,6 +82,11 @@ class TestDataRecorder(unittest.TestCase):
         # dfr.pretty_print()
         # fh.seek(0)
         return fh
+
+    def test_user_data_none_when_not_provided(self):
+        fh = self._create_file(0, 2)
+        r = DataReader().open(fh)
+        self.assertEqual(r.user_data, None)
 
     def test_write_read_direct(self):
         fh = self._create_file(0, 2)

@@ -110,7 +110,9 @@ The supported tags include:
 * b'IDX': application-specific index information.
 * b'MJS': application-specific metadata, JSON formatted.
 * b'AJS': application-specific data, JSON formatted.
-* b'AJB': application-specific data, binary formatted.
+* b'ABN': application-specific data, binary formatted.
+* b'UJS': arbitrary end-user data, JSON formatted.
+* b'UBN': arbitrary end-user data, binary formatted.
 * b'ENC': encryption authenticity and integrity information.
   This tag must follow every block with the encryption bit set.
   * 16 bytes: ChaCha20 + Poly1305 MAC
@@ -168,6 +170,8 @@ TAG_INDEX = b'IDX'
 TAG_META_JSON = b'MJS'  # JSON formatted file metadata
 TAG_DATA_BINARY = b'ABN'  # binary formatted file data
 TAG_DATA_JSON = b'AJS'  # JSON formatted file data
+TAG_USER_BINARY = b'UBN'  # binary formatted user data
+TAG_USER_JSON = b'UJS'  # JSON formatted user data
 TAG_CALIBRATION_JSON = b'CJS'  # deprecated, use TAG_DATA_JSON
 TAG_SIGNATURE_START = b'SGS'
 TAG_SIGNATURE_END = b'SGE'

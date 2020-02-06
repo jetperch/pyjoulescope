@@ -45,6 +45,7 @@ joulescope/version.py
 ~*.docx
 ~*.xlsx
 *.tmp
+*.bak
 
 # IDE files
 .idea
