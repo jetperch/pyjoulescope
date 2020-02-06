@@ -831,7 +831,7 @@ cdef class StreamBuffer:
         if stop <= start:
             log.warning("js_stream_buffer_get stop <= start")
             return 0
-        if start > self.processed_sample_id:
+        if start >= self.processed_sample_id:
             log.warning("js_stream_buffer_get start newer that current")
             return 0
         if stop > self.processed_sample_id:
@@ -1192,6 +1192,8 @@ cdef class StreamBuffer:
         cdef StreamBuffer self = <object> user_data
         if callable(self._callback):
             sample_count = self.reductions[self.reduction_count - 1].samples_per_reduction_sample
+            end_id = self.processed_sample_id
+            start_id = end_id - sample_count
             time_interval = sample_count / self.sampling_frequency  # seconds
             charge_picocoulomb = (stats[0].m * 1e12)  * time_interval
             energy_picojoules = (stats[2].m * 1e12) * time_interval
@@ -1201,6 +1203,7 @@ cdef class StreamBuffer:
             charge = self._charge_picocoulomb * 1e-12
             energy = self._energy_picojoules * 1e-12
             data = _stats_to_api(stats, 0, time_interval)
+            data['time']['sample_range'] = {'value': [start_id, end_id], 'units': 'samples'}
             data['accumulators'] = {
                 'charge' : {
                     'value': charge,
