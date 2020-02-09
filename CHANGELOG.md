@@ -6,14 +6,17 @@ This file contains the list of changes made to pyjoulescope.
 
 ## 0.8.0
 
-2020 Jan 29 [in progress]
+2020 Feb 9 [in progress]
 
 *   Unified statistics API data structure.  Code using this structure will
     need to be updated!
 *   Restructured DataReader methods to conform to other classes. 
     Applications using DataRead will need to be updated!
     Use methods samples_get, data_get, statistics_get.
+*   Removed Device.stream_buffer_duration.  Use "buffer_duration" property.
+*   Removed Device.reduction_frequency.  Use "reduction_frequency" property.
 *   Refactored StreamBuffer to split out UsbBulkProcessor.
+*   Improved parameter definition for UI integration.
 *   Added running statistics computation.
 *   Added downsampling filter implementation.
 *   Removed StreamBuffer.raw_get.  Use StreamBuffer.samples_get.
@@ -23,6 +26,7 @@ This file contains the list of changes made to pyjoulescope.
     to allow for least-squares time fitting on host computer.
 *   Fixed ['time']['range'] in StreamBuffer statistics callback data.
 *   Added arbitrary JSON-serializable user data storage to JLS files.
+*   Added memory check before allocating streaming buffer.
 
 
 ## 0.7.0

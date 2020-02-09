@@ -81,8 +81,9 @@ class TestAttributes(unittest.TestCase):
     def test_defaults(self):
         d = Device(None)
         self.assertEqual(2000000, d.sampling_frequency)
-        self.assertEqual(30, d.stream_buffer_duration)
-        self.assertEqual(2, d.reduction_frequency)
+        self.assertEqual('30 seconds', d.parameter_get('buffer_duration'))
+        self.assertEqual(30, d.parameter_get('buffer_duration', dtype='actual'))
+        self.assertEqual('2 Hz', d.parameter_get('reduction_frequency'))
         self.assertIsNone(d.stream_buffer)
         self.assertIsNone(d.calibration)
         self.assertEqual('i_range', d.parameters(name='i_range').name)
@@ -97,9 +98,19 @@ class TestAttributes(unittest.TestCase):
         with self.assertRaises(Exception):
             d.extio_status()
 
-    def reduction_frequency(self):
+    def test_parameter_arbitrary(self):
+        d = Device(None)
+        d.parameter_set('buffer_duration', 2)
+
+    def test_reduction_frequency(self):
         d = Device(None)
         for frequency in [1, 2, 4, 10, 20, 50, 100]:
-            with self.subtest(frequency=frequency):
+            with self.subTest(frequency=frequency):
                 d.reduction_frequency = frequency
                 self.assertEqual(frequency, d.reduction_frequency)
+
+    def test_info(self):
+        d = Device(None)
+        self.assertEqual('JS110', d.parameter_get('model'))
+        self.assertEqual(None, d.parameter_get('device_serial_number'))
+        self.assertEqual(None, d.parameter_get('hardware_serial_number'))

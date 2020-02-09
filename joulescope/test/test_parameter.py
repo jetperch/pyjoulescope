@@ -23,14 +23,13 @@ from joulescope.parameter import Parameter
 class TestParameter(unittest.TestCase):
 
     def test_initialize_keywords_simple(self):
-        values = [
+        options = [
             ('there', 0),
             ('world', 1),
             ('you', 2)
         ]
-        p = Parameter(name='hello', permission='rw', path='universe', default='world', values=values)
+        p = Parameter(name='hello', path='universe', default='world', options=options)
         self.assertEqual('hello', p.name)
-        self.assertEqual('rw', p.permission)
         self.assertEqual('universe', p.path)
         self.assertEqual(0, p.str_to_value['there'])
         self.assertEqual(1, p.str_to_value['world'])

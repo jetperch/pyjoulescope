@@ -27,6 +27,7 @@ from libc.math cimport isfinite, NAN
 from libc.string cimport memset, memcpy
 import logging
 import numpy as np
+import psutil
 cimport numpy as np
 from . cimport c_running_statistics
 include "running_statistics.pxi"
@@ -41,6 +42,7 @@ DEF PACKET_INDEX_WRAP = PACKET_INDEX_MASK + 1
 
 DEF REDUCTION_MAX = 5
 DEF SAMPLES_PER_PACKET = PACKET_PAYLOAD_SIZE // (2 * 2)
+DEF MEMBYTES_PER_SAMPLE = 16
 
 DEF RAW_SAMPLE_SZ = 2 * 2  # sizeof(uint16_t)
 DEF CAL_SAMPLE_SZ = 2 * 4  # sizeof(float)
@@ -441,6 +443,12 @@ cdef class StreamBuffer:
 
     def __cinit__(self, duration, reductions, sampling_frequency):
         length = int(sampling_frequency * duration)
+        mem_free = psutil.virtual_memory().available
+        if mem_free < length * MEMBYTES_PER_SAMPLE:
+            duration_fit = mem_free // (sampling_frequency * MEMBYTES_PER_SAMPLE)
+            length = int(sampling_frequency * duration_fit)
+            log.warning('not enough memory: reducing duration from %s to %s', duration, duration_fit)
+            duration = duration_fit
         self._usb_bulk_processor = UsbBulkProcessor()
         self._usb_bulk_processor.callback_set(<usb_bulk_data_processor_cbk_fn> self._process_samples, self)
         self._raw_processor = RawProcessor()
@@ -798,6 +806,7 @@ cdef class StreamBuffer:
         cdef uint64_t sample_count  = length // 2
         cdef uint64_t k
         cdef uint64_t idx
+        self._raw_processor.voltage_range = voltage_range
         while sample_count:
             idx = self.device_sample_id % self.length
             k = sample_count if (idx + sample_count) <= self.length else self.length - idx

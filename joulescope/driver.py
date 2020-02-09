@@ -117,8 +117,6 @@ LOOPBACK_BUFFER_SIZE = 132
 """The maximum size of the hardware control loopback buffer for testing."""
 
 SAMPLING_FREQUENCY = 2000000  # samples per second (Hz)
-REDUCTIONS = [200, 100, 50]  # in samples in sample units of the previous reduction
-STREAM_BUFFER_DURATION = 30.0  # seconds
 
 
 class StreamProcessApi:
@@ -170,6 +168,15 @@ class StreamProcessApi:
         raise NotImplementedError()
 
 
+def _reduction_frequency_to_reductions(frequency):
+    if frequency < 1 or frequency > 100:
+        raise ValueError(f'reduction_frequency {frequency} not between 1 Hz and 100 Hz')
+    elif frequency < 50:
+        return [200, 100, int(100 // frequency)]  # three reduction levels
+    else:
+        return [200, int((200 * 50) // frequency)]  # two reduction levels
+
+
 class Device:
     """The device implementation for use by applications.
 
@@ -186,10 +193,9 @@ class Device:
         self._usb = DeviceThread(usb_device)
         self._config = config
         self._parameters = {}
-        self._reductions = REDUCTIONS
-        self._stream_buffer_duration = STREAM_BUFFER_DURATION
         self._input_sampling_frequency = SAMPLING_FREQUENCY
-        self._output_sampling_frequency = SAMPLING_FREQUENCY  # // 10  # todo
+        self._output_sampling_frequency = SAMPLING_FREQUENCY  # cached on open
+        self._statistics_callback = None
         self.stream_buffer = None
         self._streaming = False
         self._stop_fn = None
@@ -199,7 +205,7 @@ class Device:
         self._statistics_callback = None
         self._parameters_defaults = PARAMETERS_DEFAULTS
         for p in PARAMETERS:
-            if p.permission == 'rw' and p.default is not None:
+            if 'read_only' not in p.flags and p.default is not None:
                 self._parameters[p.name] = name_to_value(p.name, p.default)
 
     def __str__(self):
@@ -216,11 +222,11 @@ class Device:
 
     @property
     def sampling_frequency(self):
-        return self._output_sampling_frequency
+        return self.parameter_get('sampling_frequency', dtype='actual')
 
     @property
     def statistics_callback(self):
-        return self.stream_buffer.callback
+        return self._statistics_callback
 
     @statistics_callback.setter
     def statistics_callback(self, cbk):
@@ -232,36 +238,9 @@ class Device:
             This function will be called from the USB processing thread.
             Any calls back into self MUST BE resynchronized.
         """
-        idx = len(self._reductions)
-        if idx:
-            self.stream_buffer.callback = cbk
-
-    @property
-    def stream_buffer_duration(self):
-        return self._stream_buffer_duration
-
-    @stream_buffer_duration.setter
-    def stream_buffer_duration(self, value):
-        if value is None:
-            self._stream_buffer_duration = STREAM_BUFFER_DURATION
-        else:
-            self._stream_buffer_duration = float(value)
+        self._statistics_callback = cbk
         if self.stream_buffer is not None:
-            log.info('stream_buffer_duration change will not take effect until close() then open()')
-
-    @property
-    def reduction_frequency(self):
-        return self._output_sampling_frequency / np.prod(self._reductions)
-
-    @reduction_frequency.setter
-    def reduction_frequency(self, frequency):
-        if frequency < 1 or frequency > 100:
-            raise ValueError(f'reduction_frequency {frequency} not between 1 Hz and 100 Hz')
-        elif frequency < 50:
-            r = [200, 100, int(100 // frequency)]  # three reduction levels
-        else:
-            r = [200, int((200 * 50) // frequency)]  # two reduction levels
-        self._reductions = r
+            self.stream_buffer.callback = cbk
 
     def view_factory(self):
         """Construct a new View into the device's data.
@@ -296,38 +275,63 @@ class Device:
         :raise KeyError: if name not found.
         :raise ValueError: if value is not allowed
         """
-        if name == 'current_ranging':
-            if value is None or value in [False, 'off']:
-                self.parameter_set('current_ranging_type', 'off')
-                return
-            parts = value.split('_')
-            if len(parts) != 4:
-                raise ValueError(f'Invalid current_ranging value {value}')
-            for p, v in zip(['type', 'samples_pre', 'samples_window', 'samples_post'], parts):
-                self.parameter_set('current_ranging_' + p, v)
-            return
-        value = name_to_value(name, value)
-        self._parameters[name] = value
         p = PARAMETERS_DICT[name]
+        if name == 'current_ranging':
+            self._current_ranging_split(value)
+            return
+        if 'read_only' in p.flags:
+            log.warning('Attempting to set read_only parameter %s', name)
+            return
+        if isinstance(value, str):
+            value = name_to_value(name, value)
+        elif p.validator is None:
+            raise KeyError('value %s not allowed for parameter %s', value, name)
+        else:
+            value = p.validator(value)
+        self._parameters[name] = value
         if p.path == 'setting':
-            self._stream_settings_send()
+            if 'skip_update' not in p.flags:
+                self._stream_settings_send()
         elif p.path == 'extio':
             self._extio_set()
         elif p.path == 'current_ranging':
             self._current_ranging_set()
 
-    def parameter_get(self, name):
+    def parameter_get(self, name, dtype=None):
         """Get a parameter value.
 
         :param name: The parameter name.
+        :param dtype: The data type for the parameter.  None (default)
+            attempts to convert the value to the enum string.
+            'actual' returns the value in its actual type used by the driver.
         :raise KeyError: if name not found.
         """
         if name == 'current_ranging':
             pnames = ['type', 'samples_pre', 'samples_window', 'samples_post']
             values = [str(self.parameter_get('current_ranging_' + p)) for p in pnames]
             return '_'.join(values)
+        p = PARAMETERS_DICT[name]
+        if p.path == 'info':
+            return self._parameter_get_info(name)
         value = self._parameters[name]
-        return value_to_name(name, value)
+        if dtype == 'actual':
+            return value
+        try:
+            return value_to_name(name, value)
+        except KeyError:
+            return value
+
+    def _parameter_get_info(self, name):
+        if name == 'model':
+            return 'JS110'
+        elif name == 'device_serial_number':
+            if self.stream_buffer is None or self.calibration is None:
+                return None
+            return self.calibration.serial_number
+        elif name == 'hardware_serial_number':
+            if self.stream_buffer is None:
+                return None
+            return self.serial_number
 
     @property
     def serial_number(self):
@@ -365,13 +369,19 @@ class Device:
         if self.stream_buffer:
             self.close()
         self._usb.open(event_callback_fn)
+        stream_buffer_duration = self._parameters['buffer_duration']
+        reduction_frequency = self._parameters['reduction_frequency']
+        self._output_sampling_frequency = self.parameter_get('sampling_frequency', dtype='actual')
+        reductions = _reduction_frequency_to_reductions(reduction_frequency)
         if self._input_sampling_frequency == self._output_sampling_frequency:
-            self.stream_buffer = StreamBuffer(self._stream_buffer_duration, self._reductions,
+            self.stream_buffer = StreamBuffer(stream_buffer_duration, reductions,
                                               self._input_sampling_frequency)
         else:
-            self.stream_buffer = DownsamplingStreamBuffer(self._stream_buffer_duration, self._reductions,
+            self.stream_buffer = DownsamplingStreamBuffer(stream_buffer_duration, reductions,
                                                           self._input_sampling_frequency,
                                                           self._output_sampling_frequency)
+        if self._statistics_callback is not None:
+            self.stream_buffer.callback = self._statistics_callback
         self._current_ranging_set()
         try:
             info = self.info()
@@ -568,6 +578,16 @@ class Device:
             value=0, index=0, data=msg)
         _ioerror_on_bad_result(rv)
 
+    def _current_ranging_split(self, value):
+        if value is None or value in [False, 'off']:
+            self.parameter_set('current_ranging_type', 'off')
+            return
+        parts = value.split('_')
+        if len(parts) != 4:
+            raise ValueError(f'Invalid current_ranging value {value}')
+        for p, v in zip(['type', 'samples_pre', 'samples_window', 'samples_post'], parts):
+            self.parameter_set('current_ranging_' + p, v)
+
     def _current_ranging_set(self):
         if self.stream_buffer is None:
             return
@@ -665,7 +685,6 @@ class Device:
             self.stream_buffer.sample_id_max = int(duration * self._input_sampling_frequency)
         if contiguous_duration is not None:
             c = int(contiguous_duration * self._input_sampling_frequency)
-            c += self._reductions[0]
             self.stream_buffer.contiguous_max = c
             log.info('contiguous_samples=%s', c)
 
