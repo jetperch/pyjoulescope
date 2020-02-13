@@ -18,6 +18,7 @@ from joulescope.stream_buffer import reduction_downsample, Statistics, stats_to_
     stats_factory, stats_array_factory, stats_array_clear, stats_array_invalidate, \
     STATS_DTYPE, STATS_FIELD_NAMES, STATS_FIELD_COUNT, NP_STATS_NAMES, \
     I_RANGE_MISSING, SUPPRESS_SAMPLES_MAX, RawProcessor
+from joulescope import array_storage
 import json
 import numpy as np
 import datetime
@@ -29,42 +30,6 @@ DATA_RECORDER_FORMAT_VERSION = '2'
 SAMPLES_PER_BLOCK = 100000
 _REDUCTION_SAMPLES_MINIMUM = 200
 _STATS_VALUES_V1 = 4
-
-_DTYPE_SIZE_MASK = 0x03
-_DTYPE_SIZE_1B = 0x0
-_DTYPE_SIZE_2B = 0x1
-_DTYPE_SIZE_4B = 0x2
-_DTYPE_SIZE_8B = 0x3
-
-_DTYPE_SUBTYPE_MASK = 0x6
-_DTYPE_SUBTYPE_FLOAT = 0x0
-_DTYPE_SUBTYPE_UINT = 0x8
-_DTYPE_SUBTYPE_INT = 0xC
-
-_DTYPE_FLOAT32 = _DTYPE_SUBTYPE_FLOAT + _DTYPE_SIZE_4B
-_DTYPE_FLOAT64 = _DTYPE_SUBTYPE_FLOAT + _DTYPE_SIZE_8B
-_DTYPE_UINT8 = _DTYPE_SUBTYPE_UINT + _DTYPE_SIZE_1B
-_DTYPE_UINT16 = _DTYPE_SUBTYPE_UINT + _DTYPE_SIZE_2B
-_DTYPE_UINT32 = _DTYPE_SUBTYPE_UINT + _DTYPE_SIZE_4B
-_DTYPE_UINT64 = _DTYPE_SUBTYPE_UINT + _DTYPE_SIZE_8B
-_DTYPE_INT8 = _DTYPE_SUBTYPE_INT + _DTYPE_SIZE_1B
-_DTYPE_INT16 = _DTYPE_SUBTYPE_INT + _DTYPE_SIZE_2B
-_DTYPE_INT32 = _DTYPE_SUBTYPE_INT + _DTYPE_SIZE_4B
-_DTYPE_INT64 = _DTYPE_SUBTYPE_INT + _DTYPE_SIZE_8B
-
-
-_DTYPE_MAP = {
-    _DTYPE_FLOAT32: np.float32,
-    _DTYPE_FLOAT64: np.float64,
-    _DTYPE_UINT8: np.uint8,
-    _DTYPE_UINT16: np.uint16,
-    _DTYPE_UINT32: np.uint32,
-    _DTYPE_UINT64: np.uint64,
-    _DTYPE_INT8: np.int8,
-    _DTYPE_INT16: np.int16,
-    _DTYPE_INT32: np.int32,
-    _DTYPE_INT64: np.int64,
-}
 
 
 _SIGNALS_UNITS = {
@@ -155,7 +120,7 @@ class DataRecorder:
         elif self._stream_buffer.has_raw:
             data_format = 'raw'
         else:
-            data_format = 'float32_v1'
+            data_format = 'float32_v2'
         config = {
             'type': 'config',
             'data_recorder_format_version': DATA_RECORDER_FORMAT_VERSION,
@@ -183,12 +148,13 @@ class DataRecorder:
         r_stop = sample_count // self._samples_per_reduction
         log.debug('_collection_end(%s, %s)', r_stop, len(self._reduction))
         data = self._reduction[:r_stop, :]
-        arrays = [(0, 0, _DTYPE_UINT64, data[:, 0]['length'])]
+        arrays = {0x00: data[:, 0]['length'].astype(np.uint64)}
         for field_idx, field in enumerate(STATS_FIELD_NAMES):
             for stat_idx, stat in enumerate(NP_STATS_NAMES[1:]):
+                x_id = ((field_idx & 0x0f) << 4) | ((stat_idx + 1) & 0x0f)
                 x = data[:, field_idx][stat]
-                arrays.append((field_idx, stat_idx + 1, _DTYPE_FLOAT32, x))
-        value = self._arrays_format(r_stop, arrays)
+                arrays[x_id] = x.astype(np.float32)
+        value = array_storage.pack(arrays, r_stop)
         value = value.tobytes()
         self._writer.collection_end(collection, value)
         self._sample_id_block = None
@@ -243,7 +209,10 @@ class DataRecorder:
                 self._collection_start(data=collection_data)
 
             log.debug('_process() add tlv %d', self._sample_id_tlv)
-            self._append_raw_data(self._sample_id_tlv, sample_id_next)
+            if stream_buffer.has_raw:
+                self._append_raw_data(self._sample_id_tlv, sample_id_next)
+            else:
+                self._append_float_data(self._sample_id_tlv, sample_id_next)
             self._total_size += (sample_id_next - self._sample_id_tlv)
             tlv_offset = (self._sample_id_tlv - self._sample_id_block) // self._samples_per_tlv
             r_start = tlv_offset * self._reductions_per_tlv
@@ -265,69 +234,18 @@ class DataRecorder:
         if self._closed:
             return
         data = self._stream_buffer.data_get(start, stop)
-        arrays = []
+        arrays = {}
         for field_idx, field in enumerate(STATS_FIELD_NAMES):
-            x = data[:, field]['mean']
+            x_id = (field_idx << 4)
+            x = data[:, field_idx]['mean']
             if field_idx < 3:
                 x = x.astype(dtype=np.float32)
-                dtype = _DTYPE_FLOAT32
             elif field_idx == 3:
                 x = (x * 16).astype(dtype=np.uint8)
-                dtype = _DTYPE_UINT8
             else:
                 x = (x * 15).astype(dtype=np.uint8)
-                dtype = _DTYPE_UINT8
-            arrays.append((field_idx, 1, dtype, x))
-        return self._arrays_format(stop - start, arrays)
-
-    def _arrays_format(self, sample_count, arrays):
-        """Format arrays.
-
-        :param sample_count: The number of samples in all arrays.
-        :param arrays: The list of (field_id, stats_id, dtype, array) for
-            each item to format.
-        """
-        # tag-length index followed by values.
-        # In tag-length, value format: tag[31:0], length[23:0]
-        #  tag: compress[31], field_idx[14:11], stats_idx[10:8], dtype[7:0]
-        # All values start on multiple of 8 bytes (values padded).
-        # Length is the length of the value in bytes (may be zero).
-        #  data: compressed[7], rsv[6], field_idx[5:3], stats_idx[2:0]
-        #  0: offset to first value (multiple of 8 bytes)
-        #  1: array_count[31:24], sample_count[23:0]
-        #  hdr_N: tag-length data for each value for fast indexing
-        if sample_count >= 2**24:
-            raise ValueError(f'sample_count {sample_count} too big')
-        arrays_count = len(arrays)
-        header_size = (((2 + 2 * arrays_count) * 4 + 7) // 8) * 8
-
-        sz = 0
-        arrays_fmt = []
-        for (field_idx, stat_idx, dtype, x) in arrays:
-            sz_mask = dtype & _DTYPE_SIZE_MASK
-            if sz_mask != _DTYPE_SIZE_1B:
-                np_dtype = _DTYPE_MAP[dtype]
-                if not x.dtype == np_dtype:
-                    x = x.astype(np_dtype)
-                if not x.flags['C_CONTIGUOUS']:
-                    x = np.ascontiguousarray(x, dtype=np_dtype)
-                x = x.view(dtype=np.uint8)
-            hdr = ((field_idx & 0x7) << 11) + ((stat_idx & 0x7) << 8) + (dtype & 0xFf)
-            arrays_fmt.append((hdr, x))
-            sz += ((len(x) + 7) // 8) * 8
-        v_u32 = np.zeros(header_size + sz, dtype=np.uint32)
-        v_u8 = v_u32.view(dtype=np.uint8)
-        v_u32[0] = header_size
-        v_u32[1] = (arrays_count << 24) + sample_count
-        offset = header_size
-        for idx, (hdr, x) in enumerate(arrays_fmt):
-            x_len = len(x)
-            value_len = ((x_len + 7) // 8) * 8
-            v_u32[2 + idx * 2] = hdr
-            v_u32[2 + idx * 2 + 1] = x_len
-            v_u8[offset:offset + x_len] = x
-            offset += value_len
-        return v_u8[:offset]
+            arrays[x_id] = x
+        return array_storage.pack(arrays, stop - start)
 
     def _append_meta(self):
         index = {
@@ -702,38 +620,15 @@ class DataReader:
 
     def _reduction_handler_v2(self, value):
         value = np.frombuffer(value, dtype=np.uint8)
-        sample_count, data = self._arrays_parse(value)
+        data, sample_count = array_storage.unpack(value)
         stats_array = stats_array_factory(sample_count)
         stats_array_invalidate(stats_array)
-        for (field_idx, stats_idx), x in data.items():
+        for key, x in data.items():
+            field_idx = (key >> 4) & 0x0f
+            stats_idx = key & 0x0f
             stats_name = NP_STATS_NAMES[stats_idx]
-            # todo optional decompresssion
             stats_array[:, field_idx][stats_name] = x  # .astype(dtype=np.float64)
         return stats_array
-
-    def _arrays_parse(self, value):
-        # See DataRecorder._arrays_format for format
-        array_header = value[:8].view(dtype=np.uint32)
-        offset = array_header[0]
-        sample_count = array_header[1] & 0xffffff
-        field_count = (array_header[1] >> 24) & 0xff
-        offset_expect = 8 + field_count * 8
-        if offset_expect > offset:
-            raise ValueError('Invalid format')
-        tag_length = value[8:offset_expect].view(dtype=np.uint32)
-        result = {}
-        for idx in range(field_count):
-            hdr = tag_length[idx * 2]
-            x_len = tag_length[idx * 2 + 1] & 0xffffff
-            field_idx = (hdr >> 11) & 0x7
-            stat_idx = (hdr >> 8) & 0x7
-            dtype = hdr & 0xff
-            np_dtype = _DTYPE_MAP[dtype]
-            x = value[offset:offset + x_len]
-            x = x.view(dtype=np_dtype)
-            result[(field_idx, stat_idx)] = x
-            offset += ((x_len + 7) // 8) * 8
-        return sample_count, result
 
     def get_reduction(self, start=None, stop=None, units=None, out=None):
         """Get the fixed reduction with statistics.
@@ -853,6 +748,9 @@ class DataReader:
                 k_start = k_stop
         return out
 
+    def _data_get_handler_float32_v2(self, start, stop, increment, out):
+        return out
+
     def data_get(self, start, stop, increment=None, units=None, out=None):
         """Get the samples with statistics.
 
@@ -964,6 +862,9 @@ class DataReader:
                 s.combine(s_stop)
         return s
 
+    def _statistics_get_handler_float32_v2(self, start, stop):
+        pass
+
     def _samples_get_handler_none(self, start, stop, fields, rv):
         return rv
 
@@ -996,6 +897,9 @@ class DataReader:
                 log.warning('Unsupported field %s', field)
                 v = np.array([])
             signals[field] = {'value': v, 'units': units}
+        return rv
+
+    def _samples_get_handler_float32_v2(self, start, stop, fields, rv):
         return rv
 
     def samples_get(self, start=None, stop=None, units=None, fields=None):
