@@ -354,6 +354,24 @@ class Device:
         log.info('serial number = %s', serial_number)
         return serial_number
 
+    def _stream_buffer_open(self):
+        if self.stream_buffer:
+            buffer, self.stream_buffer = self.stream_buffer, None
+            del buffer
+        stream_buffer_duration = self._parameters['buffer_duration']
+        reduction_frequency = self._parameters['reduction_frequency']
+        self._output_sampling_frequency = self.parameter_get('sampling_frequency', dtype='actual')
+        reductions = _reduction_frequency_to_reductions(reduction_frequency)
+        if self._input_sampling_frequency == self._output_sampling_frequency:
+            self.stream_buffer = StreamBuffer(stream_buffer_duration, reductions,
+                                              self._input_sampling_frequency)
+        else:
+            self.stream_buffer = DownsamplingStreamBuffer(stream_buffer_duration, reductions,
+                                                          self._input_sampling_frequency,
+                                                          self._output_sampling_frequency)
+        if self._statistics_callback is not None:
+            self.stream_buffer.callback = self._statistics_callback
+
     def open(self, event_callback_fn=None):
         """Open the device for use.
 
@@ -369,19 +387,7 @@ class Device:
         if self.stream_buffer:
             self.close()
         self._usb.open(event_callback_fn)
-        stream_buffer_duration = self._parameters['buffer_duration']
-        reduction_frequency = self._parameters['reduction_frequency']
-        self._output_sampling_frequency = self.parameter_get('sampling_frequency', dtype='actual')
-        reductions = _reduction_frequency_to_reductions(reduction_frequency)
-        if self._input_sampling_frequency == self._output_sampling_frequency:
-            self.stream_buffer = StreamBuffer(stream_buffer_duration, reductions,
-                                              self._input_sampling_frequency)
-        else:
-            self.stream_buffer = DownsamplingStreamBuffer(stream_buffer_duration, reductions,
-                                                          self._input_sampling_frequency,
-                                                          self._output_sampling_frequency)
-        if self._statistics_callback is not None:
-            self.stream_buffer.callback = self._statistics_callback
+        self._stream_buffer_open()
         self._current_ranging_set()
         try:
             info = self.info()
