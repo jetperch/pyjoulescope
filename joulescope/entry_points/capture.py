@@ -74,7 +74,9 @@ def run(device, filename, duration=None, contiguous_duration=None):
     signal.signal(signal.SIGINT, do_quit)
     try:
         device.open()
-        recorder = DataRecorder(filename, sampling_frequency=device.sampling_frequency, calibration=device.calibration)
+        recorder = DataRecorder(filename,
+                                sampling_frequency=device.output_sampling_frequency,
+                                calibration=device.calibration)
         device.stream_process_register(recorder)
         device.start(stop_fn=on_stop, duration=duration,
                      contiguous_duration=contiguous_duration)

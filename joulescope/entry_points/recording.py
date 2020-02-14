@@ -70,10 +70,10 @@ def on_cmd(args):
         fields = r.config['reduction_fields']
         for axis, name in enumerate(fields):
             ax = f.add_subplot(len(fields), 1, axis + 1)
-            ax.plot(x, y[:, axis, 0], color='blue')
-            ax.plot(x, y[:, axis, 2], color='red')
-            ax.plot(x, y[:, axis, 3], color='red')
+            ax.fill_between(x, y[:, axis]['min'], y[:, axis]['max'], color=(0.5, 0.5, 1.0, 0.5))
+            ax.plot(x, y[:, axis]['mean'], color='blue')
             ax.set_ylabel(name)
+            ax.grid(True)
 
         plt.show()
         plt.close(f)
@@ -109,12 +109,13 @@ def on_cmd(args):
             plot_idx_total = len(args.plot_raw)
             link_axis = None
             plot_idx = 1
-            d_raw, d_bits, d_cal = r.raw(start=start, stop=stop)
+            rv = r.samples_get(start=start, stop=stop, units='samples', fields=['raw', 'current_range'])
+            d_raw = rv['signals']['raw']['value']
+            i_sel = rv['signals']['current_range']['value']
             i_raw = np.right_shift(d_raw[:, 0], 2)
             v_raw = np.right_shift(d_raw[:, 1], 2)
             x = np.arange(len(i_raw)) * (1.0 / r.config['sampling_frequency'])
 
-            i_sel = np.bitwise_and(d_bits, 0x000F)
             f = plt.figure()
             f.suptitle('Joulescope Raw Data')
 
