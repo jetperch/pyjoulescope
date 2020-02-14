@@ -17,7 +17,6 @@ joulescope/stream_buffer.c
 joulescope/stream_buffer.html
 joulescope/pattern_buffer.c
 joulescope/libjoulescope.dll
-joulescope/version.py
 
 # Compiled Object files
 *.slo
