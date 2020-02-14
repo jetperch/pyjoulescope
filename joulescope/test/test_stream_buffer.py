@@ -243,7 +243,7 @@ class TestStreamBuffer(unittest.TestCase):
         b = StreamBuffer(1.0, [10, 10], 1000.0)
         self.assertIsNotNone(b)
         self.assertEqual(1000, len(b))
-        self.assertEqual(1000.0, b.sampling_frequency)
+        self.assertEqual(1000.0, b.output_sampling_frequency)
         self.assertEqual((0, 0), b.sample_id_range)
         self.assertEqual((0.0, 1.0), b.limits_time)
         self.assertEqual((-1000, 0), b.limits_samples)

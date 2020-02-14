@@ -40,6 +40,7 @@ assert(sizeof(ds_value_s) == 16)
 cdef class DownsamplingStreamBuffer:
 
     cdef StreamBuffer _stream_buffer
+    cdef double _input_sampling_frequency
     cdef double _output_sampling_frequency
     cdef uint64_t _length # in samples
     cdef uint64_t _processed_sample_id
@@ -53,14 +54,16 @@ cdef class DownsamplingStreamBuffer:
     cdef uint64_t _downsample_m
 
     def __init__(self, duration, reductions, input_sampling_frequency, output_sampling_frequency):
-        if input_sampling_frequency != 2000000:
+        if input_sampling_frequency is not None and input_sampling_frequency != 2000000:
             raise ValueError(f'Require 2000000 sps, provided {input_sampling_frequency}')
         if int(output_sampling_frequency) not in DECIMATORS:
             raise ValueError(f'Unsupported output frequency: {output_sampling_frequency}')
-        self._output_sampling_frequency = int(output_sampling_frequency)
+        self._input_sampling_frequency = input_sampling_frequency
+        self._output_sampling_frequency = output_sampling_frequency
         self._downsample_m = input_sampling_frequency / self._output_sampling_frequency
-        self._stream_buffer = StreamBuffer(STREAM_BUFFER_DURATION, STREAM_BUFFER_REDUCTIONS, input_sampling_frequency)
-        self._stream_buffer.process_stats_callback_set(<stream_buffer_process_fn> self._stream_buffer_process_cbk, <void *> self)
+        if input_sampling_frequency:
+            self._stream_buffer = StreamBuffer(STREAM_BUFFER_DURATION, STREAM_BUFFER_REDUCTIONS, input_sampling_frequency)
+            self._stream_buffer.process_stats_callback_set(<stream_buffer_process_fn> self._stream_buffer_process_cbk, <void *> self)
         reduction_step = int(np.prod(reductions))
         length = int(duration * output_sampling_frequency)
         length = ((length + reduction_step - 1) // reduction_step) * reduction_step
@@ -74,9 +77,10 @@ cdef class DownsamplingStreamBuffer:
         cdef double [::1] _input_view = self._input_npy
         self._input_dbl = &_input_view[0]
 
-        decimator = DECIMATORS[self._output_sampling_frequency]
-        self._filter_fir = FilterFir(decimator, width=3)
-        self._filter_fir.c_callback_set(<filter_fir_cbk> self._filter_fir_cbk, <void *> self)
+        if input_sampling_frequency:
+            decimator = DECIMATORS[self._output_sampling_frequency]
+            self._filter_fir = FilterFir(decimator, width=3)
+            self._filter_fir.c_callback_set(<filter_fir_cbk> self._filter_fir_cbk, <void *> self)
         self.reset()
 
     def __len__(self):
@@ -142,7 +146,11 @@ cdef class DownsamplingStreamBuffer:
         self._stream_buffer.suppress_mode = value
 
     @property
-    def sampling_frequency(self):
+    def input_sampling_frequency(self):
+        return self._input_sampling_frequency
+
+    @property
+    def output_sampling_frequency(self):
         return self._output_sampling_frequency
 
     @property
@@ -177,8 +185,10 @@ cdef class DownsamplingStreamBuffer:
     def reset(self):
         self._processed_sample_id = 0
         self._process_idx = 0
-        self._stream_buffer.reset()
-        self._filter_fir.reset()
+        if self._stream_buffer:
+            self._stream_buffer.reset()
+        if self._filter_fir:
+            self._filter_fir.reset()
         self._reset_accum()
 
     cpdef insert(self, data):
@@ -186,6 +196,26 @@ cdef class DownsamplingStreamBuffer:
 
     cpdef insert_raw(self, data):
         return self._stream_buffer.insert_raw(data)
+
+    cpdef insert_downsampled_and_process(self, data):
+        """Insert already downsampled data.
+        
+        :param data: The N x DS_VALUE_DTYPE numpy array to insert.
+        
+        Note: this function is not used for normal operation.
+        """
+        length = len(data)
+        start_idx = self._process_idx
+        if start_idx + length > self._length:
+            split_idx = self._length - start_idx
+            end_idx = length - split_idx
+            self._buffer_npy[start_idx:] = data[:split_idx]
+            self._buffer_npy[:] = data[split_idx:]
+        else:
+            end_idx = start_idx + length
+            self._buffer_npy[start_idx:end_idx] = data
+        self._processed_sample_id += length
+        self._process_idx = end_idx
 
     @staticmethod
     cdef void _stream_buffer_process_cbk(void * user_data, float cal_i, float cal_v, uint8_t bits):
@@ -375,4 +405,40 @@ cdef class DownsamplingStreamBuffer:
         return out[:length, :]
 
     def samples_get(self, start, stop, fields=None):
-        raise NotImplementedError()
+        """Get sample data without any skips or reductions.
+
+        :param start: The starting sample id (inclusive).
+        :param stop: The ending sample id (exclusive).
+        :param fields: The list of field names to return.  None (default) is
+            equivalent to ['raw'].  The available fields are:
+            * current: The calibrated float32 current data array in amperes.
+            * voltage: The calibrated float32 voltage data array in volts.
+            * power: The calibrated float32 Nx2 array of current, voltage.
+            * current_range: The current range. 0 = 10A, 6 = 18 uA, 7=off.
+            * current_lsb: The current LSB, which can be assign to a general purpose input.
+            * voltage_lsb: The voltage LSB, which can be assign to a general purpose input.
+        :return: The list-like corresponding to each entry in fields.
+            If fields is a string rather than a list of strings, then
+            return the value directly, not length 1 list.
+            If fields is None, then return the numpy N x DS_VALUE_DTYPE array.
+        """
+        is_single_result = False
+        if isinstance(fields, str):
+            fields = [fields]
+            is_single_result = True
+        self._range_check(start, stop)
+        length = stop - start
+        buffer_npy = np.empty(length, dtype=DS_VALUE_DTYPE)
+        start_idx = start % self._length
+        stop_idx = stop % self._length
+        if stop_idx > start_idx:
+            buffer_npy[:][:] = self._buffer_npy[start_idx:stop_idx][:]
+        else:
+            buffer_npy[:start][:] = self._buffer_npy[start_idx:self._length][:]
+            buffer_npy[start:][:] = self._buffer_npy[0:stop_idx][:]
+        if fields is None:
+            return buffer_npy
+        rv = []
+        for field in fields:
+            rv.append(buffer_npy[:][field])
+        return rv

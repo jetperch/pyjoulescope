@@ -606,7 +606,11 @@ cdef class StreamBuffer:
         self._raw_processor.suppress_mode = value
 
     @property
-    def sampling_frequency(self):
+    def input_sampling_frequency(self):
+        return self._sampling_frequency
+
+    @property
+    def output_sampling_frequency(self):
         return self._sampling_frequency
 
     @property
@@ -616,7 +620,7 @@ cdef class StreamBuffer:
         :return: (start, stop).  Stop corresponds to the exclusive sample
             returned by b.limits_samples[1].
         """
-        return 0.0, len(self) / self.sampling_frequency
+        return 0.0, len(self) / self._sampling_frequency
 
     @property
     def limits_samples(self):
@@ -1076,6 +1080,7 @@ cdef class StreamBuffer:
             * current: The calibrated float32 current data array in amperes.
             * voltage: The calibrated float32 voltage data array in volts.
             * current_voltage: The calibrated float32 Nx2 array of current, voltage.
+            * power: The calibrated float32 power data array in watts.
             * bits: The (voltage_lsb << 5) | (current_lsb << 4) | current_range
             * current_range: The current range. 0 = 10A, 6 = 18 uA, 7=off.
             * current_lsb: The current LSB, which can be assign to a general purpose input.
@@ -1156,6 +1161,18 @@ cdef class StreamBuffer:
                 else:
                     out.append(np.vstack((self.data[(start_idx * 2):].reshape((-1, 2)),
                                           self.data[:(stop_idx * 2)].reshape((-1, 2)))))
+            elif field == 'power':
+                if stop_idx > start_idx:
+                    current = self.data[(start_idx * 2):(stop_idx * 2):2]
+                    voltage = self.data[(start_idx * 2 + 1):(stop_idx * 2):2]
+                    out.append(current * voltage)
+                else:
+                    i1 = self.data[(start_idx * 2)::2]
+                    i2 = self.data[:(stop_idx * 2):2]
+                    v1 = self.data[(start_idx * 2 + 1)::2]
+                    v2 = self.data[1:(stop_idx * 2):2]
+                    out.append(np.vstack((i1 * v1).reshape((-1, 2)),
+                                         (i2 * v2).reshape((-1, 2))))
             elif field == 'current_range':
                 populate_bits()
                 out.append(np.bitwise_and(bits, 0x0f))
@@ -1211,8 +1228,8 @@ cdef class StreamBuffer:
             sample_count = self.reductions[self.reduction_count - 1].samples_per_reduction_sample
             end_id = self.processed_sample_id
             start_id = end_id - sample_count
-            duration = sample_count / self.sampling_frequency  # seconds
-            start_time = start_id / self.sampling_frequency
+            duration = sample_count / self._sampling_frequency  # seconds
+            start_time = start_id / self._sampling_frequency
             end_time = start_time + duration
             charge_picocoulomb = (stats[0].m * 1e12)  * duration
             energy_picojoules = (stats[2].m * 1e12) * duration

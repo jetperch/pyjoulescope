@@ -82,9 +82,39 @@ class TestDataRecorderDownsampled(unittest.TestCase):
         fh.seek(0)
         return fh
 
-    def test_statistics_get(self):
+    def test_samples_get(self):
         #fh = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data_recording_01.jls')
         fh = self.create_sinusoid_file(2.0, 2000000, 100000)
         r = DataReader().open(fh)
         k = r.samples_get(0, 1000, units='samples', fields=['current'])
-        print(type(k))
+        self.assertIn('time', k)
+        self.assertIn('signals', k)
+        self.assertIn('current', k['signals'])
+        self.assertIn('value', k['signals']['current'])
+        self.assertEqual(k['signals']['current']['units'], 'A')
+        i = k['signals']['current']['value']
+        self.assertEqual(1000, len(i))
+        # todo how do we know this is right?
+
+    def test_statistics_get(self):
+        #fh = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data_recording_01.jls')
+        fh = self.create_sinusoid_file(2.0, 2000000, 100000)
+        r = DataReader().open(fh)
+        ranges = [
+            (0, 1000, 'samples'),         # trivial, direct
+            (0, 20000, 'samples'),        # trivial, single reduction
+            (100000, 101000, 'samples'),  # offset, direct
+            (100000, 120000, 'samples'),  # offset, ex
+            (99000, 120000, 'samples'),
+            (100000, 121000, 'samples'),
+            (99000, 121000, 'samples'),
+            (0.066780, 0.069004, 'seconds'),
+        ]
+
+        for k_start, k_stop, units in ranges[:1]:
+            # print(f'range {k_start}:{k_stop}')
+            s1 = r.statistics_get(k_start, k_stop, units=units)
+            k = r.samples_get(k_start, k_stop, units=units, fields=['current'])
+            i_mean = np.mean(k['signals']['current']['value'])
+            np.testing.assert_allclose(s1['signals']['current']['μ']['value'], i_mean, rtol=0.0005)
+        r.close()

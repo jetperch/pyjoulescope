@@ -83,6 +83,14 @@ class TestDataRecorder(unittest.TestCase):
         # fh.seek(0)
         return fh
 
+    def test_normalize_time_arguments(self):
+        fh = self._create_file(0, 2)
+        r = DataReader().open(fh)
+        self.assertEqual(r.normalize_time_arguments(0, 1), (0, 1))
+        self.assertEqual(r.normalize_time_arguments(0.0, 0.01, 'seconds'), (0, 10))
+        self.assertEqual(r.normalize_time_arguments(-10, -1), (242, 251))
+        self.assertEqual(r.normalize_time_arguments(-0.01, -0.005, 'seconds'), (0, 252))
+
     def test_user_data_none_when_not_provided(self):
         fh = self._create_file(0, 2)
         r = DataReader().open(fh)
@@ -100,7 +108,7 @@ class TestDataRecorder(unittest.TestCase):
         fh = self._create_file(0, 2)
         r = DataReader().open(fh)
         self.assertEqual([0, 252], r.sample_id_range)
-        self.assertEqual(1000, r.sampling_frequency)
+        self.assertEqual(1000, r.output_sampling_frequency)
         self.assertEqual(1000 / 200, r.reduction_frequency)
         self.assertEqual(0.252, r.duration)
         self.assertEqual(0.0, r.sample_id_to_time(0))

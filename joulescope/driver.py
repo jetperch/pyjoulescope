@@ -221,6 +221,14 @@ class Device:
         return self._usb
 
     @property
+    def input_sampling_frequency(self):
+        return self._input_sampling_frequency
+
+    @property
+    def output_sampling_frequency(self):
+        return self.parameter_get('sampling_frequency', dtype='actual')
+
+    @property
     def sampling_frequency(self):
         return self.parameter_get('sampling_frequency', dtype='actual')
 
@@ -363,9 +371,11 @@ class Device:
         self._output_sampling_frequency = self.parameter_get('sampling_frequency', dtype='actual')
         reductions = _reduction_frequency_to_reductions(reduction_frequency)
         if self._input_sampling_frequency == self._output_sampling_frequency:
+            log.info('Create StreamBuffer')
             self.stream_buffer = StreamBuffer(stream_buffer_duration, reductions,
                                               self._input_sampling_frequency)
         else:
+            log.info('Create DownsamplingStreamBuffer')
             self.stream_buffer = DownsamplingStreamBuffer(stream_buffer_duration, reductions,
                                                           self._input_sampling_frequency,
                                                           self._output_sampling_frequency)

@@ -46,6 +46,26 @@ _SIGNALS_UNITS = {
 }
 
 
+_DOWNSAMPLE_FORMATTERS = {
+    0: lambda x: x.astype(dtype=np.float32),
+    1: lambda x: x.astype(dtype=np.float32),
+    2: lambda x: x.astype(dtype=np.float32),
+    3: lambda x: (x * 16).astype(dtype=np.uint8),
+    4: lambda x: (x * 15).astype(dtype=np.uint8),
+    5: lambda x: (x * 15).astype(dtype=np.uint8),
+}
+
+
+_DOWNSAMPLE_UNFORMATTERS = {
+    0: lambda x: x,
+    1: lambda x: x,
+    2: lambda x: x,
+    3: lambda x: x.astype(dtype=np.float32) * (1.0 / 16),
+    4: lambda x: x.astype(dtype=np.float32) * (1.0 / 15),
+    5: lambda x: x.astype(dtype=np.float32) * (1.0 / 15),
+}
+
+
 def construct_record_filename():
     time_start = datetime.datetime.utcnow()
     timestamp_str = time_start.strftime('%Y%m%d_%H%M%S')
@@ -98,7 +118,7 @@ class DataRecorder:
             self._writer.append_subfile('calibration', calibration)
 
     def _initialize(self):
-        self._sampling_frequency = self._stream_buffer.sampling_frequency
+        self._sampling_frequency = self._stream_buffer.output_sampling_frequency
         if self._sampling_frequency > 100 * _REDUCTION_SAMPLES_MINIMUM:
             self._samples_per_reduction = int(self._sampling_frequency) // 100  # 100 Hz @ 2 MSPS
         else:
@@ -164,10 +184,13 @@ class DataRecorder:
         """Process data from a stream buffer.
 
         :param stream_buffer: The stream_buffer instance which has:
-            * "sample_id_range" member
-            * "voltage_range" member
+            * "output_sampling_frequency" member -> float
+            * "has_raw" member -> in [True, False]
+            * "sample_id_range" member => (start, stop)
+            * "voltage_range" member -> in [0, 1]
             * samples_get(start_sample_id, stop_sample_id, dtype)
             * data_get(start_sample_id, stop_sample_id, increment, out)
+            * __len__ : maximum number of samples that stream_buffer holds
         """
         finalize = False
         if stream_buffer is None:
@@ -202,7 +225,7 @@ class DataRecorder:
             self._voltage_range = stream_buffer.voltage_range
             if self._sample_id_block is None:
                 collection_data = {
-                    'v_range': stream_buffer.voltage_range,
+                    'v_range': self._voltage_range,
                     'sample_id': self._sample_id_tlv,
                 }
                 collection_data = json.dumps(collection_data).encode('utf-8')
@@ -236,16 +259,13 @@ class DataRecorder:
         data = self._stream_buffer.data_get(start, stop)
         arrays = {}
         for field_idx, field in enumerate(STATS_FIELD_NAMES):
-            x_id = (field_idx << 4)
+            x_id = (field_idx << 4) | 0x01  # stat_idx=mean
             x = data[:, field_idx]['mean']
-            if field_idx < 3:
-                x = x.astype(dtype=np.float32)
-            elif field_idx == 3:
-                x = (x * 16).astype(dtype=np.uint8)
-            else:
-                x = (x * 15).astype(dtype=np.uint8)
+            x = _DOWNSAMPLE_FORMATTERS[field_idx](x)
             arrays[x_id] = x
-        return array_storage.pack(arrays, stop - start)
+        data = array_storage.pack(arrays, stop - start)
+        data = data.tobytes()
+        self._writer.append(datafile.TAG_DATA_BINARY, data, compress=False)
 
     def _append_meta(self):
         index = {
@@ -381,6 +401,10 @@ class DataReader:
         return 0.0
 
     @property
+    def output_sampling_frequency(self):
+        return self.sampling_frequency
+
+    @property
     def reduction_frequency(self):
         if self._f is not None:
             return self.config['sampling_frequency'] / self.config['samples_per_reduction']
@@ -408,6 +432,9 @@ class DataReader:
         if not idx_start <= stop <= idx_end:
             raise ValueError('stop out of range: %d <= %d <= %d: %s' %
                              (idx_start, stop, idx_end, increment))
+        if stop < start:
+            stop = start
+        return start, stop
 
     def _sample_tlv(self, sample_idx):
         """Get the sample data entry for the TLV containing sample_idx.
@@ -517,6 +544,7 @@ class DataReader:
         else:
             end_idx = x_stop
         out_idx = 0
+
         d_raw = np.empty((end_idx - sample_idx, 2), dtype=np.uint16)
         if self._f.advance() != datafile.TAG_COLLECTION_START:
             raise ValueError('data section must be single collection')
@@ -545,6 +573,49 @@ class DataReader:
         j = prefix_count
         k = min(prefix_count + stop - start, out_idx)
         return d_raw[j:k, :], d_bits[j:k], d_cal[j:k, :]
+
+    def _downsampled(self, start, stop, fields):
+        """Get the _downsampled data.
+
+        :param start: The starting sample (must already be validated).
+        :param stop: The ending sample (must already be validated).
+        :return: The output which is dict of field name to values.
+        """
+        self._fh.seek(self._data_start_position)
+        start, stop = self._validate_range(start, stop)
+        length = stop - start
+        field_idxs = []
+        for field in fields:
+            if field not in STATS_FIELD_NAMES:
+                raise ValueError(f'Field {field} not available')
+            idx = (STATS_FIELD_NAMES.index(field) << 4) | 1
+            field_idxs.append((field, idx))
+        rv = {}
+        for _, field_idx in field_idxs:
+            rv[field_idx] = np.empty(length, dtype=np.float32)
+        out_idx = 0
+        while start < stop:
+            sample_cache = self._sample_tlv(start)
+            if sample_cache is None:
+                break
+            v = np.frombuffer(sample_cache['value'], dtype=np.uint8)
+            value, sample_count = array_storage.unpack(v)
+            b_start = start - sample_cache['start']
+            length = sample_cache['stop'] - sample_cache['start'] - b_start
+            out_remaining = stop - start
+            length = min(length, out_remaining)
+            if length <= 0:
+                break
+            b_stop = b_start + length
+            for _, field_idx in field_idxs:
+                rv[field_idx][out_idx:(out_idx + length)] = value[field_idx][b_start:b_stop]
+            out_idx += length
+            start += length
+
+        result = {}
+        for field, field_idx in field_idxs:
+            result[field] = rv[field_idx][:out_idx]
+        return result
 
     def _reduction_tlv(self, reduction_idx):
         sz = self.config['samples_per_reduction']
@@ -628,6 +699,8 @@ class DataReader:
             stats_idx = key & 0x0f
             stats_name = NP_STATS_NAMES[stats_idx]
             stats_array[:, field_idx][stats_name] = x  # .astype(dtype=np.float64)
+        for idx in range(1, len(STATS_FIELD_NAMES)):
+            stats_array[:, idx]['length'] = stats_array[:, 0]['length']
         return stats_array
 
     def get_reduction(self, start=None, stop=None, units=None, out=None):
@@ -717,39 +790,33 @@ class DataReader:
             r_idx += length
         return (r_start * sz, r_stop * sz), s
 
-    def _data_get_handler_none(self, start, stop, increment, out):
-        return out
+    def _data_get_handler_none(self, start, stop, out):
+        return None
 
-    def _data_get_handler_raw(self, start, stop, increment, out):
-        out_len = len(out)
-        if increment == 1:
-            _, d_bits, d_cal = self._raw(start, stop)
-            i, v = d_cal[:, 0], d_cal[:, 1]
-            out[:, 0]['mean'] = i
-            out[:, 1]['mean'] = v
-            out[:, 2]['mean'] = i * v
-            out[:, 3]['mean'] = np.bitwise_and(d_bits, 0x0f)
-            out[:, 4]['mean'] = np.bitwise_and(np.right_shift(d_bits, 4), 0x01)
-            out[:, 5]['mean'] = np.bitwise_and(np.right_shift(d_bits, 5), 0x01)
-            out[:, :]['variance'] = 0.0  # zero variance, only one sample!
-            out[:, :]['min'] = np.nan  # min
-            out[:, :]['max'] = np.nan  # max
-        elif increment == self.config['samples_per_reduction']:
-            out = self.get_reduction(start, stop, out=out)
-        elif increment > self.config['samples_per_reduction']:
-            r_out = self.get_reduction(start, stop)
-            increment = int(increment / self.config['samples_per_reduction'])
-            out = reduction_downsample(r_out, 0, len(r_out), increment)
-        else:
-            k_start = start
-            for idx in range(out_len):
-                k_stop = k_start + increment
-                out[idx, :] = self._statistics_get_handler(k_start, k_stop).value
-                k_start = k_stop
-        return out
+    def _data_get_handler_raw(self, start, stop, out):
+        _, d_bits, d_cal = self._raw(start, stop)
+        i, v = d_cal[:, 0], d_cal[:, 1]
+        out[:, 0]['mean'] = i
+        out[:, 1]['mean'] = v
+        out[:, 2]['mean'] = i * v
+        out[:, 3]['mean'] = np.bitwise_and(d_bits, 0x0f)
+        out[:, 4]['mean'] = np.bitwise_and(np.right_shift(d_bits, 4), 0x01)
+        out[:, 5]['mean'] = np.bitwise_and(np.right_shift(d_bits, 5), 0x01)
+        out[:, :]['variance'] = 0.0  # zero variance, only one sample!
+        out[:, :]['min'] = np.nan  # min
+        out[:, :]['max'] = np.nan  # max
 
-    def _data_get_handler_float32_v2(self, start, stop, increment, out):
-        return out
+    def _data_get_handler_float32_v2(self, start, stop, out):
+        k = self._downsampled(start, stop, STATS_FIELD_NAMES)
+        out[:, 0]['mean'] = k['current']
+        out[:, 1]['mean'] = k['voltage']
+        out[:, 2]['mean'] = k['power']
+        out[:, 3]['mean'] = k['current_range']
+        out[:, 4]['mean'] = k['current_lsb']
+        out[:, 5]['mean'] = k['voltage_lsb']
+        out[:, :]['variance'] = 0.0  # zero variance, only one sample!
+        out[:, :]['min'] = np.nan  # min
+        out[:, :]['max'] = np.nan  # max
 
     def data_get(self, start, stop, increment=None, units=None, out=None):
         """Get the samples with statistics.
@@ -779,7 +846,23 @@ class DataReader:
                 raise ValueError('out too small')
         else:
             out = stats_array_factory(out_len)
-        return self._data_get_handler(start, stop, increment, out)
+
+        out_len = len(out)
+        if increment == 1:
+            self._data_get_handler(start, stop, out)
+        elif increment == self.config['samples_per_reduction']:
+            out = self.get_reduction(start, stop, out=out)
+        elif increment > self.config['samples_per_reduction']:
+            r_out = self.get_reduction(start, stop)
+            increment = int(increment / self.config['samples_per_reduction'])
+            out = reduction_downsample(r_out, 0, len(r_out), increment)
+        else:
+            k_start = start
+            for idx in range(out_len):
+                k_stop = k_start + increment
+                self._statistics_get_handler(k_start, k_stop, out[idx, :])
+                k_start = k_stop
+        return out
 
     def summary_string(self):
         s = [str(self)]
@@ -794,6 +877,7 @@ class DataReader:
         s_min, s_max = self.sample_id_range
         s = int(t * self.sampling_frequency)
         if s < s_min or s > s_max:
+            log.warning(f'time %.6f out of range', t)
             return None
         return s
 
@@ -802,7 +886,21 @@ class DataReader:
             return None
         return s / self.sampling_frequency
 
-    def normalize_time_arguments(self, start, stop, units):
+    def normalize_time_arguments(self, start, stop, units=None):
+        """Normalize time arguments to range.
+
+        :param start: The start time or samples.
+            None gets the first sample, equivalent to self.sample_id_range[0].
+        :param stop: The stop time or samples.
+            None gets the last sample, equivalent to self.sample_id_range[1].
+        :param units: The time units which is one of ['seconds', 'samples']
+            None (default) id equivalent to 'samples'.
+        :return: (start_sample, stop_sample).
+
+        When units=='samples', negative values are interpreted in standard
+        Python notation relative to the last sample.  None
+
+        """
         s_min, s_max = self.sample_id_range
         if units == 'seconds':
             start = self.time_to_sample_id(start)
@@ -811,7 +909,7 @@ class DataReader:
             if start is not None and start < 0:
                 start = s_max + start
             if stop is not None and stop < 0:
-                stop = s_max + start
+                stop = s_max + stop
         else:
             raise ValueError(f'invalid time units: {units}')
         s1 = s_min if start is None else start
@@ -822,51 +920,43 @@ class DataReader:
             raise ValueError(f'start sample out of range: {s2}')
         return s1, s2
 
-    def _statistics_get_handler_none(self, start, stop):
-        return None
+    def _stats_update(self, stats, x, length):
+        stats['mean'] = np.mean(x, axis=0)
+        stats['variance'] = np.var(x, axis=0) * length
+        stats['min'] = np.amin(x, axis=0)
+        stats['max'] = np.amax(x, axis=0)
 
-    def _statistics_get_handler_raw(self, start, stop):
-        s1, s2 = start, stop
-        (k1, k2), s = self._get_reduction_stats(s1, s2)
-        if k1 >= k2:
-            # compute directly over samples
-            stats = stats_factory()
-            _, d_bits, z = self._raw(s1, s2)
-            i, v = z[:, 0], z[:, 1]
-            p = i * v
-            zi = np.isfinite(i)
-            i_view = i[zi]
-            length = len(i_view)
-            stats[:]['length'] = length
-            if length:
-                i_range = np.bitwise_and(d_bits, 0x0f)
-                i_lsb = np.right_shift(np.bitwise_and(d_bits, 0x10), 4)
-                v_lsb = np.right_shift(np.bitwise_and(d_bits, 0x20), 5)
-                for idx, field in enumerate([i_view, v[zi], p[zi], i_range, i_lsb[zi], v_lsb[zi]]):
-                    stats[idx]['mean'] = np.mean(field, axis=0)
-                    stats[idx]['variance'] = np.var(field, axis=0)
-                    stats[idx]['min'] = np.amin(field, axis=0)
-                    stats[idx]['max'] = np.amax(field, axis=0)
-            else:
-                stats[3]['mean'] = I_RANGE_MISSING
-                stats[3]['variance'] = 0
-                stats[3]['min'] = I_RANGE_MISSING
-                stats[3]['max'] = I_RANGE_MISSING
-            s = Statistics(stats=stats)
-        else:
-            if s1 < k1:
-                s_start = self._statistics_get_handler(s1, k1)
-                s.combine(s_start)
-            if s2 > k2:
-                s_stop = self._statistics_get_handler(k2, s2)
-                s.combine(s_stop)
-        return s
+    def _statistics_get_handler_none(self, start, stop, stats):
+        return stop - start
 
-    def _statistics_get_handler_float32_v2(self, start, stop):
-        pass
+    def _statistics_get_handler_raw(self, s1, s2, stats):
+        _, d_bits, z = self._raw(s1, s2)
+        i, v = z[:, 0], z[:, 1]
+        p = i * v
+        zi = np.isfinite(i)
+        i_view = i[zi]
+        length = len(i_view)
+        stats[:]['length'] = length
+        if length:
+            i_range = np.bitwise_and(d_bits, 0x0f)
+            i_lsb = np.right_shift(np.bitwise_and(d_bits, 0x10), 4)
+            v_lsb = np.right_shift(np.bitwise_and(d_bits, 0x20), 5)
+            for idx, field in enumerate([i_view, v[zi], p[zi], i_range, i_lsb[zi], v_lsb[zi]]):
+                self._stats_update(stats[idx], field, length)
+        return length
+
+    def _statistics_get_handler_float32_v2(self, s1, s2, stats):
+        rv = {'signals': {}}
+        self._samples_get_handler_float32_v2(s1, s2, STATS_FIELD_NAMES, rv)
+        length = s2 - s1
+        stats[:]['length'] = length
+        if length:
+            for idx, field in enumerate(STATS_FIELD_NAMES):
+                self._stats_update(stats[idx], rv['signals'][field], length)
+        return length
 
     def _samples_get_handler_none(self, start, stop, fields, rv):
-        return rv
+        return stop - start
 
     def _samples_get_handler_raw(self, start, stop, fields, rv):
         raw, bits, cal = self._raw(start, stop)
@@ -900,6 +990,10 @@ class DataReader:
         return rv
 
     def _samples_get_handler_float32_v2(self, start, stop, fields, rv):
+        k = self._downsampled(start, stop, fields)
+        for field, value in k.items():
+            units = _SIGNALS_UNITS.get(field, '')
+            rv['signals'][field] = {'value': value, 'units': units}
         return rv
 
     def samples_get(self, start=None, stop=None, units=None, fields=None):
@@ -927,6 +1021,29 @@ class DataReader:
         }
         return self._samples_get_handler(s1, s2, fields, rv)
 
+    def _statistics_get(self, start, stop):
+        s1, s2 = start, stop
+        (k1, k2), s = self._get_reduction_stats(s1, s2)
+        if k1 >= k2:
+            # compute directly over samples
+            stats = stats_factory()
+            if not self._statistics_get_handler(s1, s2, stats):
+                stats[3]['mean'] = I_RANGE_MISSING
+                stats[3]['variance'] = 0
+                stats[3]['min'] = I_RANGE_MISSING
+                stats[3]['max'] = I_RANGE_MISSING
+            s = Statistics(stats=stats)
+        else:
+            if s1 < k1:
+                s_start = stats_factory()
+                self._statistics_get_handler(s1, k1, s_start)
+                s.combine(Statistics(stats=s_start))
+            if s2 > k2:
+                s_stop = stats_factory()
+                self._statistics_get_handler(k2, s2, s_stop)
+                s.combine(Statistics(stats=s_stop))
+        return s
+
     def statistics_get(self, start=None, stop=None, units=None):
         """Get the statistics for the collected sample data over a time range.
 
@@ -942,7 +1059,7 @@ class DataReader:
         s1, s2 = self.normalize_time_arguments(start, stop, units)
         if s1 == s2:
             s2 = s1 + 1  # always try to produce valid statistics
-        s = self._statistics_get_handler(s1, s2)
+        s = self._statistics_get(s1, s2)
         t_start = s1 / self.sampling_frequency
         t_stop = s2 / self.sampling_frequency
         return stats_to_api(s.value, t_start, t_stop)

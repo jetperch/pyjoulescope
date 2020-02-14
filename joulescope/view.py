@@ -95,7 +95,7 @@ class View:
     def sampling_frequency(self):
         if self._stream_buffer is None:
             return None
-        return self._stream_buffer.sampling_frequency
+        return self._stream_buffer.output_sampling_frequency
 
     @property
     def calibration(self):
