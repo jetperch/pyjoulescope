@@ -148,6 +148,7 @@ setuptools.setup(
     # See https://packaging.python.org/en/latest/requirements.html
     install_requires=[
         'numpy>=1.15.2',
+        'psutil',
         'python-dateutil>=2.7.3',
         'pymonocypher>=0.1.3',
     ] + PLATFORM_INSTALL_REQUIRES,
