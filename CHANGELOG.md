@@ -6,7 +6,7 @@ This file contains the list of changes made to pyjoulescope.
 
 ## 0.8.0
 
-2020 Feb 9 [in progress]
+2020 Feb 18
 
 *   Unified statistics API data structure.  Code using this structure will
     need to be updated!
@@ -27,6 +27,7 @@ This file contains the list of changes made to pyjoulescope.
 *   Fixed ['time']['range'] in StreamBuffer statistics callback data.
 *   Added arbitrary JSON-serializable user data storage to JLS files.
 *   Added memory check before allocating streaming buffer.
+*   Updated version storage.  Just use joulescope.version file.
 
 
 ## 0.7.0

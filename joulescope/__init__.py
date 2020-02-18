@@ -16,15 +16,10 @@ from joulescope.driver import scan, scan_require_one, scan_for_changes, \
     bootloaders_run_application, bootloader_go
 import sys
 import platform
-
-try:
-    from .version import VERSION
-except ImportError:
-    VERSION = 'UNRELEASED'
-
-__version__ = VERSION
+from .version import __version__
 
 
+VERSION = __version__  # for backwards compatibility
 __all__ = [scan, scan_require_one, scan_for_changes, bootloaders_run_application,
            bootloader_go,
            VERSION, __version__]
