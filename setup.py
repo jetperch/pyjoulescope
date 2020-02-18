@@ -51,14 +51,14 @@ extensions = [
     setuptools.Extension('joulescope.stream_buffer',
         sources=[
             'joulescope/stream_buffer' + ext,
-            'joulescope/native/running_statistics.c'
+            'joulescope/native/running_statistics.c',
         ],
         include_dirs=[],
     ),
     setuptools.Extension('joulescope.filter_fir',
         sources=[
             'joulescope/filter_fir' + ext,
-            'joulescope/native/filter_fir.c'
+            'joulescope/native/filter_fir.c',
         ],
         include_dirs=[],
     ),
