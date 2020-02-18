@@ -952,7 +952,7 @@ class DataReader:
         stats[:]['length'] = length
         if length:
             for idx, field in enumerate(STATS_FIELD_NAMES):
-                self._stats_update(stats[idx], rv['signals'][field], length)
+                self._stats_update(stats[idx], rv['signals'][field]['value'], length)
         return length
 
     def _samples_get_handler_none(self, start, stop, fields, rv):

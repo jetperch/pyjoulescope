@@ -210,7 +210,7 @@ cdef class DownsamplingStreamBuffer:
             split_idx = self._length - start_idx
             end_idx = length - split_idx
             self._buffer_npy[start_idx:] = data[:split_idx]
-            self._buffer_npy[:] = data[split_idx:]
+            self._buffer_npy[:end_idx] = data[split_idx:]
         else:
             end_idx = start_idx + length
             self._buffer_npy[start_idx:end_idx] = data
@@ -434,8 +434,9 @@ cdef class DownsamplingStreamBuffer:
         if stop_idx > start_idx:
             buffer_npy[:][:] = self._buffer_npy[start_idx:stop_idx][:]
         else:
-            buffer_npy[:start][:] = self._buffer_npy[start_idx:self._length][:]
-            buffer_npy[start:][:] = self._buffer_npy[0:stop_idx][:]
+            idx = self._length - start_idx
+            buffer_npy[:idx][:] = self._buffer_npy[start_idx:self._length][:]
+            buffer_npy[idx:][:] = self._buffer_npy[:stop_idx][:]
         if fields is None:
             return buffer_npy
         rv = []
