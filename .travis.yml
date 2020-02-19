@@ -5,17 +5,14 @@ matrix:
       dist: xenial   # required for Python >= 3.7
       python: 3.7
     - os: osx
-      osx_image: xcode11
+      osx_image: xcode11.3
       language: shell  # 'language: python' is an error on Travis CI macOS
       before_install:
       - |
-        brew update
+        # brew update
+        brew unlink python@2
         brew install libusb
-        if ! brew list --versions python@3 >/dev/null; then
-          brew install python@3
-        elif ! brew outdated python@3; then
-          brew upgrade python@3
-        fi
+        brew install python@3
     - os: windows
       language: shell  # 'language: python' is an error on Travis CI windows 
       env: >-
