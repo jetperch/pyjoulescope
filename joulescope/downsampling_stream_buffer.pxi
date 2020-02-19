@@ -34,9 +34,6 @@ cdef struct ds_value_s:
     uint8_t rsv1
 
 
-assert(sizeof(ds_value_s) == 16)
-
-
 cdef class DownsamplingStreamBuffer:
 
     cdef StreamBuffer _stream_buffer
@@ -54,6 +51,7 @@ cdef class DownsamplingStreamBuffer:
     cdef uint64_t _downsample_m
 
     def __init__(self, duration, reductions, input_sampling_frequency, output_sampling_frequency):
+        assert(sizeof(ds_value_s) == 16)
         if input_sampling_frequency is not None and input_sampling_frequency != 2000000:
             raise ValueError(f'Require 2000000 sps, provided {input_sampling_frequency}')
         if int(output_sampling_frequency) not in DECIMATORS:
@@ -279,7 +277,7 @@ cdef class DownsamplingStreamBuffer:
             c_running_statistics.statistics_add(stats_accum + 4, (<double> v.current_lsb) * (1.0 / 255))
             c_running_statistics.statistics_add(stats_accum + 5, (<double> v.voltage_lsb) * (1.0 / 255))
             idx += 1
-            if idx >= <int64_t> self._length:
+            if idx >= self._length:
                 idx = 0
         return count
 

@@ -76,6 +76,9 @@ void filter_fir_reset(struct filter_fir_s * self) {
     while (b < self->buffer_end) {
         *b++ = 0.0;
     }
+    for (uint32_t i = 0; i < self->width; ++i) {
+        self->y[i] = 0.0;
+    }
     self->buffer_offset = 0;
     self->M_counter = 0;
 }

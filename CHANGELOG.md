@@ -4,6 +4,13 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 0.8.3
+
+2020 Feb 19
+
+*   Fixed MacOS compiler warnings for Cython.
+
+
 ## 0.8.0
 
 2020 Feb 18

@@ -100,7 +100,7 @@ cdef class FilterFir:
         """
         cdef double [::1] x1d_view
         cdef double [:, ::1] x2d_view
-        cdef uint64_t idx
+        cdef ssize_t idx
 
         if isinstance(x, (float, int)):
             self._data[0] = x

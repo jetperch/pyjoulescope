@@ -798,13 +798,13 @@ class WinUsbDevice:
                     continue  # duplicate
                 endpoint.stop()
                 self._update_event_list()
-                msg = 'Endpoint pipe_id %d stopped: %s' % (pipe_id, endpoint.stop_code)
+                msg = 'Endpoint pipe_id %r stopped: %s' % (pipe_id, endpoint.stop_code)
                 log.info(msg)
                 if endpoint.stop_code > 0:
                     self._abort(endpoint.stop_code, msg)
             self._control_transfer.process()
             if self._control_transfer.stop_code is not None and self._control_transfer.stop_code > 0:
-                msg = 'Control pipe %d stopped: %s' % (pipe_id, self._control_transfer.stop_code)
+                msg = 'Control pipe %r stopped: %s' % (pipe_id, self._control_transfer.stop_code)
                 log.info(msg)
                 self._abort(self._control_transfer.stop_code, msg)
 

@@ -136,7 +136,7 @@ cdef class PatternBuffer:
             self._pattern_error += 1
 
     cdef _insert_usb_bulk(self, const uint32_t *data_u32, size_t length_u32):
-        cdef uint32_t * pkt = data_u32
+        cdef const uint32_t * pkt = data_u32
         cdef uint8_t buffer_type
         cdef uint8_t status
         cdef uint16_t pkt_length
