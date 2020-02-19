@@ -12,9 +12,9 @@ matrix:
         brew update
         brew install libusb
         if ! brew list --versions python@3 >/dev/null; then
-          brew install python@3.7
+          brew install python@3
         elif ! brew outdated python@3; then
-          brew upgrade python@3.7
+          brew upgrade python@3
         fi
     - os: windows
       language: shell  # 'language: python' is an error on Travis CI windows 
