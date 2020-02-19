@@ -54,7 +54,7 @@ struct filter_fir_s * filter_fir_alloc(double const * taps, uint32_t taps_length
         filter_fir_free(self);
         return 0;
     }
-    self->buffer_end = self->buffer + taps_length;
+    self->buffer_end = self->buffer + taps_length * width;
     filter_fir_reset(self);
     return self;
 }
