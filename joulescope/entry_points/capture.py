@@ -75,7 +75,6 @@ def run(device, filename, duration=None, contiguous_duration=None):
     try:
         device.open()
         recorder = DataRecorder(filename,
-                                sampling_frequency=device.output_sampling_frequency,
                                 calibration=device.calibration)
         device.stream_process_register(recorder)
         device.start(stop_fn=on_stop, duration=duration,

@@ -4,6 +4,15 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 0.8.5
+
+2020 Feb 26
+
+*   Fixed capture.py entry point script.
+
+
+
+
 ## 0.8.3
 
 2020 Feb 19
