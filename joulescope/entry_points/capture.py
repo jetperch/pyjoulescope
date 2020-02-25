@@ -98,6 +98,7 @@ def run(device, filename, duration=None, contiguous_duration=None):
                 time_last = time_now
             while device.stream_buffer.sample_id_range[-1] >= sample_id_next:
                 # todo save
+                sample_id_last = sample_id_next
                 sample_id_next += sample_id_incr
         device.stop()
     except Exception as ex:
