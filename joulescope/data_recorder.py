@@ -17,7 +17,7 @@ from joulescope.calibration import Calibration
 from joulescope.stream_buffer import reduction_downsample, Statistics, stats_to_api, \
     stats_factory, stats_array_factory, stats_array_clear, stats_array_invalidate, \
     STATS_DTYPE, STATS_FIELD_NAMES, STATS_FIELD_COUNT, NP_STATS_NAMES, \
-    I_RANGE_MISSING, SUPPRESS_SAMPLES_MAX, RawProcessor
+    I_RANGE_MISSING, SUPPRESS_SAMPLES_MAX, RawProcessor, stats_compute
 from joulescope import array_storage
 import json
 import numpy as np
@@ -98,12 +98,14 @@ class DataRecorder:
         self._reductions_per_tlv = 0
         self._reduction = None
 
-        self._sample_id_tlv = 0  # sample id for start of next TLV
+        self._sample_id_tlv = None  # sample id for start of next TLV
         self._sample_id_block = None  # sample id for start of current block, None if not started yet
 
         self._stream_buffer = None  # to ensure same
         self._sb_sample_id_last = None
         self._voltage_range = None
+        self._data_buffer = []
+        self._sample_buffers = {}
 
         self._writer = datafile.DataFileWriter(filehandle)
         self._closed = False
@@ -117,8 +119,8 @@ class DataRecorder:
                 calibration = calibration.data
             self._writer.append_subfile('calibration', calibration)
 
-    def _initialize(self):
-        self._sampling_frequency = self._stream_buffer.output_sampling_frequency
+    def _initialize(self, sampling_frequency, data_format):
+        self._sampling_frequency = sampling_frequency
         if self._sampling_frequency > 100 * _REDUCTION_SAMPLES_MINIMUM:
             self._samples_per_reduction = int(self._sampling_frequency) // 100  # 100 Hz @ 2 MSPS
         else:
@@ -131,16 +133,11 @@ class DataRecorder:
         reduction_block_size = self._samples_per_block // self._samples_per_reduction
 
         self._reduction = stats_array_factory(reduction_block_size)
-        self._append_configuration()
+        self._append_configuration(data_format)
         self._writer.collection_start(0, 0)
 
-    def _append_configuration(self):
-        if self._stream_buffer is None:
-            data_format = 'none'
-        elif self._stream_buffer.has_raw:
-            data_format = 'raw'
-        else:
-            data_format = 'float32_v2'
+    def _append_configuration(self, data_format=None):
+        data_format = 'none' if data_format is None else str(data_format)
         config = {
             'type': 'config',
             'data_recorder_format_version': DATA_RECORDER_FORMAT_VERSION,
@@ -201,7 +198,8 @@ class DataRecorder:
         sb_start, sb_stop = stream_buffer.sample_id_range
         if self._stream_buffer is None:
             self._stream_buffer = stream_buffer
-            self._initialize()
+            data_format = 'raw' if stream_buffer.has_raw else 'float32_v2'
+            self._initialize(stream_buffer.output_sampling_frequency, data_format)
             self._sample_id_tlv = sb_stop
             self._sample_id_block = None
             if self._samples_per_tlv > len(stream_buffer):
@@ -256,16 +254,125 @@ class DataRecorder:
     def _append_float_data(self, start, stop):
         if self._closed:
             return
-        data = self._stream_buffer.data_get(start, stop)
+        data = self._stream_buffer.samples_get(start, stop, fields=STATS_FIELD_NAMES)
         arrays = {}
         for field_idx, field in enumerate(STATS_FIELD_NAMES):
             x_id = (field_idx << 4) | 0x01  # stat_idx=mean
-            x = data[:, field_idx]['mean']
+            x = data['signals'][field]['value']
             x = _DOWNSAMPLE_FORMATTERS[field_idx](x)
             arrays[x_id] = x
         data = array_storage.pack(arrays, stop - start)
         data = data.tobytes()
         self._writer.append(datafile.TAG_DATA_BINARY, data, compress=False)
+
+    def _insert_remove_processed_data(self):
+        while len(self._data_buffer) and self._data_buffer[0]['time']['sample_id_range']['value'][1] < self._sample_id_tlv:
+            self._data_buffer.pop()
+
+    def _insert_size_pending(self):
+        self._insert_remove_processed_data()
+        if not len(self._data_buffer):
+            return 0
+        sz = np.sum([x['time']['samples']['value'] for x in self._data_buffer])
+        start_idx = self._data_buffer[0]['time']['sample_id_range']['value'][0]
+        sz -= self._sample_id_tlv - start_idx
+        return sz
+
+    def _insert_next(self):
+        # Will write any pending data up to a full data TLV
+        # WARNING: does not check for sufficient data to fill a data TLV
+        # since it needs to also handle the final partial.
+        if self._sample_id_block is None:
+            if not len(self._data_buffer):
+                return
+            has_raw = 'raw' in self._data_buffer[0]['signals']
+            collection_data = {'sample_id': self._sample_id_tlv}
+            if has_raw:
+                collection_data['v_range'] = self._data_buffer[0]['signals']['raw']['voltage_range']
+            collection_data = json.dumps(collection_data).encode('utf-8')
+            self._collection_start(data=collection_data)
+        offset = 0
+        finalize_now = True
+        while len(self._data_buffer):
+            do_pop = True
+            data = self._data_buffer[0]
+            s0, s1 = data['time']['sample_id_range']['value']  # samples, not indices
+            assert(self._sample_id_tlv + offset >= s0)
+            idx0 = self._sample_id_tlv + offset - s0  # input buffer starting index
+            idx1 = s1 - s0  # input buffer ending index
+            if s1 > self._sample_id_tlv + self._samples_per_tlv:
+                idx1 = self._sample_id_tlv + self._samples_per_tlv - s0
+                do_pop = False
+            idx_end = offset + idx1 - idx0
+            for field, d in self._sample_buffers.items():
+                if field == 'raw':
+                    self._sample_buffers[field][offset:idx_end, :] = data['signals'][field]['value'][idx0:idx1, :]
+                else:
+                    self._sample_buffers[field][offset:idx_end] = data['signals'][field]['value'][idx0:idx1]
+            offset += idx1 - idx0
+            if do_pop:
+                self._data_buffer.pop(0)
+            if offset >= self._samples_per_tlv:
+                finalize_now = False
+                break
+
+        # write the data TLV
+        if 'raw' in self._sample_buffers:
+            data = self._sample_buffers['raw'][:offset, :].tobytes()
+            self._writer.append(datafile.TAG_DATA_BINARY, data, compress=False)
+        else:
+            arrays = {}
+            for field_idx, field in enumerate(STATS_FIELD_NAMES):
+                x_id = (field_idx << 4) | 0x01  # stat_idx=mean
+                x = self._sample_buffers[field][:offset]
+                x = _DOWNSAMPLE_FORMATTERS[field_idx](x)
+                arrays[x_id] = x
+            data = array_storage.pack(arrays, self._samples_per_tlv)
+            data = data.tobytes()
+            self._writer.append(datafile.TAG_DATA_BINARY, data, compress=False)
+
+        # update reductions
+        tlv_offset = (self._sample_id_tlv - self._sample_id_block) // self._samples_per_tlv
+        r_start = tlv_offset * self._reductions_per_tlv
+        r_stop = r_start + (offset * self._reductions_per_tlv) // self._samples_per_tlv
+        for field_idx, field in enumerate(STATS_FIELD_NAMES):
+            d = self._sample_buffers[field]
+            for idx in range(0, r_stop - r_start):
+                r = r_start + idx
+                k0 = idx * self._samples_per_reduction
+                k1 = k0 + self._samples_per_reduction
+                stats_compute(d[k0:k1], self._reduction[r, field_idx:field_idx + 1])
+
+        self._sample_id_tlv += self._samples_per_tlv
+        self._total_size += offset
+        if finalize_now or self._sample_id_tlv - self._sample_id_block >= self._samples_per_block:
+            self._collection_end(self._writer.collections[-1])
+        return
+
+    def insert(self, data):
+        """Insert sample data.
+
+        :param data: A dict in the :meth:`StreamBuffer.samples_get` format.
+        """
+        if self._sample_id_tlv is None:  # first call
+            data_format = 'raw' if 'raw' in data['signals'] else 'float32_v2'
+            self._initialize(data['time']['sampling_frequency']['value'], data_format)
+            self._sample_id_tlv = data['time']['sample_id_range']['value'][0]
+            self._sample_buffers = {}
+            for field in data['signals'].keys():
+                if field == 'raw':
+                    d = np.empty((self._samples_per_tlv, 2), dtype=np.uint16)
+                else:
+                    d = np.empty(self._samples_per_tlv, dtype=np.float32)
+                self._sample_buffers[field] = d
+        if data is not None:
+            self._data_buffer.append(data)
+        while True:
+            if self._insert_size_pending() < self._samples_per_tlv:
+                break
+            self._insert_next()
+        if data is None:
+            self._insert_next()  # short data finalize
 
     def _append_meta(self):
         index = {
@@ -278,9 +385,12 @@ class DataRecorder:
     def close(self):
         if self._closed:
             return
-        if self._stream_buffer is None:
+        if self._sample_id_tlv is None:
             self._append_configuration()
-        self.stream_notify(None)
+        if self._stream_buffer:
+            self.stream_notify(None)
+        if self._data_buffer:
+            self.insert(None)
         self._closed = True
         while len(self._writer.collections):
             collection = self._writer.collections[-1]
@@ -399,6 +509,15 @@ class DataReader:
         if self._f is not None:
             return float(self.config['sampling_frequency'])
         return 0.0
+
+    @property
+    def input_sampling_frequency(self):
+        if self._f is None:
+            return 0.0
+        if 'input_sampling_frequency' in self.config:
+            return float(self.config['sampling_frequency'])
+        else:
+            return self.sampling_frequency
 
     @property
     def output_sampling_frequency(self):
@@ -966,7 +1085,7 @@ class DataReader:
         if fields is None:
             fields = ['current', 'voltage', 'power', 'current_range', 'current_lsb', 'voltage_lsb', 'raw']
         for field in fields:
-            units = _SIGNALS_UNITS.get(field, '')
+            d = {'units': _SIGNALS_UNITS.get(field, '')}
             if field == 'current':
                 v = cal[:, 0]
             elif field == 'voltage':
@@ -975,6 +1094,7 @@ class DataReader:
                 v = cal[:, 0] * cal[:, 1]
             elif field == 'raw':
                 v = raw
+                d['voltage_range'] = self._voltage_range
             elif field == 'raw_current':
                 v = np.right_shift(raw[0::2], 2)
             elif field == 'raw_voltage':
@@ -990,7 +1110,8 @@ class DataReader:
             else:
                 log.warning('Unsupported field %s', field)
                 v = np.array([])
-            signals[field] = {'value': v, 'units': units}
+            d['value'] = v
+            signals[field] = d
         return rv
 
     def _samples_get_handler_float32_v2(self, start, stop, fields, rv):
@@ -1019,6 +1140,9 @@ class DataReader:
                 'delta':  {'value': t2 - t1, 'units': 's'},
                 'sample_id_range':  {'value': [s1, s2], 'units': 'samples'},
                 'sample_id_limits': {'value': self.sample_id_range, 'units': 'samples'},
+                'samples': {'value': stop - start, 'units': 'samples'},
+                'input_sampling_frequency': {'value': self.input_sampling_frequency, 'units': 'Hz'},
+                'output_sampling_frequency': {'value': self.output_sampling_frequency, 'units': 'Hz'},
                 'sampling_frequency': {'value': self.sampling_frequency, 'units': 'Hz'},
             },
             'signals': {},

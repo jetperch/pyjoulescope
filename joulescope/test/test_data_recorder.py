@@ -295,3 +295,57 @@ class TestDataRecorder(unittest.TestCase):
         k = r.samples_get(20, 21, units='samples', fields=['current'])
         i_mean = k['signals']['current']['value'][0]
         np.testing.assert_allclose(s1['signals']['current']['µ']['value'], i_mean, rtol=0.0005)
+
+
+class TestDataRecorderInsert(unittest.TestCase):
+
+    def setUp(self):
+        self._tempdir = tempfile.mkdtemp()
+        self._filename1 = os.path.join(self._tempdir, 'f1.joulescope')
+
+    def tearDown(self):
+        shutil.rmtree(self._tempdir)
+
+    def _create_file_insert(self, packet_index, count_incr, count_total):
+        stream_buffer = StreamBuffer(10.0, [10], 1000.0)
+        stream_buffer.suppress_mode = 'off'
+        if packet_index > 0:
+            data = usb_packet_factory(0, packet_index - 1)
+            stream_buffer.insert(data)
+            stream_buffer.process()
+
+        fh = io.BytesIO()
+        d = DataRecorder(fh)
+        sample_id = stream_buffer.sample_id_range[1]
+        for _ in range(0, count_total, count_incr):
+            data = usb_packet_factory(packet_index, count_incr)
+            stream_buffer.insert(data)
+            stream_buffer.process()
+            sample_id_next = stream_buffer.sample_id_range[1]
+            d.insert(stream_buffer.samples_get(sample_id, sample_id_next))
+            sample_id = sample_id_next
+            packet_index += count_incr
+        d.close()
+        fh.seek(0)
+
+        # dfr = datafile.DataFileReader(fh)
+        # dfr.pretty_print()
+        # fh.seek(0)
+        return fh
+
+    def test_create_single(self):
+        fh = self._create_file_insert(0, 2, 2)
+        r = DataReader().open(fh)
+        self.assertEqual([0, 252], r.sample_id_range)
+        self.assertEqual(1000, r.output_sampling_frequency)
+        self.assertEqual(1000 / 200, r.reduction_frequency)
+        self.assertEqual(0.252, r.duration)
+        self.assertEqual(0.0, r.sample_id_to_time(0))
+        self.assertEqual(0, r.time_to_sample_id(0))
+        self.assertEqual(0.2, r.sample_id_to_time(200))
+        self.assertEqual(200, r.time_to_sample_id(0.2))
+        data = r.data_get(6, 10, 1)
+        np.testing.assert_allclose(np.arange(12, 20, 2), data[:, 0]['mean'])
+
+    def test_create_big_file(self):
+        fh = self._create_file_insert(0, 16, 100000)

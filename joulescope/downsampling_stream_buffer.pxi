@@ -408,20 +408,22 @@ cdef class DownsamplingStreamBuffer:
         :param start: The starting sample id (inclusive).
         :param stop: The ending sample id (exclusive).
         :param fields: The list of field names to return.  None (default) is
-            equivalent to ['raw'].  The available fields are:
+            equivalent to:
+            ['current', 'voltage', 'power', 'current_range',
+            'current_lsb', 'voltage_lsb'].
+            The available fields are:
             * current: The calibrated float32 current data array in amperes.
             * voltage: The calibrated float32 voltage data array in volts.
             * power: The calibrated float32 Nx2 array of current, voltage.
             * current_range: The current range. 0 = 10A, 6 = 18 uA, 7=off.
             * current_lsb: The current LSB, which can be assign to a general purpose input.
             * voltage_lsb: The voltage LSB, which can be assign to a general purpose input.
-        :return: The list-like corresponding to each entry in fields.
-            If fields is a string rather than a list of strings, then
-            return the value directly, not length 1 list.
-            If fields is None, then return the numpy N x DS_VALUE_DTYPE array.
+        :return: See :method:`StreamBuffer.samples_get`.
         """
         is_single_result = False
-        if isinstance(fields, str):
+        if fields is None:
+            fields = ['current', 'voltage', 'power', 'current_range', 'current_lsb', 'voltage_lsb']
+        elif isinstance(fields, str):
             fields = [fields]
             is_single_result = True
         self._range_check(start, stop)
@@ -429,15 +431,36 @@ cdef class DownsamplingStreamBuffer:
         buffer_npy = np.empty(length, dtype=DS_VALUE_DTYPE)
         start_idx = start % self._length
         stop_idx = stop % self._length
+
+        t1 = self.sample_id_to_time(start)
+        t2 = self.sample_id_to_time(stop)
+        result = {
+            'time': {
+                'range': {'value': [t1, t2], 'units': 's'},
+                'delta': {'value': t2 - t1, 'units': 's'},
+                'sample_id_range': {'value': [start, stop], 'units': 'samples'},
+                'samples': {'value': stop - start, 'units': 'samples'},
+                'input_sampling_frequency': {'value': self.input_sampling_frequency, 'units': 'Hz'},
+                'output_sampling_frequency': {'value': self.output_sampling_frequency, 'units': 'Hz'},
+                'sampling_frequency': {'value': self.output_sampling_frequency, 'units': 'Hz'},
+            },
+            'signals': {},
+        }
+
         if stop_idx > start_idx:
-            buffer_npy[:][:] = self._buffer_npy[start_idx:stop_idx][:]
+            for field in fields:
+                result['signals'][field] = {
+                    'value': self._buffer_npy[start_idx:stop_idx][field].copy(),
+                    'units': FIELD_UNITS.get(field, '')}
         else:
             idx = self._length - start_idx
-            buffer_npy[:idx][:] = self._buffer_npy[start_idx:self._length][:]
-            buffer_npy[idx:][:] = self._buffer_npy[:stop_idx][:]
-        if fields is None:
-            return buffer_npy
-        rv = []
-        for field in fields:
-            rv.append(buffer_npy[:][field])
-        return rv
+            for field in fields:
+                v = np.empty(length, dtype=self._buffer_npy[0][field].dtype)
+                v[:idx][:] = self._buffer_npy[start_idx:self._length][field]
+                v[idx:][:] = self._buffer_npy[:stop_idx][field]
+                result['signals'][field] = {
+                    'value': v,
+                    'units': FIELD_UNITS.get(field, '')}
+        if is_single_result:
+            return result['signals'][fields[0]]['value']
+        return result

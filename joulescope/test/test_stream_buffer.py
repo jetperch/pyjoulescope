@@ -269,9 +269,11 @@ class TestStreamBuffer(unittest.TestCase):
         self.assertEqual(b.limits_time[0], b.sample_id_to_time(b.limits_samples[0]))
         self.assertEqual(b.limits_time[1], b.sample_id_to_time(b.limits_samples[1]))
         self.assertEqual(126, b.status()['sample_id']['value'])
-        data = b.samples_get(0, 126, 'raw')
+        samples = b.samples_get(0, 126, ['raw'])
+        raw_data = b.samples_get(0, 126, 'raw')
+        np.testing.assert_allclose(samples['signals']['raw']['value'], raw_data)
         expect = np.arange(126*2, dtype=np.uint16).reshape((126, 2))
-        np.testing.assert_allclose(expect, np.right_shift(data, 2))
+        np.testing.assert_allclose(expect, np.right_shift(raw_data, 2))
         np.testing.assert_allclose(expect, b.data_buffer[0:126*2].reshape((126, 2)))
         data = b.data_get(0, 126)
         np.testing.assert_allclose(expect[:, 0], data[:, 0]['mean'])
@@ -518,8 +520,7 @@ class TestStreamBuffer(unittest.TestCase):
         b = StreamBuffer(0.2, [], 1000.0)
         b.insert_raw(raw)
         b.process()
-        self.assertEqual(0, b.samples_get(0, 8, fields=['current'])[0][-1])
-        self.assertEqual(0, b.samples_get(0, 8, fields='current')[-1])
+        np.testing.assert_allclose(0, b.samples_get(0, 8, fields='current'))
 
     def test_voltage_range(self):
         b = StreamBuffer(0.2, [], 1000.0)

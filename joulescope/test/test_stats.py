@@ -16,6 +16,8 @@
 import unittest
 import numpy as np
 from joulescope.stream_buffer import RunningStatistics as Statistics
+from joulescope.stream_buffer import stats_compute, stats_array_factory
+
 
 
 class TestStatistics(unittest.TestCase):
@@ -102,3 +104,9 @@ class TestStatistics(unittest.TestCase):
         self.assertEqual(s3.std, sc.std)
         self.assertEqual(s3.min, sc.min)
         self.assertEqual(s3.max, sc.max)
+
+    def test_stats_compute(self):
+        v = np.arange(0, 11, dtype=np.float32)
+        s_array = stats_array_factory(1)
+        stats_compute(v, s_array[0, 0:1])
+        self.assertEqual(np.mean(v), s_array[0, 0]['mean'])

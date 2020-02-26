@@ -8,12 +8,18 @@ This file contains the list of changes made to pyjoulescope.
 
 2020 Feb 26
 
+*   API CHANGE to samples_get return value.  Now consistent format.  Affects:
+    *   joulescope.stream_buffer.StreamBuffer.samples_get()
+    *   joulescope.stream_buffer.DownsamplingStreamBuffer.samples_get()
+    *   joulescope.view.View.samples_get()
+    *   joulescope.data_recorder.DataReader.samples_get()
+*   Added joulescope.data_recorder.DataRecorder.insert() method that accepts
+    samples_get formatted data.
 *   Fixed capture.py entry point script.
 *   Improved non-string support for parameter value aliases through the API.
 *   Unified streamed and downsampled APIs.
     *   Converted to µ (micro sign \u00B5), not μ = small greek mu \u03BC.
     *   Correctly populate field when None.
-
 
 
 

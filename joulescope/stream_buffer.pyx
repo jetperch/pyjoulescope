@@ -25,6 +25,7 @@ from libc.float cimport DBL_MAX
 from libc.math cimport isfinite, NAN
 
 from libc.string cimport memset, memcpy
+from joulescope.units import FIELD_UNITS
 import logging
 import numpy as np
 import psutil
@@ -210,6 +211,17 @@ def stats_array_invalidate(s):
     s[:, :]['variance'] = NAN
     s[:, :]['min'] = NAN
     s[:, :]['max'] = NAN
+
+
+def stats_compute(data, out):
+    cdef uint64_t length = len(data)
+    cdef int64_t idx
+    cdef np.float32_t [::1] data_c = data
+    cdef c_running_statistics.statistics_s * s = _stats_ptr(out)
+    c_running_statistics.statistics_reset(s)
+    for idx in range(length):
+        if isfinite(data_c[idx]):
+            c_running_statistics.statistics_add(s, data_c[idx])
 
 
 cdef uint64_t reduction_stats(js_stream_buffer_reduction_s * r, c_running_statistics.statistics_s * tgt,
@@ -1051,6 +1063,10 @@ cdef class StreamBuffer:
         :param out: The optional output np.ndarray((N, STATS_FIELD_COUNT), dtype=DTYPE) to populate with
             the result.  None (default) will construct and return a new array.
         :return: The np.ndarray((N, STATS_FIELD_COUNT), dtype=DTYPE) data.
+
+        This method provides fast access to statistics data, primarily for
+        graphical display.  Applications should prefer using
+        :meth:`samples_get` which provides metadata along with the samples.
         """
         cdef c_running_statistics.statistics_s * out_ptr
         increment = 1 if increment is None else int(increment)
@@ -1067,12 +1083,15 @@ cdef class StreamBuffer:
         return out[:length, :]
 
     def samples_get(self, start, stop, fields=None):
-        """Get sample data without any skips or reductions.
+        """Get exact sample data without any skips or reductions.
 
         :param start: The starting sample id (inclusive).
         :param stop: The ending sample id (exclusive).
-        :param fields: The list of field names to return.  None (default) is
-            equivalent to ['raw'].  The available fields are:
+        :param fields: The single field or list of field names to return.
+            None (default) is equivalent to
+                ['current', 'voltage', 'power', 'current_range', 'current_lsb',
+                 'voltage_lsb', 'raw'].
+            The available fields are:
             * raw: The raw u16 data from Joulescope.
               Equivalent to self.raw_get(start, stop)
             * raw_current: The raw 14-bit current data in LSBs.
@@ -1085,15 +1104,18 @@ cdef class StreamBuffer:
             * current_range: The current range. 0 = 10A, 6 = 18 uA, 7=off.
             * current_lsb: The current LSB, which can be assign to a general purpose input.
             * voltage_lsb: The voltage LSB, which can be assign to a general purpose input.
-        :return: The list-like corresponding to each entry in fields.
-            If fields is a string rather than a list of strings, then
-            return the value directly, not length 1 list.
+        :return: The dict containing top-level 'time ' and 'signals' keys.
+            The 'time' value is a dict contain the timing metadata for
+            these samples.  The 'signals' value is a dict with one
+            key for each field in fields.  Each field value is also
+            a dict with entries 'value' and 'units'.
+            However, if single field string is provided to fields, then just
+            return that field's value.
         """
-        out = []
         bits = None
         is_single_result = False
         if fields is None:
-            fields = ['raw']
+            fields = ['current', 'voltage', 'power', 'current_range', 'current_lsb', 'voltage_lsb', 'raw']
         elif isinstance(fields, str):
             fields = [fields]
             is_single_result = True
@@ -1101,6 +1123,21 @@ cdef class StreamBuffer:
         if stop <= start:
             log.warning('samples_get %d <= %d', start, stop)
             start = stop
+
+        t1 = self.sample_id_to_time(start)
+        t2 = self.sample_id_to_time(stop)
+        result = {
+            'time': {
+                'range': {'value': [t1, t2], 'units': 's'},
+                'delta': {'value': t2 - t1, 'units': 's'},
+                'sample_id_range': {'value': [start, stop], 'units': 'samples'},
+                'samples': {'value': stop - start, 'units': 'samples'},
+                'input_sampling_frequency': {'value': self.input_sampling_frequency, 'units': 'Hz'},
+                'output_sampling_frequency': {'value': self.output_sampling_frequency, 'units': 'Hz'},
+                'sampling_frequency': {'value': self.output_sampling_frequency, 'units': 'Hz'},
+            },
+            'signals': {},
+        }
 
         total_length = self.length
         start_idx = start % total_length
@@ -1117,13 +1154,15 @@ cdef class StreamBuffer:
                     bits = np.concatenate((self.bits[start_idx:], self.bits[:stop_idx]))
 
         for field in fields:
+            value_dict = {'units': FIELD_UNITS.get(field, '')}
             if field == 'raw':
                 if stop_idx > start_idx:
-                    out.append(self.raw[(start_idx * 2):(stop_idx * 2)].reshape((-1, 2)))
+                    out = self.raw[(start_idx * 2):(stop_idx * 2)].reshape((-1, 2))
                 else:
-                    out.append(np.vstack((
+                    out = np.vstack((
                         self.raw[(start_idx * 2):].reshape((-1, 2)),
-                        self.raw[:(stop_idx * 2)].reshape((-1, 2)))))
+                        self.raw[:(stop_idx * 2)].reshape((-1, 2))))
+                value_dict['voltage_range'] = self.voltage_range
             elif field == 'raw_current':
                 if stop_idx > start_idx:
                     d = self.raw[(start_idx * 2):(stop_idx * 2):2]
@@ -1131,7 +1170,7 @@ cdef class StreamBuffer:
                     d = np.concatenate((
                         self.raw[(start_idx * 2)::2],
                         self.raw[:(stop_idx * 2):2]))
-                out.append(np.right_shift(d, 2))
+                out = np.right_shift(d, 2)
             elif field == 'raw_voltage':
                 if stop_idx > start_idx:
                     d = self.raw[(start_idx * 2 + 1):(stop_idx * 2):2]
@@ -1139,52 +1178,55 @@ cdef class StreamBuffer:
                     d = np.concatenate((
                         self.raw[(start_idx * 2 + 1)::2],
                         self.raw[1:(stop_idx * 2):2]))
-                out.append(np.right_shift(d, 2))
+                out = np.right_shift(d, 2)
             elif field == 'bits':
                 populate_bits()
-                out.append(bits)
+                out = bits
             elif field == 'current':
                 if stop_idx > start_idx:
-                    out.append(self.data[(start_idx * 2):(stop_idx * 2):2])
+                    out = self.data[(start_idx * 2):(stop_idx * 2):2]
                 else:
-                    out.append(np.concatenate((self.data[(start_idx * 2)::2],
-                                               self.data[:(stop_idx * 2):2])))
+                    out = np.concatenate((self.data[(start_idx * 2)::2],
+                                          self.data[:(stop_idx * 2):2]))
             elif field == 'voltage':
                 if stop_idx > start_idx:
-                    out.append(self.data[(start_idx * 2 + 1):(stop_idx * 2):2])
+                    out = self.data[(start_idx * 2 + 1):(stop_idx * 2):2]
                 else:
-                    out.append(np.concatenate((self.data[(start_idx * 2 + 1)::2],
-                                               self.data[1:(stop_idx * 2):2])))
+                    out = np.concatenate((self.data[(start_idx * 2 + 1)::2],
+                                          self.data[1:(stop_idx * 2):2]))
             elif field == 'current_voltage':
                 if stop_idx > start_idx:
-                    out.append(self.data[(start_idx * 2):(stop_idx * 2)].reshape((-1, 2)))
+                    out = self.data[(start_idx * 2):(stop_idx * 2)].reshape((-1, 2))
                 else:
-                    out.append(np.vstack((self.data[(start_idx * 2):].reshape((-1, 2)),
-                                          self.data[:(stop_idx * 2)].reshape((-1, 2)))))
+                    out = np.vstack((self.data[(start_idx * 2):].reshape((-1, 2)),
+                                     self.data[:(stop_idx * 2)].reshape((-1, 2))))
             elif field == 'power':
                 if stop_idx > start_idx:
                     current = self.data[(start_idx * 2):(stop_idx * 2):2]
                     voltage = self.data[(start_idx * 2 + 1):(stop_idx * 2):2]
-                    out.append(current * voltage)
+                    out = current * voltage
                 else:
                     i1 = self.data[(start_idx * 2)::2]
                     i2 = self.data[:(stop_idx * 2):2]
                     v1 = self.data[(start_idx * 2 + 1)::2]
                     v2 = self.data[1:(stop_idx * 2):2]
-                    out.append(np.vstack((i1 * v1).reshape((-1, 2)),
-                                         (i2 * v2).reshape((-1, 2))))
+                    out = np.concatenate(((i1 * v1), (i2 * v2)))
             elif field == 'current_range':
                 populate_bits()
-                out.append(np.bitwise_and(bits, 0x0f))
+                out = np.bitwise_and(bits, 0x0f)
             elif field == 'current_lsb':
                 populate_bits()
-                out.append(np.bitwise_and(np.right_shift(bits, 4), 1))
+                out = np.bitwise_and(np.right_shift(bits, 4), 1)
             elif field == 'voltage_lsb':
                 populate_bits()
-                out.append(np.bitwise_and(np.right_shift(bits, 5), 1))
+                out = np.bitwise_and(np.right_shift(bits, 5), 1)
             else:
                 raise ValueError(f'Unsupported field {field}')
-        return out if not is_single_result else out[0]
+            value_dict['value'] = out
+            result['signals'][field] = value_dict
+        if is_single_result:
+            return result['signals'][fields[0]]['value']
+        return result
 
     def get_reduction(self, idx, start, stop):
         """Get reduction data directly (for testing only).
