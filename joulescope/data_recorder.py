@@ -585,6 +585,8 @@ class DataReader:
         start, stop = self._validate_range(start, stop)
         length = stop - start
         field_idxs = []
+        if fields is None:
+            fields = ['current', 'voltage', 'power', 'current_range', 'current_lsb', 'voltage_lsb']
         for field in fields:
             if field not in STATS_FIELD_NAMES:
                 raise ValueError(f'Field {field} not available')
@@ -961,6 +963,8 @@ class DataReader:
     def _samples_get_handler_raw(self, start, stop, fields, rv):
         raw, bits, cal = self._raw(start, stop)
         signals = rv['signals']
+        if fields is None:
+            fields = ['current', 'voltage', 'power', 'current_range', 'current_lsb', 'voltage_lsb', 'raw']
         for field in fields:
             units = _SIGNALS_UNITS.get(field, '')
             if field == 'current':
@@ -1008,12 +1012,12 @@ class DataReader:
         """
         log.debug('samples_get(%s, %s, %s)', start, stop, units)
         s1, s2 = self.normalize_time_arguments(start, stop, units)
-        t1, t2 = start / self.sampling_frequency, stop / self.sampling_frequency
+        t1, t2 = s1 / self.sampling_frequency, s2 / self.sampling_frequency
         rv = {
             'time': {
                 'range': {'value': [t1, t2], 'units': 's'},
                 'delta':  {'value': t2 - t1, 'units': 's'},
-                'sample_id_range':  {'value': [start, stop], 'units': 'samples'},
+                'sample_id_range':  {'value': [s1, s2], 'units': 'samples'},
                 'sample_id_limits': {'value': self.sample_id_range, 'units': 'samples'},
                 'sampling_frequency': {'value': self.sampling_frequency, 'units': 'Hz'},
             },

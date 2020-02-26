@@ -116,5 +116,5 @@ class TestDataRecorderDownsampled(unittest.TestCase):
             s1 = r.statistics_get(k_start, k_stop, units=units)
             k = r.samples_get(k_start, k_stop, units=units, fields=['current'])
             i_mean = np.mean(k['signals']['current']['value'])
-            np.testing.assert_allclose(s1['signals']['current']['μ']['value'], i_mean, rtol=0.0005)
+            np.testing.assert_allclose(s1['signals']['current']['µ']['value'], i_mean, rtol=0.0005)
         r.close()

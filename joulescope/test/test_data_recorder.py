@@ -270,7 +270,7 @@ class TestDataRecorder(unittest.TestCase):
             s1 = r.statistics_get(k_start, k_stop, units='samples')
             k = r.samples_get(k_start, k_stop, units='samples', fields=['current'])
             i_mean = np.mean(k['signals']['current']['value'])
-            np.testing.assert_allclose(s1['signals']['current']['μ']['value'], i_mean, rtol=0.0005)
+            np.testing.assert_allclose(s1['signals']['current']['µ']['value'], i_mean, rtol=0.0005)
         r.close()
 
     def test_cache_test(self):
@@ -285,7 +285,7 @@ class TestDataRecorder(unittest.TestCase):
                 s1 = r.statistics_get(i, i + step_size, units='samples')
                 k = r.samples_get(i, i + step_size, units='samples', fields=['current'])
                 i_mean = np.mean(k['signals']['current']['value'])
-                np.testing.assert_allclose(s1['signals']['current']['μ']['value'], i_mean, rtol=0.0005)
+                np.testing.assert_allclose(s1['signals']['current']['µ']['value'], i_mean, rtol=0.0005)
         r.close()
 
     def test_single_sample(self):
@@ -294,4 +294,4 @@ class TestDataRecorder(unittest.TestCase):
         s1 = r.statistics_get(20, 20, units='samples')
         k = r.samples_get(20, 21, units='samples', fields=['current'])
         i_mean = k['signals']['current']['value'][0]
-        np.testing.assert_allclose(s1['signals']['current']['μ']['value'], i_mean, rtol=0.0005)
+        np.testing.assert_allclose(s1['signals']['current']['µ']['value'], i_mean, rtol=0.0005)

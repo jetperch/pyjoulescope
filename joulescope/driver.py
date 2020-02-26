@@ -290,12 +290,13 @@ class Device:
         if 'read_only' in p.flags:
             log.warning('Attempting to set read_only parameter %s', name)
             return
-        if isinstance(value, str):
+        try:
             value = name_to_value(name, value)
-        elif p.validator is None:
-            raise KeyError('value %s not allowed for parameter %s', value, name)
-        else:
-            value = p.validator(value)
+        except KeyError:
+            if p.validator is None:
+                raise KeyError(f'value {value} not allowed for parameter {name}')
+            else:
+                value = p.validator(value)
         self._parameters[name] = value
         if p.path == 'setting':
             if 'skip_update' not in p.flags:

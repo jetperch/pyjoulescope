@@ -10,6 +10,9 @@ This file contains the list of changes made to pyjoulescope.
 
 *   Fixed capture.py entry point script.
 *   Improved non-string support for parameter value aliases through the API.
+*   Unified streamed and downsampled APIs.
+    *   Converted to µ (micro sign \u00B5), not μ = small greek mu \u03BC.
+    *   Correctly populate field when None.
 
 
 

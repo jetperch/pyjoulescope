@@ -26,6 +26,21 @@ import re
 #RE_IS_NUMBER = re.compile('^([-+]?[0-9]*\.?[0-9]+(?:[eE][-+]?[0-9]+))')
 RE_IS_NUMBER = re.compile('^\s*([-+]?[0-9]*\.?[0-9]+)\s*(.*)')
 
+
+FIELD_UNITS = {
+    'current': 'A',
+    'voltage': 'V',
+    'power': 'W',
+    'energy': 'J',
+    'current_range': '',
+    'current_lsb': '',
+    'voltage_lsb': '',
+    'raw': '',
+    'raw_current': 'LSBs',
+    'raw_voltage': 'LSBs',
+}
+
+
 _UNIT_PREFIX = [
     (1e24, 'Y'),
     (1e21, 'Z'),

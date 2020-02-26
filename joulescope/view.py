@@ -15,6 +15,7 @@
 from joulescope import span
 from joulescope.stream_buffer import StreamBuffer, stats_to_api, \
     stats_array_factory, stats_array_invalidate
+from joulescope.units import FIELD_UNITS
 import threading
 import queue
 import numpy as np
@@ -36,7 +37,7 @@ def data_array_to_update(x_limits, x, data_array):
     s['time']['limits'] = {'value': x_limits, 'units': 's'}
     s['state'] = {'source_type': 'buffer'}  # ['realtime', 'buffer']
     for idx, signal in enumerate(s['signals'].values()):
-        signal['μ']['value'] = data_array[:, idx]['mean'].copy()
+        signal['µ']['value'] = data_array[:, idx]['mean'].copy()
         length = data_array[:, idx]['length'] - 1
         length[length < 1] = 1.0
         signal['σ2']['value'] = data_array[:, idx]['variance'] / length
@@ -347,41 +348,30 @@ class View:
 
     def _samples_get(self, start=None, stop=None, units=None):
         s1, s2 = self._convert_time_range_to_samples(start, stop, units)
+        t1 = self.sample_id_to_time(s1)
+        t2 = self.sample_id_to_time(s2)
         self._log.debug('_samples_get(start=%r, stop=%r, units=%s) -> %s, %s', start, stop, units, s1, s2)
-        data = self._stream_buffer.data_get(start=start, stop=stop)
-        return {
-            # 'time': {},
-            'signals': {
-                'current': {
-                    'value': data[:, 0]['mean'],
-                    'units': 'A',
-                },
-                'voltage': {
-                    'value': data[:, 1]['mean'],
-                    'units': 'V',
-                },
-                'power': {
-                    'value': data[:, 2]['mean'],
-                    'units': 'W',
-                },
-                'current_range': {
-                    'value': data[:, 3]['mean'],
-                    'units': '',
-                },
-                'current_lsb': {
-                    'value': data[:, 4]['mean'],
-                    'units': '',
-                },
-                'voltage_lsb': {
-                    'value': data[:, 5]['mean'],
-                    'units': '',
-                },
-                'raw': {
-                    'value': self._stream_buffer.samples_get(start=start, stop=stop, fields='raw'),
-                    'units': 'LSBs',
-                },
+        fields = ['current', 'voltage', 'power', 'current_range', 'current_lsb', 'voltage_lsb']
+        if self._stream_buffer.has_raw:
+            fields.append('raw')
+        sample_d = self._stream_buffer.samples_get(start=start, stop=stop, fields=fields)
+        result = {
+            'time': {
+                "range": {"value": [t1, t2], "units": "s"},
+                "delta": {"value": t2 - t2, "units": "s"},
+                'sample_id_range': {'value': [s1, s2], 'units': 'samples'},
+                "samples": {"value": s2 - s1, "units": "samples"},
+                'input_sampling_frequency': self._stream_buffer.input_sampling_frequency,
+                'output_sampling_frequency': self._stream_buffer.output_sampling_frequency,
+                'sampling_frequency': self._stream_buffer.output_sampling_frequency,
             },
+            'signals': {},
         }
+        for field, value in zip(fields, sample_d):
+            result['signals'][field] = {'value': value, 'units': FIELD_UNITS[field]}
+        if self._stream_buffer.has_raw:
+            result['signals']['raw']['voltage_range'] = self._stream_buffer.voltage_range
+        return result
 
     def _statistics_get(self, start=None, stop=None, units=None):
         """Get the statistics for the collected sample data over a time range.
