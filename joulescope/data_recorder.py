@@ -1140,7 +1140,7 @@ class DataReader:
                 'delta':  {'value': t2 - t1, 'units': 's'},
                 'sample_id_range':  {'value': [s1, s2], 'units': 'samples'},
                 'sample_id_limits': {'value': self.sample_id_range, 'units': 'samples'},
-                'samples': {'value': stop - start, 'units': 'samples'},
+                'samples': {'value': s2 - s1, 'units': 'samples'},
                 'input_sampling_frequency': {'value': self.input_sampling_frequency, 'units': 'Hz'},
                 'output_sampling_frequency': {'value': self.output_sampling_frequency, 'units': 'Hz'},
                 'sampling_frequency': {'value': self.sampling_frequency, 'units': 'Hz'},
