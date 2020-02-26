@@ -228,7 +228,7 @@ PARAMETERS = [
         detail='Use "n" for automatic duration based upon known response time.',
         path='current_ranging',
         default='n',
-        options=[('n', 'n')] + [(str(d), d, [d]) for d in range(13)]
+        options=[('n', 'n', [])] + [(str(d), d, [d]) for d in range(13)]
     ),
     Parameter(
         name='current_ranging_samples_post',
