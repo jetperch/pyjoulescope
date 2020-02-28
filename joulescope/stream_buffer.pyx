@@ -689,6 +689,7 @@ cdef class StreamBuffer:
         for idx in range(REDUCTION_MAX):
             self.reductions[idx].sample_counter = 0
         self._stats_reset()
+        self._usb_bulk_processor.reset()
         self._raw_processor.reset()
 
     cdef uint32_t reduction_index(self, js_stream_buffer_reduction_s * r, uint32_t parent_samples_per_step):

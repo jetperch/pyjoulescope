@@ -4,6 +4,13 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 0.8.7
+
+2020 Feb 28
+
+*   Added missing UsbBulkProcessor.reset() on StreamBuffer.reset().
+
+
 ## 0.8.6
 
 2020 Feb 26
