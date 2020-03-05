@@ -421,10 +421,14 @@ cdef class DownsamplingStreamBuffer:
         :return: See :method:`StreamBuffer.samples_get`.
         """
         is_single_result = False
+        fields_orig = fields
         if fields is None:
             fields = ['current', 'voltage', 'power', 'current_range', 'current_lsb', 'voltage_lsb']
         elif isinstance(fields, str):
-            fields = [fields]
+            if fields == 'current_voltage':
+                fields = ['current', 'voltage']
+            else:
+                fields = [fields]
             is_single_result = True
         self._range_check(start, stop)
         length = stop - start
@@ -462,5 +466,10 @@ cdef class DownsamplingStreamBuffer:
                     'value': v,
                     'units': FIELD_UNITS.get(field, '')}
         if is_single_result:
-            return result['signals'][fields[0]]['value']
+            if fields_orig == 'current_voltage':
+                i = result['signals']['current']['value']
+                v = result['signals']['voltage']['value']
+                return np.hstack((i.reshape(-1, 1), v.reshape(-1, 1)))
+            else:
+                return result['signals'][fields[0]]['value']
         return result
