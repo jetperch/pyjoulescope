@@ -10,6 +10,7 @@ This file contains the list of changes made to pyjoulescope.
 
 *   Updated sampling_frequency parameter to accept integer values.
 *   Fixed downsampling_stream_buffer to support current_voltage for samples_get.
+*   Added out_format='samples_get' option to Driver.read().
 
 
 ## 0.8.7

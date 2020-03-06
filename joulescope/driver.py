@@ -738,7 +738,7 @@ class Device:
             return True
         return False
 
-    def read(self, duration=None, contiguous_duration=None, out_format=None):
+    def read(self, duration=None, contiguous_duration=None, out_format=None, fields=None):
         """Read data from the device.
 
         :param duration: The duration in seconds for the capture.
@@ -749,8 +749,12 @@ class Device:
             occur when the device first starts.
             The duration must fit within the stream_buffer.
         :param out_format: The output format which is one of
-            ['raw', 'calibrated', None].
-            None (default) is the same as 'calibrated'.
+            * calibrated: The Nx2 np.ndarray(float32) with columns current and voltage.
+            * raw: The raw Nx2 np.ndarray(uint16) Joulescope data.
+            * samples_get: The StreamBuffer samples get format.  Use the fields
+              parameter to optionally specify the signals to include.
+            * None: equivalent to 'calibrated'.
+        :param fields: The fields for samples_get when out_format=samples_get.
 
         If streaming was already in progress, it will be restarted.
         If neither duration or contiguous duration is specified, the capture
@@ -759,6 +763,8 @@ class Device:
         """
         log.info('read(duration=%s, contiguous_duration=%s, out_format=%s)',
                  duration, contiguous_duration, out_format)
+        if out_format not in ['raw', 'calibrate', 'samples_get', None]:
+            raise ValueError(f'Invalid out_format {out_format}')
         if duration is None and contiguous_duration is None:
             raise ValueError('Must specify duration or contiguous_duration')
         duration_max = len(self.stream_buffer) / self._output_sampling_frequency
@@ -787,8 +793,10 @@ class Device:
 
         if out_format == 'raw':
             return self.stream_buffer.samples_get(start_id, end_id, fields='raw').reshape((-1, 2))
-        else:
+        elif out_format in ['calibrated', None]:
             return self.stream_buffer.samples_get(start_id, end_id, fields='current_voltage')
+        else:
+            return self.stream_buffer.samples_get(start_id, end_id, fields=fields)
 
     @property
     def is_streaming(self):
