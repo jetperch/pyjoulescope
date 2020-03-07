@@ -23,7 +23,9 @@ https://github.com/pypa/sampleproject
 # Always prefer setuptools over distutils
 import setuptools
 from distutils.command.build import build as build_orig
+import platform
 import os
+import struct
 import sys
 
 
@@ -36,6 +38,27 @@ try:
     USE_CYTHON = os.path.isfile(os.path.join(MYPATH, 'joulescope', 'stream_buffer.pyx'))
 except ImportError:
     USE_CYTHON = False
+
+
+def _to_int_safe(s):
+    try:
+        return int(s)
+    except:
+        return s
+
+
+def _version_parse(s):
+    return [_to_int_safe(k) for k in s.split('.')]
+
+
+def _platform_check():
+	if struct.calcsize("P") != 8:
+	    raise RuntimeError('pyjoulescope only supports 64-bit Python')
+	if _version_parse(platform.python_version()) < _version_parse('3.6.0'):
+	    raise RuntimeError('pyjoulescope only supports Python 3.6+')
+
+
+_platform_check()
 
 
 def _version_get():
@@ -118,14 +141,34 @@ setuptools.setup(
         # Indicate who your project is intended for
         'Intended Audience :: Developers',
         'Intended Audience :: End Users/Desktop',
-        'Topic :: Software Development :: Build Tools',
+        'Intended Audience :: Science/Research',
 
         # Pick your license as you wish
         'License :: OSI Approved :: Apache Software License',
 
+        # Operating systems
+        'Operating System :: Microsoft :: Windows :: Windows 10',
+        'Operating System :: Microsoft :: Windows :: Windows 8.1',
+        'Operating System :: Microsoft :: Windows :: Windows 8',
+        'Operating System :: Microsoft :: Windows :: Windows 7',
+        'Operating System :: MacOS :: MacOS X',
+        'Operating System :: POSIX :: Linux',
+
         # Supported Python versions
+        'Programming Language :: Python',
+        'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
+        'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.9',
+        'Programming Language :: Python :: Implementation :: CPython',
+        
+        # Topics
+        'Topic :: Scientific/Engineering',
+        'Topic :: Software Development :: Embedded Systems',
+        'Topic :: Software Development :: Testing',
+        'Topic :: System :: Hardware :: Hardware Drivers',
+        'Topic :: Utilities',
     ],
 
     keywords='joulescope driver',
@@ -154,12 +197,12 @@ setuptools.setup(
     ] + PLATFORM_INSTALL_REQUIRES,
 
     extras_require={
-        'dev': ['check-manifest', 'Cython', 'coverage', 'wheel'],
+        'dev': ['check-manifest', 'coverage', 'Cython', 'wheel', 'sphinx', 'm2r'],
     },   
 
     entry_points={
         'console_scripts': [
-            'joulescope_cmd=joulescope.command.runner:run',
+            'joulescope=joulescope.entry_points.runner:run',
         ],
     },
     

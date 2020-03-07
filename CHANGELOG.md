@@ -12,6 +12,10 @@ This file contains the list of changes made to pyjoulescope.
 *   Fixed downsampling_stream_buffer to support current_voltage for samples_get.
 *   Added out_format='samples_get' option to Driver.read().
 *   Added "info" command.
+*   Updated setup.py
+    *   Added setup.py check for Python version and 64-bit.
+    *   Added "joulescope" entry_point (joulescope_cmd was broken).
+    *   Improved "classifiers".
 
 
 ## 0.8.7
