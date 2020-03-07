@@ -42,10 +42,13 @@ and voltage::
 
 Visit `joulescope.com <https://joulescope.com>`_ to purchase a Joulescope.
 You can also `download <https://joulescope.com/download>`_ the Joulescope UI.
-If you have questions, visit the 
-`support <https://www.joulescope.com/pages/support>`_ page.
-Submit any issues on
-`GitHub <https://github.com/jetperch/pyjoulescope/issues>`_.
+
+In addition to this documentation, you can:
+
+* Visit the `Joulescope support page <https://www.joulescope.com/pages/support>`_
+* Read the `Joulescope User's Guide <http://download.joulescope.com/docs/JoulescopeUsersGuide/index.html>`_
+* Visit the `Joulescope forum <https://forum.joulescope.com/>`_
+* Submit issues on `GitHub <https://github.com/jetperch/pyjoulescope/issues>`_
 
 
 Table of Contents
