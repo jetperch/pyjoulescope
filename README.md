@@ -42,7 +42,7 @@ If you just want to use your Joulescope, you can
 ## Documentation
 
 For more information, see the 
-[documentation](https://joulescope.readthedocs.io/en/latest/).
+[documentation](https://joulescope.readthedocs.io).
 
 
 ## License
