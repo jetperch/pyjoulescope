@@ -1,12 +1,14 @@
 .. _install:
 
-*******
-Install
-*******
+************
+Installation
+************
 
 If you want to use released versions of pyjoulescope, **Install from PyPI**.
 It's quick and easy!  If you want unrelease pyjoulescope software or you
 want to develop pyjoulescope, see **Install from Source**.
+
+.. contents::  :local:
 
 
 Install Python
@@ -90,9 +92,49 @@ Change directory into the extracted file.  Install the developer dependencies::
 If you plan on using pyjoulescope, you should install it::
 
     pip install -U .
+
+
+Using virtualenv
+================
+
+Although not required, the developers recommend using 
+[virtualenv](https://virtualenv.pypa.io/en/latest/) to minimize any
+dependency conflicts with different python applications.
+
+First install virtualenv:
+
+    pip3 install virtualenv
     
-If you plan on developing pyjoulescope, you can adjust your PYTHONPATH to
-use the source directly.  For Linux and macOS::
+And then create a new virtual environment.
+
+    virtualenv ~/venv/joulescope
+
+You need to activate the virtual environment whenever you start
+a new terminal.
+    
+On POSIX (Linux, Mac OS X with homebrew):
+
+    source ~/venv/joulescope/bin/activate
+    
+On Windows:
+
+    virtualenv c:\venv\joulescope
+    source c:\venv\joulescope\Scripts\activate
+
+
+Developing Joulescope
+=====================
+
+If you plan on developing pyjoulescope, you probably want to run directly
+from the source code directory.  First, install the dependencies::
+
+    pip3 install -r requirements.txt
+    
+You can then build the native modules and adjust your PYTHONPATH so that
+python finds the joulescope package.
+
+
+For Linux and macOS::
 
     python setup.py build_ext --inplace
     export PYTHONPATH=`cwd`

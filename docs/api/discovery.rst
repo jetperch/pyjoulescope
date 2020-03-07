@@ -17,6 +17,19 @@ To support multiple Joulescopes, use::
 See :class:`joulescope.driver.Device`.
 
 
-.. autofunction:: joulescope.driver.scan
-.. autofunction:: joulescope.driver.scan_require_one
-.. autofunction:: joulescope.driver.scan_for_changes
+scan
+----
+
+.. autofunction:: joulescope.scan
+
+
+scan_require_one
+----------------
+
+.. autofunction:: joulescope.scan_require_one
+
+
+scan_for_changes
+----------------
+
+.. autofunction:: joulescope.scan_for_changes

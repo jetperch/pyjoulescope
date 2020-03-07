@@ -73,17 +73,16 @@ def construct_record_filename():
 
 
 class DataRecorder:
-    """Record Joulescope data to a file."""
+    """Record Joulescope data to a file.
 
+    :param filehandle: The file-like object or file name.
+    :param calibration: The calibration bytes in datafile format.
+        None (default) uses the unit gain calibration.
+    :param user_data: Arbitrary JSON-serializable user data that is
+        added to the file.
+    """
     def __init__(self, filehandle, calibration=None, user_data=None):
-        """Create a new instance.
 
-        :param filehandle: The file-like object or file name.
-        :param calibration: The calibration bytes in datafile format.
-            None (default) uses the unit gain calibration.
-        :param user_data: Arbitrary JSON-serializable user data that is
-            added to the file.
-        """
         log.info('init')
         if isinstance(filehandle, str):
             self._fh = open(filehandle, 'wb')
@@ -383,6 +382,7 @@ class DataRecorder:
         self._writer.append(datafile.TAG_META_JSON, data)
 
     def close(self):
+        """Finalize and close the recording."""
         if self._closed:
             return
         if self._sample_id_tlv is None:
@@ -406,6 +406,7 @@ class DataRecorder:
 
 
 class DataReader:
+    """Read Joulescope data from a file."""
 
     def __init__(self):
         self.calibration = None
@@ -429,6 +430,7 @@ class DataReader:
             return 'DataReader %.2f seconds (%d samples)' % (self.duration, self.footer['size'])
 
     def close(self):
+        """Close the recording file."""
         if self._fh_close:
             self._fh.close()
         self._fh_close = False
@@ -438,6 +440,10 @@ class DataReader:
         self._reduction_cache = None
 
     def open(self, filehandle):
+        """Open a recording file.
+
+        :param filehandle: The seekable filehandle or filename string.
+        """
         self.close()
         self.calibration = Calibration()  # default calibration
         self.config = None
@@ -498,6 +504,10 @@ class DataReader:
 
     @property
     def sample_id_range(self):
+        """The sample ID range.
+
+        :return: [start, stop] sample identifiers.
+        """
         if self._f is not None:
             s_start = 0
             s_end = int(s_start + self.footer['size'])
@@ -506,12 +516,14 @@ class DataReader:
 
     @property
     def sampling_frequency(self):
+        """The output sampling frequency."""
         if self._f is not None:
             return float(self.config['sampling_frequency'])
         return 0.0
 
     @property
     def input_sampling_frequency(self):
+        """The original input sampling frequency."""
         if self._f is None:
             return 0.0
         if 'input_sampling_frequency' in self.config:
@@ -521,16 +533,19 @@ class DataReader:
 
     @property
     def output_sampling_frequency(self):
+        """The output sampling frequency."""
         return self.sampling_frequency
 
     @property
     def reduction_frequency(self):
+        """The reduction frequency or 1 if no reduction."""
         if self._f is not None:
             return self.config['sampling_frequency'] / self.config['samples_per_reduction']
         return 0.0
 
     @property
     def duration(self):
+        """The data file duration, in seconds."""
         f = self.sampling_frequency
         if f > 0:
             r = self.sample_id_range
@@ -539,6 +554,7 @@ class DataReader:
 
     @property
     def voltage_range(self):
+        """The data file voltage range."""
         return self._voltage_range
 
     def _validate_range(self, start=None, stop=None, increment=None):

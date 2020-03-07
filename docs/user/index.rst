@@ -10,7 +10,8 @@ and gives some information for further use.
 .. toctree::
     :maxdepth: 1
 
+    intro
     install
     quickstart
     license
-    ../changelog
+    changelog

@@ -8,7 +8,7 @@
 
 The most affordable and easy-to-use precision DC energy analyzer.
 
-Version \ |version| (:ref:`Installation <install>`)
+Version \ |version| (:ref:`install`)
 
 .. image:: https://pepy.tech/badge/joulescope
     :target: https://pypi.org/project/joulescope/
@@ -25,9 +25,13 @@ Version \ |version| (:ref:`Installation <install>`)
 
 -------------------
 
-Welcome to the Joulescope Driver's documentation.  This driver allows you to
-include Joulescope functionality into your own Python programs.  
-With the Joulescope driver, it is easy to automate your energy measurements::
+Welcome to the Joulescope™ driver's documentation.  This driver enables you to
+automate Joulescope operation and easily measure current, voltage, power and
+energy within your own Python programs on Windows,
+Linux, and macOS.
+With the Joulescope driver, controlling your Joulescope is easy.  This 
+example captures 0.1 seconds of data and then prints the average current
+and voltage::
 
     import joulescope
     import numpy as np
@@ -37,9 +41,15 @@ With the Joulescope driver, it is easy to automate your energy measurements::
     print(f'{current} A, {voltage} V')
 
 Visit `joulescope.com <https://joulescope.com>`_ to purchase a Joulescope.
-You can also `download <https://joulescope.com/download>`_ the Joulescope UI,
-which is a Windows, macOS and Linux application.
+You can also `download <https://joulescope.com/download>`_ the Joulescope UI.
+If you have questions, visit the 
+`support <https://www.joulescope.com/pages/support>`_ page.
+Submit any issues on
+`GitHub <https://github.com/jetperch/pyjoulescope/issues>`_.
 
+
+Table of Contents
+=================
 
 .. toctree::
     :maxdepth: 2

@@ -222,18 +222,22 @@ class Device:
 
     @property
     def input_sampling_frequency(self):
+        """The original input sampling frequency."""
         return self._input_sampling_frequency
 
     @property
     def output_sampling_frequency(self):
+        """The output sampling frequency."""
         return self.parameter_get('sampling_frequency', dtype='actual')
 
     @property
     def sampling_frequency(self):
+        """The output sampling frequency."""
         return self.parameter_get('sampling_frequency', dtype='actual')
 
     @property
     def statistics_callback(self):
+        """Get the registered statistics callback."""
         return self._statistics_callback
 
     @statistics_callback.setter
