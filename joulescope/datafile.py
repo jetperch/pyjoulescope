@@ -17,16 +17,19 @@ This module implements readers and writers for tag-length-value files
 used by Joulescope.
 
 This file format is used for multiple purposes, including:
-- Raw data capture, playback & browsing
-- Processed data capture, playback & browsing
-- Calibration storage
-- Firmware update storage
+
+* Raw data capture, playback & browsing
+* Processed data capture, playback & browsing
+* Calibration storage
+* Firmware update storage
 
 The file format must meet multiple objectives:
-- Support a streaming interface, such as over TCP.
-- Support fast access loading from disk.
-- Support incremental processing, such as by a microcontroller
+
+* Support a streaming interface, such as over TCP.
+* Support fast access loading from disk.
+* Support incremental processing, such as by a microcontroller
   for firmware updates.
+
 
 The streaming requirement means that seeking back to the start of the
 file is not allowed.  Any collections or sections must be indicated with
@@ -34,15 +37,17 @@ tags.  However, reading and writing files can seek, so tags may be
 rewritten with offset information for improved performance.
 
 The file format starts with a 32 byte header:
-  16 bytes: b'\xd3tagfmt \r\n \n  \x1a\x1c'
-  8 bytes: total length in bytes (0="not provided" or "streaming")
-  3 bytes: reserved (0)
-  1 byte: file version (1)
-  4 bytes: crc32 over this header
+
+* 16 bytes: [0xd3, 0x74, 0x61, 0x67, 0x66, 0x6d, 0x74, 0x20, 0x0d, 0x0a, 0x20, 0x0a, 0x20, 0x20, 0x1a, 0x1c]
+* 8 bytes: total length in bytes (0="not provided" or "streaming")
+* 3 bytes: reserved (0)
+* 1 byte: file version (1)
+* 4 bytes: crc32 over this header
 
 The prefix is specially selected to ensure:
-* Identification: Help the application determine that this file is
-  in the correct format with minimal uncertainty.
+
+* Identification: Help the application determine that
+  this file is in the correct format with minimal uncertainty.
 * Correct endianness:  Little endian has won, so this entire format is
   stored in little endian format.
 * Proper binary processing:  The different line ending combinations
@@ -52,12 +57,13 @@ The prefix is specially selected to ensure:
   printers to not show the rest of the file.
 
 The remaining file contents are in tag-length-value (TLV) format with CRC32:
-  3 bytes: tag
-  1 byte: TLV flags (compression, encryption)
-  4 bytes: length of data in bytes (may be zero)
-  length bytes: The data value
-  pad bytes: zero padding to 8 byte + 4 boundary so that crc ends on 8 byte boundary
-  4 bytes: crc32
+
+* 3 bytes: tag
+* 1 byte: TLV flags (compression, encryption)
+* 4 bytes: length of data in bytes (may be zero)
+* length bytes: The data value
+* pad bytes: zero padding to 8 byte + 4 boundary so that crc ends on 8 byte boundary
+* 4 bytes: crc32
 
 Tags are selected such that the upper byte is 0.  Since the file format is
 little endian, this means that the tag has three usable characters.  The
@@ -74,6 +80,7 @@ The supported tags include:
   SGS is optionally allowed before.  Files with encrypted tags will
   typically use the first 24 bytes of this field as the nonce, and then
   increment the last uint32 with each new encrypted block.
+
   * 8 byte timestamp for data creation.  See time.py for timestamp
     format information.
   * 4 byte version of the file data contents: major8, minor8, patch16.
@@ -91,8 +98,10 @@ The supported tags include:
     If this field is not used, set to 0.
   * 16 byte serial number identifying device associated with this data.
     If this field is not used, set to 0.
+
 * b'END': Indicate data file end.  Must be the last tag.
 * b'CLS': collection start.  The payload is:
+
   * 8 byte position to the collection end tag.
     This allows fast seeking to skip the collection data.
     In streaming datafile mode, the offset is 0.
@@ -100,6 +109,7 @@ The supported tags include:
   * 1 byte collection type: 0=unstructured, 1=list, 2=map
   * 1 byte reserved (0)
   * N bytes: optional application specific data.
+
 * b'CLE': collection end.  May contain application-specific data
   such as indices to increase access performance.
 * b'SUB': A subfile, which is often used for storing the calibration
@@ -115,6 +125,7 @@ The supported tags include:
 * b'UBN': arbitrary end-user data, binary formatted.
 * b'ENC': encryption authenticity and integrity information.
   This tag must follow every block with the encryption bit set.
+
   * 16 bytes: ChaCha20 + Poly1305 MAC
   * 64 bytes: EdDSA curve25519 using Blake2b hash (monocypher)
     The signature is computed on the UNENCRYPTED data (sign-then-encrypt)
@@ -122,19 +133,25 @@ The supported tags include:
     who created the cryptotext.  If you want to prevent cryptotext
     forgeries, use encrypt-then-sign with use SGS/SGE and the payload only
     flag.
+
 * b'SGS': signature start.  This field (inclusive) and all others
   up to SGE (exclusive) are included in the signature.  Note that this file
   format makes no provisions for managing keys or ensuring key validity.
+
   * 1 byte: signature type
+
     * 1 = EdDSA curve25519 using Blake2b hash (monocypher).
+
   * 1 byte: flags
+
     * 1 = include this field (default is exclude)
     * 2 = payload only (exclude tag, length & crc32)
+
   * 6 bytes: reserved zero
   * 32 bytes: public key
+
 * b'SGE': signature end.  This field is exclude from the signature.
   Payload is the signature.
-
 
 """
 
@@ -291,13 +308,13 @@ def _maybe_compress(data):
 
 
 class DataFileWriter:
+    """Create a new instance.
+
+    :param filehandle: The file open for write which must support
+        the write, seek and tell methods.
+    """
 
     def __init__(self, filehandle):
-        """Create a new instance.
-
-        :param filehandle: The file open for write which must support
-            the write, seek and tell methods.
-        """
         self._fh = filehandle
         self.collections = []  # type: List[Collection]
         self._write_file_header()
@@ -476,13 +493,13 @@ def _maybe_decompress(value, flags):
 
 
 class DataFileReader:
+    """Create a new instance.
+
+    :param filehandle: The file-like object open for read.  The file must
+        support read, seek and tell.
+    """
 
     def __init__(self, filehandle):
-        """Create a new instance.
-
-        :param filehandle: The file-like object open for read.  The file must
-            support read, seek and tell.
-        """
         self._signature_key = None
         self._signature_data = None
         self._fh = filehandle

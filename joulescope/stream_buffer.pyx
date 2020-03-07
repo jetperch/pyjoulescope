@@ -1090,9 +1090,10 @@ cdef class StreamBuffer:
         :param stop: The ending sample id (exclusive).
         :param fields: The single field or list of field names to return.
             None (default) is equivalent to
-                ['current', 'voltage', 'power', 'current_range', 'current_lsb',
-                 'voltage_lsb', 'raw'].
+            ['current', 'voltage', 'power', 'current_range', 'current_lsb',
+            'voltage_lsb', 'raw'].
             The available fields are:
+
             * raw: The raw u16 data from Joulescope.
               Equivalent to self.raw_get(start, stop)
             * raw_current: The raw 14-bit current data in LSBs.
@@ -1105,6 +1106,7 @@ cdef class StreamBuffer:
             * current_range: The current range. 0 = 10A, 6 = 18 uA, 7=off.
             * current_lsb: The current LSB, which can be assign to a general purpose input.
             * voltage_lsb: The voltage LSB, which can be assign to a general purpose input.
+
         :return: The dict containing top-level 'time ' and 'signals' keys.
             The 'time' value is a dict contain the timing metadata for
             these samples.  The 'signals' value is a dict with one

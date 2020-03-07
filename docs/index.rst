@@ -41,35 +41,11 @@ You can also `download <https://joulescope.com/download>`_ the Joulescope UI,
 which is a Windows, macOS and Linux application.
 
 
-**********
-User Guide
-**********
-
-The User Guide describes how to get started with using the pyjoulescope package,
-and gives some information for further use.
-
 .. toctree::
-    :maxdepth: 1
+    :maxdepth: 2
 
-    user/install
-    user/quickstart
-    user/license
-    changelog
-
-
-*********
-API Guide
-*********
-
-Are you developing software using the joulescope package and want the
-documentation for a module, class, method or function?
-This section is for you!
-
-
-.. toctree::
-   :maxdepth: 2
-   
-   api/index
+    user/index
+    api/index
 
 
 

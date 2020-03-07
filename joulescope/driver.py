@@ -184,7 +184,7 @@ class Device:
     :param config: The initial default configuration following device open.
         Choices are ['auto', 'off', 'ignore', None].
         * 'auto': enable the sensor and start collecting data with
-          current sensor autoranging.
+        current sensor autoranging.
         * 'ignore' or None: Leave the device in its existing state.
         * 'off': Turn the sensor off and disable data collection.
     """
@@ -748,12 +748,14 @@ class Device:
             duration has no missing samples.  Missing samples usually
             occur when the device first starts.
             The duration must fit within the stream_buffer.
-        :param out_format: The output format which is one of
+        :param out_format: The output format which is one of:
+
             * calibrated: The Nx2 np.ndarray(float32) with columns current and voltage.
             * raw: The raw Nx2 np.ndarray(uint16) Joulescope data.
             * samples_get: The StreamBuffer samples get format.  Use the fields
               parameter to optionally specify the signals to include.
             * None: equivalent to 'calibrated'.
+
         :param fields: The fields for samples_get when out_format=samples_get.
 
         If streaming was already in progress, it will be restarted.
