@@ -14,7 +14,6 @@ import os
 import sys
 DOC_PATH = os.path.dirname(os.path.abspath(__file__))
 PROJ_PATH = os.path.dirname(DOC_PATH)
-sys.path.insert(0, PROJ_PATH)
 import joulescope
 
 # -- Project information -----------------------------------------------------
@@ -59,6 +58,19 @@ exclude_patterns = []
 # a list of builtin themes.
 #
 html_theme = 'alabaster'
+
+# Theme options are theme-specific and customize the look and feel of a theme
+# further.  For a list of options available for each theme, see the
+# documentation.
+html_theme_options = {
+    "show_powered_by": False,
+    "github_user": "jetperch",
+    "github_repo": "pyjoulescope",
+    "github_banner": True,
+    "show_related": False,
+    "note_bg": "#FFF59C",
+}
+
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,

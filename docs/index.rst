@@ -67,9 +67,9 @@ This section is for you!
 
 
 .. toctree::
-   :maxdepth: 1
+   :maxdepth: 2
    
-   api
+   api/index
 
 
 
