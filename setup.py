@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # Copyright 2018 Jetperch LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,13 +24,13 @@ https://github.com/pypa/sampleproject
 # Always prefer setuptools over distutils
 import setuptools
 from distutils.command.build import build as build_orig
-import platform
+import distutils.cmd
+from distutils.errors import DistutilsExecError
 import os
-import struct
 import sys
 
 
-MYPATH = os.path.abspath(os.path.dirname(__file__))
+MYPATH = os.path.dirname(os.path.abspath(__file__))
 VERSION_PATH = os.path.join(MYPATH, 'joulescope', 'version.py')
 
 
@@ -40,33 +41,9 @@ except ImportError:
     USE_CYTHON = False
 
 
-def _to_int_safe(s):
-    try:
-        return int(s)
-    except:
-        return s
-
-
-def _version_parse(s):
-    return [_to_int_safe(k) for k in s.split('.')]
-
-
-def _platform_check():
-	if struct.calcsize("P") != 8:
-	    raise RuntimeError('pyjoulescope only supports 64-bit Python')
-	if _version_parse(platform.python_version()) < _version_parse('3.6.0'):
-	    raise RuntimeError('pyjoulescope only supports Python 3.6+')
-
-
-_platform_check()
-
-
-def _version_get():
-    with open(VERSION_PATH, 'rt') as fv:
-        for line in fv:
-            if line.startswith('__version__'):
-                return line.split('=')[-1].strip()[1:-1]
-    raise RuntimeError('VERSION not found!')
+about = {}
+with open(VERSION_PATH, 'rt') as f:
+    exec(f.read(), about)
 
 
 ext = '.pyx' if USE_CYTHON else '.c'
@@ -121,16 +98,44 @@ class Build(build_orig):
         self.distribution.include_dirs.append(numpy.get_include())
 
 
+class CustomBuildDocs(distutils.cmd.Command):
+    """Custom command to build docs locally."""
+
+    description = 'Build docs.'
+    user_options = []
+
+    def initialize_options(self):
+        pass
+
+    def finalize_options(self):
+        pass
+
+    def run(self):
+        # sphinx-build -b html docs build\docs_html
+        # defer import so not all setups require sphinx
+        from sphinx.application import Sphinx
+        from sphinx.util.console import nocolor, color_terminal
+        nocolor()
+        source_dir = os.path.join(MYPATH, 'docs')
+        target_dir = os.path.join(MYPATH, 'build', 'docs_html')
+        doctree_dir = os.path.join(target_dir, '.doctree')
+        app = Sphinx(source_dir, source_dir, target_dir, doctree_dir, 'html')
+        app.build()
+        if app.statuscode:
+            raise DistutilsExecError(
+                'caused by %s builder.' % app.builder.name)
+
+
 setuptools.setup(
-    name='joulescope',
-    version=_version_get(),
-    description='Joulescope™ host driver and utilities',
+    name=about['__title__'],
+    version=about['__version__'],
+    description=about['__description__'],
     long_description=long_description,
     long_description_content_type='text/markdown',
-    url='https://www.joulescope.com',
-    author='Jetperch LLC',
-    author_email='joulescope-dev@jetperch.com',
-    license='Apache',
+    url=about['__url__'],
+    author=about['__author__'],
+    author_email=about['__author_email__'],
+    license=about['__license__'],
 
     # Classifiers help users find your project by categorizing it.
     #
@@ -177,6 +182,7 @@ setuptools.setup(
     ext_modules=extensions,
     cmdclass={
         'build': Build,
+        'docs': CustomBuildDocs,
     },
     include_dirs=[],
     

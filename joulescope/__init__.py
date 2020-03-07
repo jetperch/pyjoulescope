@@ -16,16 +16,16 @@ from joulescope.driver import scan, scan_require_one, scan_for_changes, \
     bootloaders_run_application, bootloader_go
 import sys
 import platform
-from .version import __version__
-
+from .version import __version__, __title__, __description__, __url__
+from .version import __author__, __author_email__, __license__, __copyright__
 
 VERSION = __version__  # for backwards compatibility
 __all__ = [scan, scan_require_one, scan_for_changes, bootloaders_run_application,
-           bootloader_go,
-           VERSION, __version__]
+           bootloader_go]
+
 
 if sys.hexversion < 0x030600:
-    raise RuntimeError('joulescope requires Python 3.6+ 64-bit')
+    raise RuntimeError('joulescope requires Python 3.6+')
 
 
 # Although only 64-bit OS/Python is supported, may be able to run on 32bit Python / 32bit Windows.

@@ -2,6 +2,7 @@
 # ![Joulescope](https://download.joulescope.com/press/joulescope_logo-PNG-Transparent-Exact-Small.png "Joulescope Logo")
 
 [![Build Status](https://travis-ci.org/jetperch/pyjoulescope.svg?branch=master)](https://travis-ci.org/jetperch/pyjoulescope)
+[![Docs Status](https://readthedocs.org/projects/joulescope/badge/?version=latest)](https://joulescope.readthedocs.io/)
 
 Welcome to Joulescope™!  Joulescope is an affordable, precision DC energy 
 analyzer that enables you to build better products. 
