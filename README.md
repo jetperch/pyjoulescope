@@ -4,16 +4,14 @@
 [![Build Status](https://travis-ci.org/jetperch/pyjoulescope.svg?branch=master)](https://travis-ci.org/jetperch/pyjoulescope)
 [![Docs Status](https://readthedocs.org/projects/joulescope/badge/?version=latest)](https://joulescope.readthedocs.io/)
 
-Welcome to the Joulescope™!  Joulescope is an affordable, precision DC energy 
+Welcome to the Joulescope™ python driver!  
+[Joulescope](https://www.joulescope.com) is an affordable, precision DC energy 
 analyzer that enables you to build better products. 
-Joulescope accurately and simultaneously measures the voltage and current 
-supplied to your target device, and it then computes power and energy. 
 
 This pyjoulescope python package enables you to
 automate Joulescope operation and easily measure current, voltage, power and
-energy within your own Python programs on Windows,
-Linux, and macOS.
-With the Joulescope driver, controlling your Joulescope is easy.  This 
+energy within your own Python programs.
+With the Joulescope driver, controlling your Joulescope is easy.  The following
 example captures 0.1 seconds of data and then prints the average current
 and voltage:
 
@@ -28,21 +26,15 @@ This package also installs the "joulescope" command line tool:
 
     joulescope --help
 
-Most users will run the graphical user interface which is in the 
-[pyjoulescope_ui](https://github.com/jetperch/pyjoulescope_ui) package. 
-The majority of code is written in Python 3.6+, but a small amount is in 
-Cython for better performance. 
-
-For the list of changes by release, see the [Changelog](CHANGELOG.md).
-
-If you just want to use your Joulescope, you can 
-[download](https://www.joulescope.com/download) the application.
+Most Joulescope users will run the graphical user interface which is in the 
+[pyjoulescope_ui](https://github.com/jetperch/pyjoulescope_ui) package and
+available for [download](https://www.joulescope.com/download).
 
 
 ## Documentation
 
-For more information, see the 
-[documentation](https://joulescope.readthedocs.io).
+Visit the [documentation](https://joulescope.readthedocs.io) for details on
+installing and using this joulescope package.
 
 
 ## License
