@@ -5,6 +5,7 @@ build
 dist
 joulescope.egg-info
 *.eggs
+Brewfile.lock.json
 
 **/__pycache__
 *.pyo

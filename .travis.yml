@@ -11,8 +11,7 @@ matrix:
       - |
         # brew update
         brew unlink python@2
-        brew install libusb
-        brew install python@3
+        brew bundle
     - os: windows
       language: shell  # 'language: python' is an error on Travis CI windows 
       env: >-
