@@ -116,7 +116,7 @@ class DeviceThread:
         log.info('DeviceThread.run start')
         while not _quit:
             try:
-                self._device.process(timeout=1.0)
+                self._device.process(timeout=0.05)
             except Exception:
                 log.exception('In device thread')
             _quit = self._cmd_process_all()
@@ -131,6 +131,12 @@ class DeviceThread:
         else:
             self._cmd_queue.put((command, args, cbk))
             self._device.signal()
+
+    def _join(self, timeout=None):
+        timeout = TIMEOUT if timeout is None else timeout
+        thread, self._thread = self._thread, None
+        if thread:
+            thread.join(timeout=timeout)
 
     def _post_block(self, command, args, timeout=None):
         timeout = TIMEOUT if timeout is None else float(timeout)
@@ -150,8 +156,7 @@ class DeviceThread:
             except queue.Empty as ex:
                 log.error('device thread hung: %s - FORCE CLOSE', command)
                 self._post('close', None, None)
-                self._thread.join(timeout=TIMEOUT)
-                self._thread = None
+                self._join(timeout=TIMEOUT)
                 rv = ex
             except Exception as ex:
                 rv = ex
@@ -187,8 +192,7 @@ class DeviceThread:
                 self._post_block('close', None)
             except Exception:
                 log.exception('while attempting to close')
-            self._thread.join(timeout=TIMEOUT)
-            self._thread = None
+            self._join(timeout=TIMEOUT)
 
     def control_transfer_out(self, *args, **kwargs):
         return self._post_block('control_transfer_out', (args, kwargs))
