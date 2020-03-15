@@ -38,7 +38,7 @@ EXTIO_REQUEST_LENGTH = 128
 SERIAL_NUMBER_LENGTH = 16
 HOST_API_VERSION = 1
 CALIBRATION_SIZE_MAX = 0x8000
-PACKET_VERION = 1
+PACKET_VERSION = 1
 USB_RECONNECT_TIMEOUT_SECONDS = 15.0
 SENSOR_COMMAND_TIMEOUT_SECONDS = 3.0
 
@@ -555,7 +555,7 @@ class Device:
             streaming = 0
         options = (self._parameters['v_range'] << 1) | self._parameters['ovr_to_lsb']
         msg = struct.pack('<BBBBIBBBBBBBB',
-                          PACKET_VERION,
+                          PACKET_VERSION,
                           length,
                           PacketType.SETTINGS,
                           0,  # rsvl (1 byte)
@@ -578,7 +578,7 @@ class Device:
 
     def _extio_set(self):
         msg = struct.pack('<BBBBIBBBBBBBBII',
-                          PACKET_VERION,
+                          PACKET_VERSION,
                           24,
                           PacketType.EXTIO,
                           0,  # hdr_rsv1
