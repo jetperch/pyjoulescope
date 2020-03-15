@@ -18,6 +18,10 @@ This file contains the list of changes made to pyjoulescope.
     *   Improved "classifiers".
     *   Added "docs" option to build the documents.
     *   Import settings from joulescope.version and check python version.
+*   Reduced control transfer timeout.  Prevents crash due to transfer
+    completing after device closed.
+*   Fixed device thread join so that only happens once.
+*   Added "bootloader_go" command.
 
 
 ## 0.8.7
