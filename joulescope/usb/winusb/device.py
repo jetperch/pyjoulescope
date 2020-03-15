@@ -32,6 +32,12 @@ _winusb = windll.winusb
 
 TICK_INTERVAL = 1.0  # seconds
 
+# Set the control timeout in milliseconds
+# WinUSB cannot cancel control transfers.
+# In order to prevent heap corruption, the timeout must be less than the
+# any forced closing time.
+CONTROL_TIMEOUT = 1.0  # seconds
+
 
 class PipeInfo(Structure):
     _fields_ = [
@@ -43,6 +49,19 @@ class PipeInfo(Structure):
 
     def __repr__(self):
         return usb_core.structure_to_repr(self)
+
+
+# https://docs.microsoft.com/en-us/windows-hardware/drivers/usbcon/winusb-functions-for-pipe-policy-modification
+class PipePolicy:
+    SHORT_PACKET_TERMINATE = 0x01
+    AUTO_CLEAR_STALL = 0x02
+    PIPE_TRANSFER_TIMEOUT = 0x03
+    IGNORE_SHORT_PACKETS = 0x04
+    ALLOW_PARTIAL_READS = 0x05
+    AUTO_FLUSH = 0x06
+    RAW_IO = 0x07
+    MAXIMUM_TRANSFER_SIZE = 0x08
+    RESET_PIPE_ON_RESUME = 0x09
 
 
 # BOOL __stdcall WinUsb_Initialize(
@@ -128,6 +147,16 @@ WinUsb_ReadPipe = _winusb.WinUsb_ReadPipe
 WinUsb_ReadPipe.restype = BOOL
 WinUsb_ReadPipe.argtypes = [c_void_p, c_ubyte, POINTER(c_ubyte), c_ulong, POINTER(c_ulong),
                             POINTER(kernel32.Overlapped)]
+
+# BOOL WinUsb_SetPipePolicy(
+#   WINUSB_INTERFACE_HANDLE InterfaceHandle,
+#   UCHAR                   PipeID,
+#   ULONG                   PolicyType,
+#   ULONG                   ValueLength,
+#   PVOID                   Value);
+WinUsb_SetPipePolicy = _winusb.WinUsb_SetPipePolicy
+WinUsb_SetPipePolicy.restype = BOOL
+WinUsb_SetPipePolicy.argtypes = [c_void_p, c_ubyte, c_ulong, c_ulong, c_void_p]
 
 # BOOL __stdcall WinUsb_WritePipe(
 #   _In_      WINUSB_INTERFACE_HANDLE InterfaceHandle,
@@ -454,7 +483,10 @@ class ControlTransferAsync:
         commands_len = len(commands)
         if commands:
             command = commands.pop(0)
-            self._finish(command, do_wait=False)
+            rc = kernel32.WaitForSingleObject(self._event, int(CONTROL_TIMEOUT * 1100))
+            if rc != kernel32.WAIT_OBJECT_0:  # transfer done
+                log.warning('ControlTransferAsync.close but transaction hung')
+            self._finish(command)
         while commands:
             cbk_fn, setup_packet, _ = commands.pop(0)
             cbk_fn(usb_core.ControlTransferResponse(setup_packet, False, None))
@@ -522,11 +554,11 @@ class ControlTransferAsync:
             return False
         return True
 
-    def _finish(self, command, do_wait=True):
+    def _finish(self, command):
         buffer = None
         cbk_fn, setup_packet, _ = command
         length_transferred = c_ulong()
-        rc = WinUsb_GetOverlappedResult(self._winusb, self._overlapped.ptr, byref(length_transferred), do_wait)
+        rc = WinUsb_GetOverlappedResult(self._winusb, self._overlapped.ptr, byref(length_transferred), True)
         if rc == 0:  # failed (any value other than 0 is success)
             rc = kernel32.GetLastError()
             if rc not in [kernel32.ERROR_IO_INCOMPLETE, kernel32.ERROR_IO_PENDING]:
@@ -551,17 +583,17 @@ class ControlTransferAsync:
         if not self._commands:
             return
         rc = kernel32.WaitForSingleObject(self._event, 0)
-        if rc == kernel32.WAIT_TIMEOUT:
-            pass  # not ready yet
-        elif rc != kernel32.WAIT_OBJECT_0:
-            log.warning('ControlTransferAsync.process wait %d', rc)
-        else:  # transfer is done!
+        if rc == kernel32.WAIT_OBJECT_0:  # transfer done
             command = self._commands.pop(0)
             self._finish(command)
             if self.stop_code is None:
                 self._issue()
             else:
                 self._close_event()
+        elif rc == kernel32.WAIT_TIMEOUT:
+            pass  # not ready yet
+        else:
+            log.warning('ControlTransferAsync.process wait %d', rc)
 
 
 class WinUsbDevice:
@@ -650,6 +682,11 @@ class WinUsbDevice:
             log.info('interface_settings = %s', self._query_interface_settings(0))
             self._control_transfer = ControlTransferAsync(self._winusb)
             self._control_transfer.open()
+            timeout = DWORD(int(CONTROL_TIMEOUT * 1000))
+            result = WinUsb_SetPipePolicy(self._winusb, 0, PipePolicy.PIPE_TRANSFER_TIMEOUT,
+                                          sizeof(timeout), byref(timeout))
+            if not result:
+                log.warning('WinUsb_SetPipePolicy: %s', kernel32.get_error_str())
             self._update_event_list()
         except Exception:
             self.close()
