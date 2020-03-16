@@ -43,6 +43,16 @@ class DeviceDriverApi:
         """
         raise NotImplementedError()
 
+    @property
+    def serial_number(self):
+        """Get the assigned serial number.
+
+        :return: The serial number string.
+
+        This attribute is valid even before the device is opened.
+        """
+        raise NotImplementedError()
+
     def open(self, event_callback_fn):
         """Open the USB device.
 

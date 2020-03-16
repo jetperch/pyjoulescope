@@ -339,7 +339,7 @@ class Device:
             return 'JS110'
         elif name == 'device_serial_number':
             if self.stream_buffer is None or self.calibration is None:
-                return None
+                return self.device_serial_number
             return self.calibration.serial_number
         elif name == 'hardware_serial_number':
             if self.stream_buffer is None:
@@ -366,6 +366,16 @@ class Device:
         serial_number = binascii.hexlify(sn).decode('utf-8')
         log.info('serial number = %s', serial_number)
         return serial_number
+
+    @property
+    def device_serial_number(self):
+        """Get the Joulescope device serial number assigned during manufacturing.
+
+        :return: The serial number string.
+        """
+        if self._usb is None:
+            return None
+        return self._usb.serial_number
 
     def _stream_buffer_open(self):
         if self.stream_buffer:

@@ -174,6 +174,12 @@ class DeviceThread:
             self._str = str(self._device)
         return self._str
 
+    @property
+    def serial_number(self):
+        if self._device is None:
+            return None
+        return self._device.serial_number
+
     def open(self, event_callback_fn=None):
         self.close()
         log.info('open')

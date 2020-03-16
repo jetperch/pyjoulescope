@@ -22,6 +22,7 @@ This file contains the list of changes made to pyjoulescope.
     completing after device closed.
 *   Fixed device thread join so that only happens once.
 *   Added "bootloader_go" command.
+*   Added parameter_set command-line option which addresses UI issue 27.
 
 
 ## 0.8.7

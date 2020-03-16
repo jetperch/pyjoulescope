@@ -19,10 +19,12 @@
 import sys
 import argparse
 import logging
-from joulescope.entry_points import bootloader_go, capture, capture_usb, gpo_demo, info, program, recording
+from joulescope.entry_points import bootloader_go, capture, capture_usb, \
+    gpo_demo, info, parameter_set, program, recording
 
 
-entry_points = [bootloader_go, capture, capture_usb, gpo_demo, info, program, recording]
+entry_points = [bootloader_go, capture, capture_usb, gpo_demo, info,
+                parameter_set, program, recording]
 """This list of available command modules.  Each module must contain a 
 parser_config(subparser) function.  The function must return the callable(args)
 that will be executed for the command."""
