@@ -24,6 +24,7 @@ import sys
 
 
 def parser_config(p):
+    """Display platform and connected device details."""
     return on_cmd
 
 

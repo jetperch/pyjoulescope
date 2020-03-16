@@ -18,7 +18,7 @@ import numpy as np
 
 
 def parser_config(p):
-    """Inspect recordings"""
+    """Inspect recordings."""
     p.add_argument('filename',
                    help='The JLS filename to process.')
     p.add_argument('--plot-reduction',

@@ -20,7 +20,7 @@ from joulescope.driver import scan_require_one
 
 
 def parser_config(p):
-    """Demonstrate the general purpose output functionality"""
+    """Demonstrate the general purpose output functionality."""
     p.add_argument('--voltage',
                    choices=['1.8V', '2.1V', '2.5V', '2.7V', '3.0V', '3.3V', '5.0V'],
                    default='3.3V',

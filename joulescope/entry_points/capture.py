@@ -20,7 +20,7 @@ from joulescope.data_recorder import DataRecorder
 
 
 def parser_config(p):
-    """Capture data from Joulescope"""
+    """Capture data from Joulescope."""
     p.add_argument('--duration',
                    type=float,
                    help='The capture duration in seconds.')
