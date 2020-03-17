@@ -24,7 +24,7 @@ This file contains the list of changes made to pyjoulescope.
 *   Added "bootloader_go" command.
 *   Added parameter_set command-line option which addresses UI issue 27.
 *   Fixed libusb backend to wait for transfer cancellation #9.
-
+*   Cleanly close and join the view and device threads.
 
 ## 0.8.7
 

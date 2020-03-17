@@ -27,6 +27,14 @@ TIMEOUT = 3.0
 TIMEOUT_OPEN = 10.0
 
 
+def _queue_empty(q):
+    while True:
+        try:
+            q.get(timeout=0.0)
+        except queue.Empty:
+            break
+
+
 class DeviceThread:
     """Wrap a :class:`Device` in a thread.
 
@@ -40,6 +48,7 @@ class DeviceThread:
         self._signal_queue = queue.Queue()
         self._response_queue = queue.Queue()
         self._thread = None
+        self._closing = False
         self._str = None
         self.counter = 0
 
@@ -134,9 +143,13 @@ class DeviceThread:
 
     def _join(self, timeout=None):
         timeout = TIMEOUT if timeout is None else timeout
-        thread, self._thread = self._thread, None
-        if thread:
-            thread.join(timeout=timeout)
+        if not self._closing:
+            self._closing = True
+            self._post('close', None, None)
+        if self._thread:
+            # thread can safely join() multiple times
+            self._thread.join(timeout=timeout)
+            self._thread = None
 
     def _post_block(self, command, args, timeout=None):
         timeout = TIMEOUT if timeout is None else float(timeout)
@@ -155,7 +168,6 @@ class DeviceThread:
                 rv = self._response_queue.get(timeout=timeout)
             except queue.Empty as ex:
                 log.error('device thread hung: %s - FORCE CLOSE', command)
-                self._post('close', None, None)
                 self._join(timeout=TIMEOUT)
                 rv = ex
             except Exception as ex:
@@ -185,6 +197,7 @@ class DeviceThread:
         log.info('open')
         self._thread = threading.Thread(name='usb_device', target=self.run)
         self._thread.start()
+        self._closing = False
         try:
             return self._post_block('open', event_callback_fn, timeout=TIMEOUT_OPEN)
         except:
@@ -192,13 +205,11 @@ class DeviceThread:
             raise
 
     def close(self):
-        if self._thread is not None:
-            log.info('close')
-            try:
-                self._post_block('close', None)
-            except Exception:
-                log.exception('while attempting to close')
-            self._join(timeout=TIMEOUT)
+        log.info('close')
+        self._join(timeout=TIMEOUT)
+        _queue_empty(self._cmd_queue)
+        _queue_empty(self._response_queue)
+        _queue_empty(self._signal_queue)
 
     def control_transfer_out(self, *args, **kwargs):
         return self._post_block('control_transfer_out', (args, kwargs))

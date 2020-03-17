@@ -65,6 +65,7 @@ class View:
         self._log = logging.getLogger(__name__)
 
         self._thread = None
+        self._closing = False
         self._cmd_queue = queue.Queue()  # tuples of (command, args, callback)
         self._response_queue = queue.Queue()
         self.on_update_fn = None  # callable(data)
@@ -189,9 +190,7 @@ class View:
             rv = self._response_queue.get(timeout=timeout)
         except queue.Empty as ex:
             self._log.error('view thread hung: %s - FORCE CLOSE', command)
-            self._post('close', None, None)
-            self._thread.join(timeout=TIMEOUT)
-            self._thread = None
+            self._join()
             rv = ex
         except Exception as ex:
             rv = ex
@@ -369,6 +368,7 @@ class View:
     def open(self):
         self.close()
         self._log.info('open')
+        self._closing = False
         self._thread = threading.Thread(name='view', target=self.run)
         self._thread.start()
         self._post_block('ping')
@@ -381,15 +381,20 @@ class View:
         if self._thread is not None:
             self._post_block('stop')
 
+    def _join(self, timeout=None):
+        timeout = TIMEOUT if timeout is None else timeout
+        if not self._closing:
+            self._closing = True
+            self._post('close', None, None)
+        if self._thread:
+            # thread can safely join() multiple times
+            self._thread.join(timeout=timeout)
+            self._thread = None
+
     def close(self):
         if self._thread is not None:
             self._log.info('close')
-            try:
-                self._post_block('close', None)
-            except Exception:
-                self._log.exception('while attempting to close')
-            self._thread.join(timeout=TIMEOUT)
-            self._thread = None
+            self._join()
             self._data = None
             on_close, self.on_close = self.on_close, None
             if callable(on_close):
