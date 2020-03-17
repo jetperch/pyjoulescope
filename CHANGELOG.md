@@ -6,7 +6,7 @@ This file contains the list of changes made to pyjoulescope.
 
 ## 0.8.8
 
-2020 Mar 7 [in progress]
+2020 Mar 17 [in progress]
 
 *   Updated sampling_frequency parameter to accept integer values.
 *   Fixed downsampling_stream_buffer to support current_voltage for samples_get.
@@ -23,6 +23,7 @@ This file contains the list of changes made to pyjoulescope.
 *   Fixed device thread join so that only happens once.
 *   Added "bootloader_go" command.
 *   Added parameter_set command-line option which addresses UI issue 27.
+*   Fixed libusb backend to wait for transfer cancellation #9.
 
 
 ## 0.8.7

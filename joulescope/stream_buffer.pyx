@@ -760,8 +760,10 @@ cdef class StreamBuffer:
             data = np.ascontiguousarray(data, dtype=np.uint8)
             data_c = data
             self._usb_bulk_processor.process(&data_c[0], len(data))
-        else:
+        elif data is not None:
             self._usb_bulk_processor.process(data, len(data))
+        else:
+            return True  # todo signal our data listener?
         return self._check_stop()
 
     cpdef insert_raw(self, data):

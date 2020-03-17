@@ -34,7 +34,8 @@ import logging
 
 log = logging.getLogger(__name__)
 STRING_LENGTH_MAX = 255
-CONTROL_TRANSFER_TIMEOUT_MS = 1000  # default in milliseconds
+TRANSFER_TIMEOUT_MS = 1000  # default in milliseconds
+
 
 find_lib = ctypes.util.find_library('usb-1.0')
 if find_lib is None:
@@ -371,7 +372,7 @@ class Transfer:
         transfer.user_data = None
         transfer.num_iso_packets = 0
         transfer.status = TransferStatus.COMPLETED
-        transfer.timeout_ms = 1000  # milliseconds
+        transfer.timeout_ms = TRANSFER_TIMEOUT_MS  # milliseconds
         transfer.callback = _transfer_callback_discard_fn
 
     def __del__(self):
@@ -395,6 +396,13 @@ class ControlTransferAsync:
     def __str__(self):
         return 'ControlTransferAsync()'
 
+    def __len__(self):
+        return len(self._commands)
+
+    @property
+    def is_busy(self):
+        return 0 != len(self._commands)
+
     def _transfer_callback(self, transfer_void_ptr):
         if self._transfer_pending is None:
             log.warning('Transfer callback when none pending')
@@ -411,24 +419,25 @@ class ControlTransferAsync:
 
     def _abort_all(self):
         commands, self._commands = self._commands, []
+        status = self.stop_code if self.stop_code is not None else TransferStatus.CANCELLED
         for cbk_fn, setup_packet, _ in commands:
             try:
-                response = usb_core.ControlTransferResponse(setup_packet, TransferStatus.CANCELLED, None)
+                response = usb_core.ControlTransferResponse(setup_packet, status, None)
                 cbk_fn(response)
             except Exception:
                 log.exception('in callback while aborting')
 
     def close(self):
-        if self._handle and self._transfer_pending:
+        if self.stop_code is None:
+            self.stop_code = 0
+        handle, self._handle = self._handle, None
+        if handle and self._transfer_pending:
             log.info('ControlTransferAsync.close cancel pending transfer, %d', len(self._commands))
-            transfer, self._transfer_pending = self._transfer_pending, None
-            transfer.transfer[0].callback = _transfer_callback_discard_fn
-            _lib.libusb_cancel_transfer(transfer.transfer)
             # callback function will be invoked later
+            _lib.libusb_cancel_transfer(self._transfer_pending.transfer)
         else:
             log.info('ControlTransferAsync.close %d', len(self._commands))
-        self._handle = None
-        self._abort_all()
+            self._abort_all()
 
     def pend(self, cbk_fn, setup_packet: usb_core.SetupPacket, buffer=None):
         """Pend an asynchronous Control Transfer.
@@ -439,10 +448,6 @@ class ControlTransferAsync:
         :param buffer: The buffer (if length > 0) for write transactions.
         :return: True if pending, False on error.
         """
-        if self.stop_code is not None:
-            response = usb_core.ControlTransferResponse(setup_packet, self.stop_code, None)
-            cbk_fn(response)
-            return False
         command = [cbk_fn, setup_packet, buffer]
         was_empty = not bool(self._commands)
         self._commands.append(command)
@@ -455,6 +460,10 @@ class ControlTransferAsync:
             return True
         if not self._handle:
             log.info('_issue but handle not valid')
+            self._abort_all()
+            return False
+        if self.stop_code is not None:
+            log.info('_issue but stop_code=%s', self.stop_code)
             self._abort_all()
             return False
         log.debug('preparing')
@@ -556,10 +565,16 @@ class EndpointIn:
     ST_IDLE = 0
     ST_RUNNING = 1
     ST_STOPPING = 2
-    ST_ABORT = 3
 
     def __str__(self):
         return 'EndpointIn(0x%02x)' % (self.pipe_id, )
+
+    def __len__(self):
+        return len(self._transfers_pending)
+
+    @property
+    def is_busy(self):
+        return 0 != len(self._transfers_pending)
 
     def _transfer_pending_pop(self, transfer_void_ptr):
         for idx in range(len(self._transfers_pending)):
@@ -567,6 +582,21 @@ class EndpointIn:
                 return self._transfers_pending.pop(idx)
         log.warning('%s _transfer_pending_pop not found', self)
         raise IOError('%s _transfer_pending_pop not found' % (self, ))
+
+    def _transfer_done(self):
+        if self.stop_code is None:
+            log.warning('%s transfer_done by stop_code not set', self)
+            self.stop_code = 0
+        try:
+            self._data_fn(None)
+        except Exception:
+            log.exception('_data_fn exception: stop streaming')
+        try:
+            self._stop_fn(self.stop_code, self.stop_message)
+        except Exception:
+            log.exception('_stop_fn exception')
+        self._state = self.ST_IDLE
+        log.info('%s transfer_done %d: %s', self, self.stop_code, self.stop_message)
 
     def _transfer_callback(self, transfer_void_ptr):
         transfer = self._transfer_pending_pop(transfer_void_ptr)
@@ -586,33 +616,18 @@ class EndpointIn:
                         log.exception('data_fn exception: stop streaming')
                         rv = True
                     if rv:
-                        log.info('%s terminated by data_fn', self)
-                        self._cancel()
-                elif t.status == TransferStatus.NO_DEVICE:
-                    msg = f'{self} transfer callback with status NO DEVICE'
-                    log.warning(msg)
-                    self._stop_fn(DeviceEvent.COMMUNICATION_ERROR, "msg")
-                    self._cancel()
+                        self._cancel(0, 'terminated by data_fn')
+                elif t.status == TransferStatus.TIMED_OUT:
+                    log.warning('%s: timed out', self)
                 else:
-                    log.warning('%s, transfer callback with status %d', self, t.status)
+                    msg = f'transfer callback with status {t.status}'
+                    self._cancel(DeviceEvent.COMMUNICATION_ERROR, msg)
         finally:
             self._transfers_free.append(transfer)
         self._pend()
-        if self._state in [self.ST_STOPPING, self.ST_ABORT]:
+        if self._state == self.ST_STOPPING:
             if 0 == len(self._transfers_pending):
-                if self.stop_code is None:
-                    self.stop_code = 0
-                try:
-                    self._stop_fn(self.stop_code, self.stop_message)
-                except Exception:
-                    log.exception('_stop_fn exception')
-                self._state = self.ST_IDLE
-                try:
-                    self._stop_fn(0, '')  # indicate done with None
-                except Exception:
-                    log.exception('data_fn(None) exception on done')
-                self._state = self.ST_IDLE
-                log.info('%s stop => idle', self)
+                self._transfer_done()
             else:
                 log.debug('awaiting transfer completion')
 
@@ -636,35 +651,27 @@ class EndpointIn:
                 if rv in [ReturnCodes.ERROR_BUSY]:
                     log.info('libusb_submit_transfer busy')
                 else:  # no device, not supported, or other error
-                    msg = f'libusb_submit_transfer => {rv}  ABORT'
-                    log.error(msg)
-                    self._cancel()
-                    self._stop_fn(DeviceEvent.COMMUNICATION_ERROR, msg)
-                    self._state = self.ST_ABORT
+                    msg = f'libusb_submit_transfer => {rv}'
+                    self._cancel(DeviceEvent.COMMUNICATION_ERROR, msg)
                 break  # give system time to recover
             else:
                 self._transfers_pending.append(transfer)
 
-    def _cancel(self):
+    def _cancel(self, stop_code=None, stop_msg=None):
         if self._state != self.ST_RUNNING:
             return
+        if self.stop_code is None:
+            stop_code = 0 if stop_code is None else int(stop_code)
+            stop_msg = '' if stop_msg is None else str(stop_msg)
+            self.stop_code = stop_code
+            self.stop_message = stop_msg
+            lvl = logging.INFO if stop_code <= 0 else logging.ERROR
+            log.log(lvl, 'endpoint halt %d: %s', stop_code, stop_msg)
         self._state = self.ST_STOPPING
-        log.info('%s cancel %d', self, len(self._transfers_pending))
+        log.info('%s cancel %d : %d', self, self.stop_code, len(self._transfers_pending))
         for transfer in self._transfers_pending:
             _lib.libusb_cancel_transfer(transfer.transfer)
-
-    def _halt(self, stop_code, msg=None):
-        if self._state == self.ST_RUNNING:
-            self._state = self.ST_STOPPING
-            self._cancel()
-        if stop_code:
-            lvl = logging.INFO if stop_code <= 0 else logging.ERROR
-            if self.stop_code is None:
-                self.stop_code = stop_code
-                self.stop_message = '' if msg is None else str(msg)
-                log.log(lvl, 'endpoint halt %d: %s', stop_code, msg)
-            else:
-                log.log(lvl, 'endpoint halt %d duplicate: %s', stop_code, msg)
+            # callbacks will be invoked later
 
     def process_signal(self):
         rv = False
@@ -677,8 +684,7 @@ class EndpointIn:
                 log.exception('_process_fn exception: stop streaming')
                 rv = True  # force stop
             if rv:
-                log.info('%s terminated by process_fn', self)
-                self._cancel()
+                self._cancel(0, 'terminated by process_fn')
         return rv
 
     def start(self):
@@ -686,19 +692,15 @@ class EndpointIn:
         self.transfer_count = 0
         self.byte_count_window = 0
         self.byte_count_total = 0
+        self.stop_code = None
+        self.stop_message = None
         self._state = self.ST_RUNNING
         self._time_last = time.time()
         self._pend()
         time.sleep(0.0001)
 
     def stop(self):
-        if self._state != self.ST_IDLE:
-            log.info('%s stop', self)
-            if self._state == self.ST_RUNNING:
-                self._cancel()
-            if self.stop_code is None:
-                self.stop_code = 0
-                self.process_signal()  # ensure that all received data is processed
+        self._cancel(0, 'stop by method request')
 
     def status(self):
         """Get the endpoint status.
@@ -801,33 +803,50 @@ class LibUsbDevice:
             self.close()
             raise IOError(ex)
 
-    def close(self):
-        log.info('close')
-        if self._control_transfer:
+    def _abort_endpoints(self):
+        waiting = []
+        if self._control_transfer is not None:
             self._control_transfer.close()
-            self._control_transfer = None
-        if self._handle and not self._removed:
-            _lib.libusb_close(self._handle)
-            self._handle = c_void_p(None)
-        if self._ctx:
-            _libusb_context_destroy(self._ctx)
-            self._ctx = None
-
-    def _abort(self, stop_code, msg):
+            waiting.append(self._control_transfer)
         for endpoint in self._endpoints.values():
             endpoint.stop()
+            waiting.append(endpoint)
+        time_start = time.time()
+        while True:
+            if all([not x.is_busy for x in waiting]):
+                break
+            dt = time.time() - time_start
+            if dt > 0.25 + TRANSFER_TIMEOUT_MS / 1000:
+                log.warning('Could not shut down gracefully')
+                break
+            timeval = TimeVal(tv_sec=0, tv_usec=25000)
+            _lib.libusb_handle_events_timeout(self._ctx, byref(timeval))
+        self._control_transfer = None
         self._endpoints.clear()
-        if self._control_transfer.stop_code is None:
-            self._control_transfer.stop_code = DeviceEvent.ENDPOINT_CALLBACK_STOP
-        if stop_code > 1:
-            self._removed = True
-        # self._control_transfer.close()
+
+    def close(self, status=None, message=None):
+        log.info('close')
+        self._abort_endpoints()
+        if self._handle and not self._removed:
+            handle, self._handle = self._handle, c_void_p(None)
+            _lib.libusb_close(handle)
+        if self._ctx:
+            ctx, self._ctx = self._ctx, None
+            _libusb_context_destroy(ctx)
         event_callback_fn, self._event_callback_fn = self._event_callback_fn, None
-        if callable(event_callback_fn):
+        if status is not None and callable(event_callback_fn):
+            message = '' if message is None else str(message)
             try:
-                event_callback_fn(stop_code, msg)
+                event_callback_fn(status, message)
             except:
                 log.exception('while in _event_callback_fn')
+
+    def _control_transfer_pend(self, cbk_fn, setup_packet, data):
+        if self._control_transfer is None:
+            rsp = usb_core.ControlTransferResponse(setup_packet, TransferStatus.NO_DEVICE, None)
+            cbk_fn(rsp)
+            return False
+        return self._control_transfer.pend(cbk_fn, setup_packet, data)
 
     def control_transfer_out(self, cbk_fn, recipient, type_, request, value=0, index=0, data=None):
         if cbk_fn is None:
@@ -839,7 +858,7 @@ class LibUsbDevice:
         request_type = usb_core.RequestType(direction='out', type_=type_, recipient=recipient).u8
         length = 0 if data is None else len(data)
         setup_packet = usb_core.SetupPacket(request_type, request, value, index, length)
-        return self._control_transfer.pend(cbk_fn, setup_packet, data)
+        return self._control_transfer_pend(cbk_fn, setup_packet, data)
 
     def control_transfer_in(self, cbk_fn, recipient, type_, request, value, index, length) -> ControlTransferResponse:
         if cbk_fn is None:
@@ -850,7 +869,7 @@ class LibUsbDevice:
             return run_until_done.value_args0
         request_type = usb_core.RequestType(direction='in', type_=type_, recipient=recipient).u8
         setup_packet = usb_core.SetupPacket(request_type, request, value, index, length)
-        return self._control_transfer.pend(cbk_fn, setup_packet, None)
+        return self._control_transfer_pend(cbk_fn, setup_packet, None)
 
     def read_stream_start(self, endpoint_id, transfers, block_size, data_fn, process_fn, stop_fn):
         pipe_id = (endpoint_id & 0x7f) | 0x80
@@ -869,8 +888,6 @@ class LibUsbDevice:
         endpoint = self._endpoints.pop(pipe_id, None)
         if endpoint is not None:
             endpoint.stop()
-            if endpoint.stop_code > 0:
-                self._abort(endpoint.stop_code, endpoint.stop_message)
 
     def status(self):
         e = {}
@@ -892,9 +909,10 @@ class LibUsbDevice:
                 if endpoint._state == endpoint.ST_IDLE:
                     endpoints_stop.append(endpoint.pipe_id)
             for pipe_id in endpoints_stop:
-                self.read_stream_stop(pipe_id)
+                self._endpoints.pop(pipe_id, None)
             if self._control_transfer.stop_code:
-                self._abort(self._control_transfer.stop_code, '')
+                msg = f'Control endpoint failed {self._control_transfer.stop_code}'
+                self.close(self._control_transfer.stop_code, msg)
         else:
             time.sleep(0.025)
 
