@@ -60,6 +60,26 @@ class TestDataRecorder(unittest.TestCase):
         r = DataReader().open(fh)
         self.assertEqual(r.user_data, expect)
 
+    def test_empty_file(self):
+        fh = io.BytesIO()
+        d = DataRecorder(fh)
+        d.close()
+        fh.seek(0)
+        r = DataReader().open(fh)
+        self.assertEqual([0, 0], r.sample_id_range)
+        self.assertEqual(1.0, r.sampling_frequency)
+        self.assertEqual(1.0, r.input_sampling_frequency)
+        self.assertEqual(1.0, r.output_sampling_frequency)
+        self.assertEqual(1.0, r.reduction_frequency)
+        self.assertEqual(0.0, r.duration)
+        self.assertEqual(0, r.voltage_range)
+        self.assertEqual(0, len(r.get_reduction(0, 0)))
+        self.assertEqual(0, len(r.data_get(0, 0)))
+        self.assertEqual(0, r.time_to_sample_id(0.0))
+        self.assertEqual(0.0, r.sample_id_to_time(0))
+        self.assertIsNone(r.samples_get(0, 0))
+        r.close()
+
     def _create_file(self, packet_index, count=None):
         stream_buffer = StreamBuffer(10.0, [10], 1000.0)
         stream_buffer.suppress_mode = 'off'

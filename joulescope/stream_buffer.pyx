@@ -1409,11 +1409,15 @@ cpdef single_stat_to_api(v_mean, v_var, v_min, v_max, units):
 
 cdef _stats_to_api(c_running_statistics.statistics_s * stats, t_start, t_stop):
     dt = t_stop - t_start
+    if stats is NULL:
+        k = 0
+    else:
+        k = int(stats[0].k)
     data = {
         'time': {
             'range': {'value': [t_start, t_stop], 'units': 's'},
             'delta': {'value': dt, 'units': 's'},
-            'samples': {'value': int(stats[0].k), 'units': 'samples'},
+            'samples': {'value': k, 'units': 'samples'},
         },
         'signals': {},
     }

@@ -6,7 +6,7 @@ This file contains the list of changes made to pyjoulescope.
 
 ## 0.8.8
 
-2020 Mar 17 [in progress]
+2020 Mar 20 [in progress]
 
 *   Updated sampling_frequency parameter to accept integer values.
 *   Fixed downsampling_stream_buffer to support current_voltage for samples_get.
@@ -27,6 +27,7 @@ This file contains the list of changes made to pyjoulescope.
 *   Cleanly close and join the view and device threads.
 *   Fixed span set length beyond maximum to set to max and not throw exception.
 *   Fixed DownsamplingStreamBuffer.samples_get zero length handling.
+*   Improved handling of empty JLS files and zero length data.
 
 
 ## 0.8.7

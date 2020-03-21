@@ -32,7 +32,10 @@ def data_array_to_update(x_limits, x, data_array):
     :param x: The np.ndarray of x-axis times.
     :param data_array: The np.ndarray((N, STATS_FIELD_COUNT), dtype=STATS_DTYPE)
     """
-    s = stats_to_api(data_array[0, :], float(x[0]), float(x[-1]))
+    if len(x):
+        s = stats_to_api(data_array[0, :], float(x[0]), float(x[-1]))
+    else:
+        s = stats_to_api(None, 0.0, 0.0)
     s['time']['x'] = {'value': x, 'units': s}
     s['time']['limits'] = {'value': x_limits, 'units': 's'}
     s['state'] = {'source_type': 'buffer'}  # ['realtime', 'buffer']

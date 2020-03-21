@@ -512,24 +512,33 @@ class DataReader:
             s_start = 0
             s_end = int(s_start + self.footer['size'])
             return [s_start, s_end]
-        return 0
+        return [0, 0]
 
     @property
     def sampling_frequency(self):
         """The output sampling frequency."""
+        f = 0.0
         if self._f is not None:
-            return float(self.config['sampling_frequency'])
-        return 0.0
+            f = float(self.config['sampling_frequency'])
+        if f <= 0.0:
+            log.warning('Invalid sampling frequency %r, assume 1.0 Hz.', f)
+            f = 1.0
+        return f
 
     @property
     def input_sampling_frequency(self):
         """The original input sampling frequency."""
+        f = 0.0
         if self._f is None:
-            return 0.0
-        if 'input_sampling_frequency' in self.config:
-            return float(self.config['sampling_frequency'])
+            pass
+        elif 'input_sampling_frequency' in self.config:
+            f = float(self.config['sampling_frequency'])
         else:
-            return self.sampling_frequency
+            f = self.sampling_frequency
+        if f <= 0.0:
+            log.warning('Invalid input sampling frequency %r, assume 1.0 Hz.', f)
+            f = 1.0
+        return f
 
     @property
     def output_sampling_frequency(self):
@@ -539,9 +548,16 @@ class DataReader:
     @property
     def reduction_frequency(self):
         """The reduction frequency or 1 if no reduction."""
-        if self._f is not None:
-            return self.config['sampling_frequency'] / self.config['samples_per_reduction']
-        return 0.0
+        f = 0.0
+        try:
+            if self._f is not None:
+                f = self.config['sampling_frequency'] / self.config['samples_per_reduction']
+        except:
+            log.warning('Could not get reduction frequency.')
+        if f <= 0.0:
+            log.warning('Invalid input sampling frequency %r, assume 1.0 Hz.', f)
+            f = 1.0
+        return f
 
     @property
     def duration(self):
@@ -562,9 +578,11 @@ class DataReader:
         if increment is not None:
             idx_end = ((idx_end + increment - 1) // increment) * increment
         # log.debug('[%d, %d] : [%d, %d]', start, stop, idx_start, idx_end)
-        if not idx_start <= start < idx_end:
+        if start == idx_start and start == stop:
+            pass  # empty is allowed
+        elif not idx_start <= start < idx_end:
             raise ValueError('start out of range: %d <= %d < %d' % (idx_start, start, idx_end))
-        if not idx_start <= stop <= idx_end:
+        elif not idx_start <= stop <= idx_end:
             raise ValueError('stop out of range: %d <= %d <= %d: %s' %
                              (idx_start, stop, idx_end, increment))
         if stop < start:
@@ -857,6 +875,8 @@ class DataReader:
         self._validate_range(start, stop)
 
         sz = self.config['samples_per_reduction']
+        if sz < 1:
+            sz = 1
         r_start = start // sz
         total_length = (stop - start) // sz
         r_stop = r_start + total_length
@@ -1051,9 +1071,11 @@ class DataReader:
             raise ValueError(f'invalid time units: {units}')
         s1 = s_min if start is None else start
         s2 = s_max if stop is None else stop
-        if not s_min <= s1 < s_max:
+        if s1 == s_min and s1 == s2:
+            pass  # ok, zero length capture
+        elif not s_min <= s1 < s_max:
             raise ValueError(f'start sample out of range: {s1}')
-        if not s_min <= s2 <= s_max:
+        elif not s_min <= s2 <= s_max:
             raise ValueError(f'start sample out of range: {s2}')
         return s1, s2
 
@@ -1093,7 +1115,7 @@ class DataReader:
         return length
 
     def _samples_get_handler_none(self, start, stop, fields, rv):
-        return stop - start
+        return None
 
     def _samples_get_handler_raw(self, start, stop, fields, rv):
         raw, bits, cal = self._raw(start, stop)
