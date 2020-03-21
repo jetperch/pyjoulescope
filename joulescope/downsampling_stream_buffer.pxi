@@ -257,7 +257,7 @@ cdef class DownsamplingStreamBuffer:
             return 0
         return 1
 
-    cdef uint64_t _stats_get(self, int64_t start, int64_t stop, c_running_statistics.statistics_s * stats_accum):
+    cdef _stats_get(self, int64_t start, int64_t stop, c_running_statistics.statistics_s * stats_accum):
         """Get exact statistics over the specified range.
 
         :param start: The starting sample_id (inclusive).
@@ -265,33 +265,47 @@ cdef class DownsamplingStreamBuffer:
         :param stats_accum: The output computed statistics.
         :return: The number of sample used to compute the statistic
         """
-        cdef uint64_t idx = (start % self._length)
-        cdef uint64_t count = stop - start
+        cdef uint64_t idx
+        cdef uint64_t count
+        cdef uint64_t valid_count = 0
+        start, stop = self._constrain_range(start, stop)
+        idx = (start % self._length)
+        count = stop - start
         _stats_reset(stats_accum)
         for idx_inner in range(count):
             v = self._buffer_ptr + idx
-            c_running_statistics.statistics_add(stats_accum + 0, v.current)
-            c_running_statistics.statistics_add(stats_accum + 1, v.voltage)
-            c_running_statistics.statistics_add(stats_accum + 2, v.power)
-            c_running_statistics.statistics_add(stats_accum + 3, (<double> v.current_range) * (1.0 / 16))
-            c_running_statistics.statistics_add(stats_accum + 4, (<double> v.current_lsb) * (1.0 / 255))
-            c_running_statistics.statistics_add(stats_accum + 5, (<double> v.voltage_lsb) * (1.0 / 255))
+            if isfinite(v.current):
+                c_running_statistics.statistics_add(stats_accum + 0, v.current)
+                c_running_statistics.statistics_add(stats_accum + 1, v.voltage)
+                c_running_statistics.statistics_add(stats_accum + 2, v.power)
+                c_running_statistics.statistics_add(stats_accum + 3, (<double> v.current_range) * (1.0 / 16))
+                c_running_statistics.statistics_add(stats_accum + 4, (<double> v.current_lsb) * (1.0 / 255))
+                c_running_statistics.statistics_add(stats_accum + 5, (<double> v.voltage_lsb) * (1.0 / 255))
+                valid_count += 1
             idx += 1
             if idx >= self._length:
                 idx = 0
-        return count
+        if valid_count == 0:
+            log.warning('_stats_get no samples')
+            _stats_invalidate(stats_accum)
+        return [start, stop], valid_count
+
+    cdef _constrain_range(self, start, stop):
+        xlim_start, xlim_stop = self.sample_id_range
+        x_start = max(0, start, xlim_start)
+        x_stop = min(stop, xlim_stop)
+        x_stop = max(x_start, x_stop)
+        if x_start != start or x_stop != stop:
+            log.warning('range [%r, %r] constrained to [%r, %r]', start, stop, x_start, x_stop)
+        return [x_start, x_stop]
 
     def statistics_get(self, start, stop, out=None):
         cdef c_running_statistics.statistics_s * out_ptr
         if out is None:
             out = _stats_factory(NULL)
         out_ptr = _stats_ptr(out)
-        if start < 0 or stop < 0 or not self._range_check(start, stop):
-            log.warning('start, stop invalid: %d, %d', start, stop)
-            _stats_invalidate(out_ptr)
-            return out
-        self._stats_get(start, stop, out_ptr)
-        return out
+        x_range, _ = self._stats_get(start, stop, out_ptr)
+        return out, x_range
 
     cdef uint64_t _data_get(self, c_running_statistics.statistics_s *buffer, uint64_t buffer_samples,
                             int64_t start, int64_t stop, uint64_t increment):

@@ -28,6 +28,10 @@ This file contains the list of changes made to pyjoulescope.
 *   Fixed span set length beyond maximum to set to max and not throw exception.
 *   Fixed DownsamplingStreamBuffer.samples_get zero length handling.
 *   Improved handling of empty JLS files and zero length data.
+*   Modified statistics_get to constrain range and return actual range.
+    NOTICE: direct users of StreamBuffer.statistics_get or 
+    DownsamplingStreamBuffer.samples_get will have to update their programs.
+*   Improved statistics_get handling for missing samples.
 
 
 ## 0.8.7

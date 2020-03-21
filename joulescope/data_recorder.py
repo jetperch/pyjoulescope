@@ -1107,11 +1107,12 @@ class DataReader:
     def _statistics_get_handler_float32_v2(self, s1, s2, stats):
         rv = {'signals': {}}
         self._samples_get_handler_float32_v2(s1, s2, STATS_FIELD_NAMES, rv)
-        length = s2 - s1
+        zi = np.isfinite(rv['signals']['current']['value'])
+        length = np.count_nonzero(zi)
         stats[:]['length'] = length
         if length:
             for idx, field in enumerate(STATS_FIELD_NAMES):
-                self._stats_update(stats[idx], rv['signals'][field]['value'], length)
+                self._stats_update(stats[idx], rv['signals'][field]['value'][zi], length)
         return length
 
     def _samples_get_handler_none(self, start, stop, fields, rv):

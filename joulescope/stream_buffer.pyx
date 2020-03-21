@@ -180,6 +180,14 @@ def stats_factory():
     return np.zeros(_STATS_FIELDS, dtype=STATS_DTYPE)
 
 
+def stats_invalidate(s):
+    s[:]['length'] = 0
+    s[:]['mean'] = NAN
+    s[:]['variance'] = NAN
+    s[:]['min'] = NAN
+    s[:]['max'] = NAN
+
+
 cdef c_running_statistics.statistics_s * _stats_array_ptr(c_running_statistics.statistics_s [:, ::1] d):
     return &d[0, 0]
 
@@ -875,7 +883,16 @@ cdef class StreamBuffer:
             return 0
         return 1
 
-    cdef uint64_t _stats_get(self, int64_t start, int64_t stop, c_running_statistics.statistics_s * stats_accum):
+    cdef _constrain_range(self, start, stop):
+        xlim_start, xlim_stop = self.sample_id_range
+        x_start = max(0, start, xlim_start)
+        x_stop = min(stop, xlim_stop)
+        x_stop = max(x_start, x_stop)
+        if x_start != start or x_stop != stop:
+            log.warning('range [%r, %r] constrained to [%r, %r]', start, stop, x_start, x_stop)
+        return [x_start, x_stop]
+
+    cdef _stats_get(self, int64_t start, int64_t stop, c_running_statistics.statistics_s * stats_accum):
         """Get exact statistics over the specified range.
 
         :param start: The starting sample_id (inclusive).
@@ -888,19 +905,7 @@ cdef class StreamBuffer:
         cdef uint32_t samples_per_step
 
         _stats_reset(stats_accum)
-        # log.info('stats_get(%r, %r)', start, stop)
-        if start < 0 or stop < 0:
-            log.warning('sample_id < 0: %d, %d', start, stop)
-            _stats_invalidate(stats_accum)
-            return 0
-        if not self.range_check(start, stop):
-            _stats_invalidate(stats_accum)
-            return 0
-        if stop <= start:
-            log.warning('stop <= start: %d <= %d', start, stop)
-            _stats_invalidate(stats_accum)
-            return 0
-
+        start, stop = self._constrain_range(start, stop)
         length = stop - start
         ranges = [[start, stop], [None, None]]
 
@@ -944,7 +949,7 @@ cdef class StreamBuffer:
         if _stats_length(stats_accum) == 0:
             log.warning('_stats_get no samples')
             _stats_invalidate(stats_accum)
-        return _stats_length(stats_accum)
+        return [start, stop], _stats_length(stats_accum)
 
     def statistics_get(self, start, stop, out=None):
         """Get exact statistics over the specified range.
@@ -953,14 +958,16 @@ cdef class StreamBuffer:
         :param stop: The ending sample_id (exclusive).
         :param out: The optional output np.ndarray(STATS_FIELD_COUNT, dtype=DTYPE).
             None (default) creates and outputs a new record.
-        :return: The np.ndarray(STATS_FIELD_COUNT, dtype=DTYPE).
+        :return: The tuple of (np.ndarray(STATS_FIELD_COUNT, dtype=DTYPE), [start, stop]).
+            The values of start and stop will be constrained to the
+            available range.
         """
         cdef c_running_statistics.statistics_s * out_ptr
         if out is None:
             out = _stats_factory(NULL)
         out_ptr = _stats_ptr(out)
-        self._stats_get(start, stop, out_ptr)
-        return out
+        x_range, _ = self._stats_get(start, stop, out_ptr)
+        return out, x_range
 
     cdef uint64_t _data_get(self, c_running_statistics.statistics_s *buffer, uint64_t buffer_samples,
                             int64_t start, int64_t stop, uint64_t increment):
@@ -1423,9 +1430,12 @@ cdef _stats_to_api(c_running_statistics.statistics_s * stats, t_start, t_stop):
     }
     if stats is not NULL:
         for i, (signal, units, integral_units) in enumerate(_SIGNALS):
-            v_mean = float(stats[i].m)
-            v_var = float(c_running_statistics.statistics_var(&stats[i]))
-            v_min, v_max = float(stats[i].min), float(stats[i].max)
+            if k == 0:
+                v_mean, v_var, v_min, v_max = NAN, NAN, NAN, NAN
+            else:
+                v_mean = float(stats[i].m)
+                v_var = float(c_running_statistics.statistics_var(&stats[i]))
+                v_min, v_max = float(stats[i].min), float(stats[i].max)
             data['signals'][signal] = single_stat_to_api(v_mean, v_var, v_min, v_max, units)
             if integral_units is not None:
                 data['signals'][signal]['∫'] = {'value': v_mean * dt, 'units': integral_units}
