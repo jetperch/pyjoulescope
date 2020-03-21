@@ -26,6 +26,7 @@ This file contains the list of changes made to pyjoulescope.
 *   Fixed libusb backend to wait for transfer cancellation #9.
 *   Cleanly close and join the view and device threads.
 *   Fixed span set length beyond maximum to set to max and not throw exception.
+*   Fixed DownsamplingStreamBuffer.samples_get zero length handling.
 
 
 ## 0.8.7

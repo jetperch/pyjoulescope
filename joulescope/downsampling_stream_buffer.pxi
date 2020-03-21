@@ -451,7 +451,7 @@ cdef class DownsamplingStreamBuffer:
             'signals': {},
         }
 
-        if stop_idx > start_idx:
+        if stop_idx >= start_idx:
             for field in fields:
                 result['signals'][field] = {
                     'value': self._buffer_npy[start_idx:stop_idx][field].copy(),
