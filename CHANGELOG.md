@@ -25,6 +25,8 @@ This file contains the list of changes made to pyjoulescope.
 *   Added parameter_set command-line option which addresses UI issue 27.
 *   Fixed libusb backend to wait for transfer cancellation #9.
 *   Cleanly close and join the view and device threads.
+*   Fixed span set length beyond maximum to set to max and not throw exception.
+
 
 ## 0.8.7
 

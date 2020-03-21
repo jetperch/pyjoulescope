@@ -65,3 +65,10 @@ class TestSpan(unittest.TestCase):
         k1 = (pivot - sc[0]) / (sc[1] - sc[0])
         np.testing.assert_allclose(k1, k0, rtol=0.015)
 
+    def test_maximum_length(self):
+        s = Span([10.0, 20.0], 0.01, 1000)
+        self.assertEqual(1000, s.length)
+        s.length = 101
+        self.assertEqual(101, s.length)
+        s.length = 10000
+        self.assertEqual(1001, s.length)
