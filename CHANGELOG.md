@@ -6,7 +6,7 @@ This file contains the list of changes made to pyjoulescope.
 
 ## 0.8.8
 
-2020 Mar 20 [in progress]
+2020 Mar 23
 
 *   Updated sampling_frequency parameter to accept integer values.
 *   Fixed downsampling_stream_buffer to support current_voltage for samples_get.
