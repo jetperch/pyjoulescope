@@ -20,11 +20,11 @@ import sys
 import argparse
 import logging
 from joulescope.entry_points import bootloader_go, capture, capture_usb, \
-    gpo_demo, info, parameter_set, program, recording
+    gpo_demo, info, parameter_set, program, recording, stream_test
 
 
 entry_points = [bootloader_go, capture, capture_usb, gpo_demo, info,
-                parameter_set, program, recording]
+                parameter_set, program, recording, stream_test]
 """This list of available command modules.  Each module must contain a 
 parser_config(subparser) function.  The function must return the callable(args)
 that will be executed for the command."""
@@ -59,7 +59,8 @@ def get_parser():
 
 
 def run():
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.INFO,
+                        format="%(levelname)s:%(asctime)s:%(filename)s:%(lineno)d:%(name)s:%(message)s")
     parser = get_parser()
     args = parser.parse_args()
     if args.subparser_name is None:
