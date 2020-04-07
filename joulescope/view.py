@@ -347,7 +347,7 @@ class View:
         else:
             start = self._convert_time_to_samples(start, units)
         if stop is None and units == 'seconds':
-            stop = data_idx_view_end
+            stop = data_idx_view_end * self._samples_per
         else:
             stop = self._convert_time_to_samples(stop, units)
         return start, stop
@@ -355,7 +355,7 @@ class View:
     def _samples_get(self, start=None, stop=None, units=None, fields=None):
         s1, s2 = self._convert_time_range_to_samples(start, stop, units)
         self._log.debug('_samples_get(start=%r, stop=%r, units=%s) -> %s, %s', start, stop, units, s1, s2)
-        return self._stream_buffer.samples_get(start=start, stop=stop, fields=fields)
+        return self._stream_buffer.samples_get(start=s1, stop=s2, fields=fields)
 
     def _statistics_get(self, start=None, stop=None, units=None):
         """Get the statistics for the collected sample data over a time range.
