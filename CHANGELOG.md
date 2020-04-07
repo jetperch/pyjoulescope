@@ -4,6 +4,13 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 0.8.11
+
+2020 Apr 7 [in progress]
+
+*   Added View thread exception handling.
+
+
 ## 0.8.8
 
 2020 Mar 23

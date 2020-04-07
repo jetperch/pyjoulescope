@@ -161,6 +161,9 @@ class View:
                     self._update()
                 cmd_count = 0
                 continue
+            except Exception:
+                self._log.exception('Exception during View _cmd_queue get')
+                continue
             cmd_count += 1
             timeout = 0.0
             rv = self._cmd_process(cmd, args)
@@ -169,6 +172,7 @@ class View:
                     cbk(rv)
                 except:
                     self._log.exception('in callback')
+        self._data = None
         self._log.info('View.run done')
 
     def _post(self, command, args=None, cbk=None):
@@ -398,7 +402,6 @@ class View:
         if self._thread is not None:
             self._log.info('close')
             self._join()
-            self._data = None
             on_close, self.on_close = self.on_close, None
             if callable(on_close):
                 try:
