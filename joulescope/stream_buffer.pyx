@@ -223,7 +223,7 @@ def stats_array_invalidate(s):
 
 def stats_compute(data, out):
     cdef uint64_t length = len(data)
-    cdef int64_t idx
+    cdef uint64_t idx
     cdef np.float32_t [::1] data_c = data
     cdef c_running_statistics.statistics_s * s = _stats_ptr(out)
     c_running_statistics.statistics_reset(s)
