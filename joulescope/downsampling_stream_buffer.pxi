@@ -163,12 +163,12 @@ cdef class DownsamplingStreamBuffer:
     def time_to_sample_id(self, t):
         idx_start, idx_end = self.limits_samples
         t_start, t_end = self.limits_time
-        return int(np.round((t - t_start) / (t_end - t_start) * (idx_end - idx_start) + idx_start))
+        return int(np.round((float(t) - t_start) / (t_end - t_start) * (idx_end - idx_start) + idx_start))
 
     def sample_id_to_time(self, s):
         idx_start, idx_end = self.limits_samples
         t_start, t_end = self.limits_time
-        return (s - idx_start) / (idx_end - idx_start) * (t_end - t_start) + t_start
+        return (int(s) - idx_start) / (idx_end - idx_start) * (t_end - t_start) + t_start
 
     def status(self):
         return self._stream_buffer.status()

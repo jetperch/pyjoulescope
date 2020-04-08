@@ -10,6 +10,7 @@ This file contains the list of changes made to pyjoulescope.
 
 *   Added View thread exception handling.
 *   Fixed View.samples_get to correctly supply default start and stop.
+*   Fixed API calls passing numpy.float32/64 rather than python float.
 
 
 ## 0.8.8

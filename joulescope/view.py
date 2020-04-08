@@ -36,7 +36,7 @@ def data_array_to_update(x_limits, x, data_array):
         s = stats_to_api(data_array[0, :], float(x[0]), float(x[-1]))
     else:
         s = stats_to_api(None, 0.0, 0.0)
-    s['time']['x'] = {'value': x, 'units': s}
+    s['time']['x'] = {'value': x, 'units': 's'}
     s['time']['limits'] = {'value': x_limits, 'units': 's'}
     s['state'] = {'source_type': 'buffer'}  # ['realtime', 'buffer']
     for idx, signal in enumerate(s['signals'].values()):
@@ -267,7 +267,7 @@ class View:
         self._state = 'idle'
 
     def _on_x_change(self, cmd, kwargs):
-        x_range = list(self._x_range)
+        x_range = list(self._x_range)  # copy
         if cmd == 'resize':  # {pixels: int}
             length = kwargs['pixels']
             if length is not None and length != len(self):

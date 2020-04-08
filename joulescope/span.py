@@ -17,6 +17,7 @@ Utility functions for managing spans.
 """
 
 import numpy as np
+import math
 import logging
 
 
@@ -31,10 +32,10 @@ class Span:
 
     def __init__(self, limits, quant, length):
         self.limits = None
-        self.quant = quant
+        self.quant = float(quant)
         self._length = 0
         self.limits = self._round_span(limits, 1)
-        self.length = length
+        self.length = int(length)
         log.info(self)
 
     def __str__(self):
@@ -84,18 +85,18 @@ class Span:
 
     def quantize_round(self, value, quants_per, direction=None):
         direction = 0 if direction is None else float(direction)
-        step = self.quant * quants_per
-        value /= float(step)
+        step = float(self.quant * quants_per)
+        value = float(value) / step
         if 0 == direction:
-            value = np.round(value)
+            value = round(value)
         elif direction > 0:
-            value = np.ceil(value)
+            value = math.ceil(value)
         else:
-            value = np.floor(value)
+            value = math.floor(value)
         return value * step
 
     def _bound_steps_per(self, steps_per):
-        steps_per = int(np.round(steps_per))
+        steps_per = int(round(steps_per))
         if steps_per < 1:
             steps_per = 1
         if steps_per > 1 and ((self.length - 1) * self.quant * steps_per) > self.s_limit_max:
@@ -107,7 +108,7 @@ class Span:
     def _quants_per(self, span):
         """Compute the number of quantization steps per sample in a given span"""
         t = span[1] - span[0]
-        return int(np.round((t / (self.length - 1)) / self.quant))
+        return int(round((t / (self.length - 1)) / self.quant))
 
     def conform(self, span):
         """Update a span range to conform to rules.
@@ -155,14 +156,17 @@ class Span:
         if self.length <= 1:
             return span
 
-        s_prev = list(span)
+        s_prev = [float(span[0]), float(span[1])]
         if gain is not None:
             if gain > 1:
                 incr = 1
             elif gain < 1:
                 incr = -1
+            gain = float(gain)
         if pivot is None:
             pivot = (s_prev[1] + s_prev[0]) / 2  # center
+        else:
+            pivot = float(pivot)
         window_sz = s_prev[1] - s_prev[0]
         if window_sz > 0:
             pivot_fract = (pivot - s_prev[0]) / (s_prev[1] - s_prev[0])
@@ -187,7 +191,7 @@ class Span:
         # s[1] = s[0] + (steps_per * self.quant * (self.length - 1))
         # center
         pivot_quant = self.quantize_round(pivot, steps_per, direction=-1)
-        start = pivot_quant - (steps_per * self.quant * np.round(pivot_fract * self.length - 1))
+        start = pivot_quant - (steps_per * self.quant * round(pivot_fract * self.length - 1))
         s[0] = self.quantize_round(start, steps_per)
         s[1] = s[0] + (steps_per * self.quant * (self.length - 1))
 

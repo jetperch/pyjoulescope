@@ -658,12 +658,12 @@ cdef class StreamBuffer:
     def time_to_sample_id(self, t):
         idx_start, idx_end = self.limits_samples
         t_start, t_end = self.limits_time
-        return int(np.round((t - t_start) / (t_end - t_start) * (idx_end - idx_start) + idx_start))
+        return int(round((float(t) - t_start) / (t_end - t_start) * (idx_end - idx_start) + idx_start))
 
     def sample_id_to_time(self, s):
         idx_start, idx_end = self.limits_samples
         t_start, t_end = self.limits_time
-        return (s - idx_start) / (idx_end - idx_start) * (t_end - t_start) + t_start
+        return (int(s) - idx_start) / (idx_end - idx_start) * (t_end - t_start) + t_start
 
     def status(self):
         return {
@@ -1086,6 +1086,8 @@ cdef class StreamBuffer:
         expected_length = (stop - start) // increment
         if out is None:
             out = _stats_array_factory(expected_length, NULL)
+        elif len(out) < expected_length:
+            raise ValueError('out too small')
         out_ptr = _stats_array_ptr(out)
         length = self._data_get(out_ptr, len(out), start, stop, increment)
         if length != expected_length:
@@ -1415,6 +1417,8 @@ cpdef single_stat_to_api(v_mean, v_var, v_min, v_max, units):
 
 
 cdef _stats_to_api(c_running_statistics.statistics_s * stats, t_start, t_stop):
+    t_start = float(t_start)
+    t_stop = float(t_stop)
     dt = t_stop - t_start
     if stats is NULL:
         k = 0
