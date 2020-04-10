@@ -6,7 +6,7 @@ This file contains the list of changes made to pyjoulescope.
 
 ## 0.8.11
 
-2020 Apr 7 [in progress]
+2020 Apr 10
 
 *   Added View thread exception handling.
 *   Fixed View.samples_get to correctly supply default start and stop.
