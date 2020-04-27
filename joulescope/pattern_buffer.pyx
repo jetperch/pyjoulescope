@@ -29,6 +29,7 @@ import logging
 DEF PACKET_TOTAL_SIZE = 512
 DEF PACKET_TOTAL_SIZE_U32 = PACKET_TOTAL_SIZE // 4
 log = logging.getLogger(__name__)
+np.import_array()  # initialize numpy
 
 
 cdef class PatternBuffer:

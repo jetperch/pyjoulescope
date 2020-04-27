@@ -60,6 +60,7 @@ STATS_DTYPE = np.dtype({'names': NP_STATS_NAMES, 'formats': NP_STATS_FORMAT})
 STATS_FIELD_COUNT = _STATS_FIELDS
 assert(len(STATS_FIELD_NAMES) == STATS_FIELD_COUNT)
 log = logging.getLogger(__name__)
+np.import_array()  # initialize numpy
 
 
 NAME_TO_COLUMN = {

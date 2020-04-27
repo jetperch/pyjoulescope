@@ -4,6 +4,14 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 0.8.12
+
+2020 Apr 27 [in progress]
+
+*   Added numpy import_array() to stream_buffer and pattern_buffer.
+
+
+
 ## 0.8.11
 
 2020 Apr 10
