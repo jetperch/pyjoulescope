@@ -1052,6 +1052,8 @@ cdef class StreamBuffer:
             # compute over raw data.
             while start + <int64_t> increment <= stop and buffer_samples:
                 _stats_compute_run(buffer, self.data_ptr, self.bits_ptr, self.length, start, increment)
+                if buffer[0].k == 0:
+                    _stats_invalidate(buffer)
                 buffer = &buffer[_STATS_FIELDS]
                 start += increment
                 buffer_samples -= 1

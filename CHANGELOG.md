@@ -9,6 +9,7 @@ This file contains the list of changes made to pyjoulescope.
 2020 Apr 27 [in progress]
 
 *   Added numpy import_array() to stream_buffer and pattern_buffer.
+*   Invalidate statistics on zero length for file reader and stream buffer.
 
 
 

@@ -15,6 +15,7 @@
 from . import datafile
 from joulescope.calibration import Calibration
 from joulescope.stream_buffer import reduction_downsample, Statistics, stats_to_api, \
+    stats_invalidate, \
     stats_factory, stats_array_factory, stats_array_clear, stats_array_invalidate, \
     STATS_DTYPE, STATS_FIELD_NAMES, STATS_FIELD_COUNT, NP_STATS_NAMES, \
     I_RANGE_MISSING, SUPPRESS_SAMPLES_MAX, RawProcessor, stats_compute
@@ -1102,6 +1103,8 @@ class DataReader:
             v_lsb = np.right_shift(np.bitwise_and(d_bits, 0x20), 5)
             for idx, field in enumerate([i_view, v[zi], p[zi], i_range, i_lsb[zi], v_lsb[zi]]):
                 self._stats_update(stats[idx], field, length)
+        else:
+            stats_invalidate(stats)
         return length
 
     def _statistics_get_handler_float32_v2(self, s1, s2, stats):
@@ -1113,6 +1116,8 @@ class DataReader:
         if length:
             for idx, field in enumerate(STATS_FIELD_NAMES):
                 self._stats_update(stats[idx], rv['signals'][field]['value'][zi], length)
+        else:
+            stats_invalidate(stats)
         return length
 
     def _samples_get_handler_none(self, start, stop, fields, rv):
