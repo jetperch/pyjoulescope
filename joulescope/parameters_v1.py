@@ -331,9 +331,9 @@ def value_to_name(param_name, value):
 
 PARAMETERS_DEFAULTS = {
     'auto': {
-        'source': 'on',
         'i_range': 'auto',
         'v_range': '15V',
+        'source': 'on',
     },
     'off': {
         'source': 'off',

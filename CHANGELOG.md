@@ -4,6 +4,13 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 0.8.13
+
+2020 Apr 29
+
+*   Fixed momentary power OUT power glitch when reconnecting using 'auto'
+
+
 ## 0.8.12
 
 2020 Apr 27
