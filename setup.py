@@ -42,7 +42,7 @@ except ImportError:
 
 
 about = {}
-with open(VERSION_PATH, 'rt') as f:
+with open(VERSION_PATH, 'r', encoding='utf-8') as f:
     exec(f.read(), about)
 
 
@@ -74,7 +74,7 @@ if USE_CYTHON:
 
 
 # Get the long description from the README file
-with open(os.path.join(MYPATH, 'README.md'), encoding='utf-8') as f:
+with open(os.path.join(MYPATH, 'README.md'), 'r', encoding='utf-8') as f:
     long_description = f.read()
 
 
