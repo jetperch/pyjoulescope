@@ -440,6 +440,8 @@ class DataFileWriter:
 
     def collection_start(self, id_=None, type_=None, data=None):
         c = Collection(id_, type_, data=data)
+        # note: append writes start_position=0 and end_position=0.
+        # Both are later updated by collection_end() in normal operation.
         c.start_position = self.append(TAG_COLLECTION_START, c.encode())
         self.collections.append(c)
         return c

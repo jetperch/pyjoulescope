@@ -6,7 +6,7 @@ This file contains the list of changes made to pyjoulescope.
 
 ## 0.8.14
 
-2020 May 8 [in progress]
+2020 May 8
 
 *   Added encoding='utf-8' to setup.py to fix package install on macOS.
 *   Fixed JLS load to better handle truncated files.
