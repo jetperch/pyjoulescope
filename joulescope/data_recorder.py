@@ -462,7 +462,17 @@ class DataReader:
         while True:
             tag, value = self._f.peek()
             if tag is None:
-                raise ValueError('could not read file')
+                if self._data_start_position and self.config is not None:
+                    log.warning('Unexpected file truncation, attempting recovery')
+                    sample_count = self._sample_count()
+                    log.warning('Recovery found %d samples', sample_count)
+                    self.footer = {
+                        'type': 'footer',
+                        'size': sample_count,  # in samples
+                    }
+                else:
+                    raise ValueError('could not read file')
+                break
             elif tag == datafile.TAG_SUBFILE:
                 name, data = datafile.subfile_split(value)
                 if name == 'calibration':
@@ -573,6 +583,26 @@ class DataReader:
     def voltage_range(self):
         """The data file voltage range."""
         return self._voltage_range
+
+    def _sample_count(self):
+        """Count the actual samples in the file.
+
+        WARNING: this operation may be slow.  Use footer when possible.
+        """
+        samples_per_block = self.config['samples_per_block']
+        sample_count = 0
+        self._fh.seek(self._data_start_position)
+
+        while True:
+            tag, _ = self._f.peek_tag_length()
+            if tag is None:
+                break
+            if tag == datafile.TAG_COLLECTION_START:
+                self._f.skip()
+                sample_count += samples_per_block
+            else:
+                self._f.advance()
+        return sample_count
 
     def _validate_range(self, start=None, stop=None, increment=None):
         idx_start, idx_end = self.sample_id_range

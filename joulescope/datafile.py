@@ -529,8 +529,8 @@ class DataFileReader:
     def _read_tag(self):
         remaining_length = self.remaining_length
         if 0 <= remaining_length < 16:
-            log.warning('tag read truncated at %d of %d', self._fh.tell())
-            return None, None, None
+            log.warning('tag read truncated at %d of %d', remaining_length, self._fh.tell())
+            return None, 0, b'', b''
         tag_length = self._fh.read(8)
         tag, flags, length = _parse_tag_start(tag_length)
         log.debug('tag read %s length=%d at %d of %d', tag, length, self._fh.tell(), self.length)
@@ -694,7 +694,8 @@ class DataFileReader:
             tag_str = tag[:3].decode('utf-8')
             if tag == TAG_COLLECTION_START:
                 c = Collection.decode(value)
-                print("%s%s id=%d, type=%d, end=%d" % (indent_str * indent, tag_str, c.id_, c.type_, c.end_position))
+                print("%s%s id=%d, type=%d, start=%d, end=%d" %
+                      (indent_str * indent, tag_str, c.id_, c.type_, c.start_position, c.end_position))
                 indent += 1
             elif tag == TAG_SIGNATURE_END:
                 print("%s%s %s" % (indent_str * indent, tag_str, value))

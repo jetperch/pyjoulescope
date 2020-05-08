@@ -316,6 +316,24 @@ class TestDataRecorder(unittest.TestCase):
         i_mean = k['signals']['current']['value'][0]
         np.testing.assert_allclose(s1['signals']['current']['µ']['value'], i_mean, rtol=0.0005)
 
+    def test_truncated(self):
+        stream_buffer = StreamBuffer(10.0, [10], 1000.0)
+        stream_buffer.suppress_mode = 'off'
+
+        fh = io.BytesIO()
+        d = DataRecorder(fh)
+        d.stream_notify(stream_buffer)
+        count = 16
+        for idx in range(0, 160, count):
+            data = usb_packet_factory(idx, count)
+            stream_buffer.insert(data)
+            stream_buffer.process()
+            d.stream_notify(stream_buffer)
+        fh.seek(0)
+        #r = datafile.DataFileReader(fh)
+        #r.pretty_print()
+        r = DataReader().open(fh)
+
 
 class TestDataRecorderInsert(unittest.TestCase):
 
