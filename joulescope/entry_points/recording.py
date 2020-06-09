@@ -15,6 +15,26 @@
 
 from joulescope.data_recorder import DataReader
 import numpy as np
+import sys
+
+
+SUDO = "sudo " if "linux" in sys.platform else ""
+
+
+MATPLOTLIB_IMPORT_ERROR = f"""
+  _____                            _ 
+ |  ___|                          | |
+ | |__   _ __  _ __   ___   _ __  | |
+ |  __| | '__|| '__| / _ \ | '__| | |
+ | |___ | |   | |   | (_) || |    |_|
+ \____/ |_|   |_|    \___/ |_|    (_)
+
+Could not import matplotlib.
+
+To install matplotlib, type:
+    {SUDO}pip3 install -U matplotlib
+then try running this program again.
+"""
 
 
 def parser_config(p):
@@ -45,6 +65,13 @@ def parser_config(p):
 
 
 def on_cmd(args):
+    if args.plot_reduction or args.plot or args.plot_raw:
+        try:
+            import matplotlib.pyplot as plt
+        except:
+            print(MATPLOTLIB_IMPORT_ERROR)
+            return 1
+
     r = DataReader().open(args.filename)
     print(r.summary_string())
     start = args.start
@@ -63,7 +90,6 @@ def on_cmd(args):
             np.savetxt(args.export, data, fmt='%.5g', delimiter=',')
 
     if args.plot_reduction:
-        import matplotlib.pyplot as plt
         y = r.get_reduction(start, stop)
         x = np.arange(len(y)) * (r.config['samples_per_reduction'] / r.config['sampling_frequency'])
         f = plt.figure()
@@ -79,7 +105,6 @@ def on_cmd(args):
         plt.close(f)
 
     if args.plot:
-        import matplotlib.pyplot as plt
         k = r.samples_get(start, stop, units='samples', fields=['current', 'voltage'])
         i = k['signals']['current']['value']
         v = k['signals']['voltage']['value']
@@ -102,7 +127,6 @@ def on_cmd(args):
         plt.close(f)
 
     if args.plot_raw:
-        import matplotlib.pyplot as plt
         if stop - start > 2000000:
             print('Time range too long, cannot --plot-raw')
         else:

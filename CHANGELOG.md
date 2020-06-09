@@ -9,6 +9,7 @@ This file contains the list of changes made to pyjoulescope.
 2020 Jun 9 [in progress]
 
 *   Updated installation instructions.
+*   Clearly display matplotlib not installed error for recordings entry point.
 
 
 ## 0.8.14
