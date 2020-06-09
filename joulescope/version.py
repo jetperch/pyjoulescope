@@ -1,4 +1,4 @@
-__version__ = "0.8.14"
+__version__ = "0.8.17"
 
 __title__ = "joulescope"
 __description__ = 'Joulescope™ host driver and utilities'

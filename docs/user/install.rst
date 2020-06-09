@@ -40,7 +40,7 @@ The easiest way to install Python on macOS is through
 `Homebrew <https://brew.sh/>`_.  Follow the instructions to install brew,
 then type::
 
-    $ brew install python3
+    $ brew install python3 libusb
     $ python3 -VV
 
 
@@ -50,7 +50,7 @@ Linux
 Use your package manager to install python.  On Debian-based systems, including
 Ubuntu, use apt:
 
-    $ sudo apt install python3-dev python3-pip
+    $ sudo apt install python3-dev python3-pip libusb-1.0
     $ python3 -VV
 
 
@@ -128,7 +128,7 @@ Developing Joulescope
 If you plan on developing pyjoulescope, you probably want to run directly
 from the source code directory.  First, install the dependencies::
 
-    pip3 install -r requirements.txt
+    pip3 install -U -r requirements.txt
     
 You can then build the native modules and adjust your PYTHONPATH so that
 python finds the joulescope package.

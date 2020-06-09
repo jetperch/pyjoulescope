@@ -4,6 +4,13 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 0.8.17
+
+2020 Jun 9 [in progress]
+
+*   Updated installation instructions.
+
+
 ## 0.8.14
 
 2020 May 8
