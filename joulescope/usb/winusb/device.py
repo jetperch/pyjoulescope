@@ -31,6 +31,7 @@ log = logging.getLogger(__name__)
 _winusb = windll.winusb
 
 TICK_INTERVAL = 1.0  # seconds
+BULK_IN_LENGTH = 512
 
 # Set the control timeout in milliseconds
 # WinUSB cannot cancel control transfers.
@@ -249,7 +250,7 @@ class EndpointIn:
         self._overlapped_free = []
         self._overlapped_pending = []
         self._transfers = transfers
-        self._transfer_size = (block_size + 511 // 512)
+        self._transfer_size = ((block_size + BULK_IN_LENGTH - 1) // BULK_IN_LENGTH) * BULK_IN_LENGTH
         self._data_fn = data_fn
         self._process_fn = process_fn
         self._stop_fn = stop_fn
