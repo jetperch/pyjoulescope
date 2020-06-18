@@ -18,6 +18,9 @@ The USB backend which must be implemented for each platform type.
 This module defines the USB backend.  Each target platform
 (such as Windows, Mac OS/X and Linux), must implement backend that conforms
 to this API.
+
+This API is **not** thread-safe.  All methods and functions must be invoked
+from a single thread.
 """
 
 
@@ -29,7 +32,11 @@ class DeviceEvent:
 
 
 class DeviceDriverApi:
-    """The device driver API."""
+    """The device driver API.
+
+    This API is **not** thread-safe.  All methods must be invoked from a
+    single thread.
+    """
 
     def __str__(self):
         """Get the user-friendly device string.

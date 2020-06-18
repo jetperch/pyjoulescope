@@ -11,6 +11,7 @@ This file contains the list of changes made to pyjoulescope.
 *   Updated installation instructions.
 *   Clearly display matplotlib not installed error for recordings entry point.
 *   Added numeric option to buffer_duration and reduction_frequency parameters.
+*   Clarified documentation stating that USB API is NOT thread-safe.
 
 
 ## 0.8.14
