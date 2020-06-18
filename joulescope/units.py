@@ -29,6 +29,7 @@ RE_IS_NUMBER = re.compile('^\s*([-+]?[0-9]*\.?[0-9]+)\s*(.*)')
 
 FIELD_UNITS = {
     'current': 'A',
+    'charge': 'C',
     'voltage': 'V',
     'power': 'W',
     'energy': 'J',

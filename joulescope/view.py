@@ -15,7 +15,6 @@
 from joulescope import span
 from joulescope.stream_buffer import StreamBuffer, stats_to_api, \
     stats_array_factory, stats_array_invalidate
-from joulescope.units import FIELD_UNITS
 import threading
 import queue
 import numpy as np

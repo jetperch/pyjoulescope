@@ -1121,7 +1121,7 @@ cdef class StreamBuffer:
             * current_lsb: The current LSB, which can be assign to a general purpose input.
             * voltage_lsb: The voltage LSB, which can be assign to a general purpose input.
 
-        :return: The dict containing top-level 'time ' and 'signals' keys.
+        :return: The dict containing top-level 'time' and 'signals' keys.
             The 'time' value is a dict contain the timing metadata for
             these samples.  The 'signals' value is a dict with one
             key for each field in fields.  Each field value is also
