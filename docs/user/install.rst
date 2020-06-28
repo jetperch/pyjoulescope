@@ -69,6 +69,23 @@ If your system does not meet these requirements, then the installation will
 fail with an error message.
 
 
+Troubleshooting
+---------------
+
+If you get an error showing "CERTIFICATE_VERIFY_FAILED", your corporate 
+IT policy is likely blocking the pypi SSL certificate.  You have several
+options:
+
+A. Contact your IT department to correct the problem.
+
+B. Ignore the SSL validation (slight security risk)::
+
+    pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org -U joulescope
+
+For more discussion, see `StackOverflow <https://stackoverflow.com/questions/25981703/pip-install-fails-with-connection-error-ssl-certificate-verify-failed-certi>`.
+
+
+
 Install from Source
 ===================
 

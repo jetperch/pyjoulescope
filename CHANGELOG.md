@@ -6,12 +6,14 @@ This file contains the list of changes made to pyjoulescope.
 
 ## 0.8.17
 
-2020 Jun 9 [in progress]
+2020 Jun 28 [in progress]
 
 *   Updated installation instructions.
 *   Clearly display matplotlib not installed error for recordings entry point.
 *   Added numeric option to buffer_duration and reduction_frequency parameters.
 *   Clarified documentation stating that USB API is NOT thread-safe.
+*   Added install troubleshooting section to documentation.
+*   Updated documentation to sphinx 3 and recommonmark (m2r not maintained).
 
 
 ## 0.8.14
