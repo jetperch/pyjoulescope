@@ -48,10 +48,20 @@ Linux
 -----
 
 Use your package manager to install python.  On Debian-based systems, including
-Ubuntu, use apt:
+Ubuntu, use apt::
 
     $ sudo apt install python3-dev python3-pip libusb-1.0
     $ python3 -VV
+    
+The user must have sufficient permissions to access Joulescopes.
+Many linux systems, including Debian, Ubuntu, and Raspberry Pi OS, use udev.
+We include a 
+`udev script <https://github.com/jetperch/pyjoulescope/blob/master/99-joulescope.rules>`_ 
+in the repository to give permissions to all users.  To install it::
+
+    $ wget https://raw.githubusercontent.com/jetperch/pyjoulescope/master/99-joulescope.rules
+    $ sudo cp 99-joulescope.rules /etc/udev/rules.d/
+    $ sudo udevadm control --reload-rules
 
 
 Install from PyPI
@@ -80,7 +90,7 @@ A. Contact your IT department to correct the problem.
 
 B. Ignore the SSL validation (slight security risk)::
 
-    pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org -U joulescope
+    pip3 install --trusted-host pypi.org --trusted-host files.pythonhosted.org -U joulescope
 
 For more discussion, see `StackOverflow <https://stackoverflow.com/questions/25981703/pip-install-fails-with-connection-error-ssl-certificate-verify-failed-certi>`.
 
@@ -104,11 +114,11 @@ or the ZIP file (Windows)::
     
 Change directory into the extracted file.  Install the developer dependencies::
 
-    pip install -U -e .[dev]
+    pip3 install -U -e .[dev]
 
 If you plan on using pyjoulescope, you should install it::
 
-    pip install -U .
+    pip3 install -U .
 
 
 Using virtualenv
@@ -118,22 +128,22 @@ Although not required, the developers recommend using
 [virtualenv](https://virtualenv.pypa.io/en/latest/) to minimize any
 dependency conflicts with different python applications.
 
-First install virtualenv:
+First install virtualenv::
 
-    pip3 install virtualenv
+    pip3 install -U virtualenv
     
-And then create a new virtual environment.
+And then create a new virtual environment::
 
     virtualenv ~/venv/joulescope
 
 You need to activate the virtual environment whenever you start
 a new terminal.
     
-On POSIX (Linux, Mac OS X with homebrew):
+On POSIX (Linux, Mac OS X with homebrew)::
 
     source ~/venv/joulescope/bin/activate
     
-On Windows:
+On Windows::
 
     virtualenv c:\venv\joulescope
     source c:\venv\joulescope\Scripts\activate
