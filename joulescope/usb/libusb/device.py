@@ -134,7 +134,7 @@ class _libusb_transfer(Structure):
         ('endpoint_id', c_uint8),
         ('endpoint_type', c_uint8),
         ('timeout_ms', c_uint),
-        ('status', c_uint),
+        ('status', c_int),  # enum libusb_transfer_status
         ('length', c_int),
         ('actual_length', c_int),
         ('callback', libusb_transfer_cb_fn),

@@ -20,7 +20,7 @@ Optimized Cython native Joulescope code for digital pattern testing.
 
 # cython: boundscheck=False, wraparound=False, nonecheck=False, overflowcheck=False, cdivision=True
 
-from libc.stdint cimport uint8_t, uint16_t, uint32_t, uint64_t, int32_t, int64_t
+from libc.stdint cimport uint8_t, uint16_t, uint32_t, uint64_t, int32_t, int64_t, UINT64_MAX
 import numpy as np
 cimport numpy as np
 import logging
@@ -50,7 +50,7 @@ cdef class PatternBuffer:
         self._reset()
 
     def __len__(self):
-        return 2**63 - 1
+        return UINT64_MAX
 
     @property
     def sample_id_max(self):
