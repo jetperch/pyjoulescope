@@ -446,7 +446,8 @@ class View:
             data structure from the view thread.
         :return: The statistics data structure or None if callback is provided.
 
-        Note: this same format is used by the :meth:`Driver.statistics_callback`.
+        Note: this same format is used by the
+        :meth:`Driver.statistics_callback_register`.
         See joulescope.stream_buffer.stats_to_api for details.
         """
         args = {'start': start, 'stop': stop, 'units': units}

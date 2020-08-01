@@ -177,6 +177,82 @@ def _reduction_frequency_to_reductions(frequency):
         return [200, int((200 * 50) // frequency)]  # two reduction levels
 
 
+def _statistics_unpack(pdu_section):
+    values = struct.unpack('<qqqqiiiiiiiiiiii', pdu_section)
+    samples_total, power_mean, charge, energy, samples_this, \
+        samples_per_update, samples_per_second, \
+        current_mean, current_min, current_max, \
+        voltage_mean, voltage_min, voltage_max, \
+        power_min, power_max, _ = values
+
+    if not samples_this:
+        return None
+
+    s_start = (samples_total - samples_this)
+    s_end = samples_total
+    t_start = s_start / samples_per_second
+    t_end = s_end / samples_per_second
+    t_delta = t_end - t_start
+    nan = float('nan')
+
+    current_mean /= (1 << 27)
+    current_min /= (1 << 27)
+    current_max /= (1 << 27)
+    voltage_mean /= (1 << 17)
+    voltage_min /= (1 << 17)
+    voltage_max /= (1 << 17)
+    power_mean /= (1 << 34)
+    power_min /= (1 << 21)
+    power_max /= (1 << 21)
+    charge /= (1 << 27)
+    energy /= (1 << 27)
+
+    s = {
+        'time': {
+            'range': {'value': [t_start, t_end], 'units': 's'},
+            'delta': {'value': t_delta, 'units': 's'},
+            'samples': {'value': samples_this, 'units': 'samples'},
+        },
+        'signals': {
+            'current': {
+                'µ': {'value': current_mean, 'units': 'A'},
+                'σ2': {'value': nan, 'units': 'A'},
+                'min': {'value': current_min, 'units': 'A'},
+                'max': {'value': current_max, 'units': 'A'},
+                'p2p': {'value': current_max - current_min, 'units': 'A'},
+                '∫': {'value': current_mean * t_delta, 'units': 'C'},
+            },
+            'voltage': {
+                'µ': {'value': voltage_mean, 'units': 'V'},
+                'σ2': {'value': nan, 'units': 'V'},
+                'min': {'value': voltage_min, 'units': 'V'},
+                'max': {'value': voltage_max, 'units': 'V'},
+                'p2p': {'value': voltage_max - voltage_min, 'units': 'V'},
+            },
+            'power': {
+                'µ': {'value': power_mean, 'units': 'W'},
+                'σ2': {'value': nan, 'units': 'W'},
+                'min': {'value': power_min, 'units': 'W'},
+                'max': {'value': power_max, 'units': 'W'},
+                'p2p': {'value': power_max - power_min, 'units': 'W'},
+                '∫': {'value': power_mean * t_delta, 'units': 'J'},
+            },
+        },
+        'accumulators': {
+            'charge': {
+                'value': charge,
+                'units': 'C',
+            },
+            'energy': {
+                'value': energy,
+                'units': 'J',
+            },
+        },
+        'source': 'sensor',
+    }
+    return s
+
+
 class Device:
     """The device implementation for use by applications.
 
@@ -195,14 +271,14 @@ class Device:
         self._parameters = {}
         self._input_sampling_frequency = SAMPLING_FREQUENCY
         self._output_sampling_frequency = SAMPLING_FREQUENCY  # cached on open
-        self._statistics_callback = None
+        self._statistics_callbacks = {'stream_buffer': [], 'sensor': []}
+        self._statistics_offsets = {'stream_buffer': [], 'sensor': []}
         self.stream_buffer = None
         self._streaming = False
         self._stop_fn = None
         self._process_objs = []  #: list of :class:`StreamProcessApi` compatible instances
         self._process_objs_add = []  #: list of :class:`StreamProcessApi` compatible instances
         self.calibration = None
-        self._statistics_callback = None
         self._parameters_defaults = PARAMETERS_DEFAULTS
         for p in PARAMETERS:
             if 'read_only' not in p.flags and p.default is not None:
@@ -238,7 +314,11 @@ class Device:
     @property
     def statistics_callback(self):
         """Get the registered statistics callback."""
-        return self._statistics_callback
+        cbks = self._statistics_callbacks['stream_buffer']
+        if len(cbks):
+            return cbks[0]
+        else:
+            return None
 
     @statistics_callback.setter
     def statistics_callback(self, cbk):
@@ -250,9 +330,65 @@ class Device:
             This function will be called from the USB processing thread.
             Any calls back into self MUST BE resynchronized.
         """
-        self._statistics_callback = cbk
-        if self.stream_buffer is not None:
-            self.stream_buffer.callback = cbk
+        self._statistics_callbacks['stream_buffer'] = [cbk]
+
+    def statistics_callback_register(self, cbk, source=None):
+        """Register a statistics callback.
+
+        :param cbk: The callable(data) where data is a statistics data
+            structure.  See :func:`joulescope.stream_buffer.stats_to_api` for
+            details on the data format.
+            This function will be called from the USB processing thread.
+            Any calls back into self MUST BE resynchronized.
+        :param source: The statistics source where the computation is performed.
+            which is one of:
+            * stream_buffer: The host-side stream buffer (default).
+            * sensor: The device-side FPGA.
+
+        WARNING: calling :meth:`statistics_callback` after calling this method
+        may result in unusual behavior.  Do not mix these API calls.
+        """
+        source = 'stream_buffer' if source is None else source
+        if source not in self._statistics_callbacks:
+            raise ValueError(f'Invalid source: {source}')
+        self._statistics_callbacks[source].append(cbk)
+
+    def statistics_callback_unregister(self, cbk, source=None):
+        """Unregister a statistics callback.
+
+        :param cbk: The callback previously provided to
+            :meth:`statistics_callback_register`.
+        :param source: The callback source.
+        """
+        source = 'stream_buffer' if source is None else source
+        if source not in self._statistics_callbacks:
+            raise ValueError(f'Invalid source: {source}')
+        self._statistics_callbacks[source].remove(cbk)
+
+    def _statistics_callback_handler(self, s):
+        if s is None:
+            return
+        source = s['source']
+        offsets = self._statistics_offsets.get(source, [])
+        if not len(offsets):
+            duration = s['time']['range']['value'][0]
+            charge = s['accumulators']['charge']['value']
+            energy = s['accumulators']['energy']['value']
+            offsets = [duration, charge, energy]
+            self._statistics_offsets[source] = offsets
+            return
+        duration_offset, charge_offset, energy_offset = offsets
+        s['time']['range']['value'] = [x - duration_offset for x in s['time']['range']['value']]
+        s['accumulators']['charge']['value'] -= charge_offset
+        s['accumulators']['energy']['value'] -= energy_offset
+        cbks = self._statistics_callbacks.get(source, [])
+        for cbk in cbks:
+            cbk(s)
+
+    def statistics_accumulators_clear(self):
+        """Clear the charge and energy accumulators."""
+        for offsets in self._statistics_offsets.values():
+            offsets.clear()
 
     def view_factory(self):
         """Construct a new View into the device's data.
@@ -394,8 +530,7 @@ class Device:
             self.stream_buffer = DownsamplingStreamBuffer(stream_buffer_duration, reductions,
                                                           self._input_sampling_frequency,
                                                           self._output_sampling_frequency)
-        if self._statistics_callback is not None:
-            self.stream_buffer.callback = self._statistics_callback
+        self.stream_buffer.callback = self._statistics_callback_handler
 
     def open(self, event_callback_fn=None):
         """Open the device for use.
@@ -411,6 +546,7 @@ class Device:
         """
         if self.stream_buffer:
             self.close()
+        self.statistics_accumulators_clear()
         self._usb.open(event_callback_fn)
         self._stream_buffer_open()
         self._current_ranging_set()
@@ -855,9 +991,11 @@ class Device:
             s = 'usb control transfer failed: {}'.format(usb.get_error_str(rv.result))
             return _status_error(rv.result, s)
         pdu = bytes(rv.data)
-        expected_length = 8 + 16
-        if len(pdu) < expected_length:
-            msg = 'status msg pdu too small: %d < %d' % (len(pdu), expected_length)
+        v1_expected_length = 8 + 16
+        v2_expected_length = 8 + 16 + 4 * 8 + 12 * 4
+        expected_lengths = [v1_expected_length, v2_expected_length]
+        if len(pdu) not in expected_lengths:
+            msg = 'status msg size unexpected: %d not in %s' % (len(pdu), expected_lengths)
             return _status_error(1, msg)
         version, hdr_length, pdu_type = struct.unpack('<BBB', pdu[:3])
         if version != HOST_API_VERSION:
@@ -866,10 +1004,10 @@ class Device:
         if pdu_type != PacketType.STATUS:
             msg = 'status msg pdu_type mismatch: %d != %d' % (pdu_type, PacketType.STATUS)
             return _status_error(1, msg)
-        if hdr_length != expected_length:
-            msg = 'status msg length mismatch: %d != %d' % (hdr_length, expected_length)
+        if hdr_length != len(pdu):
+            msg = 'status msg length mismatch: %d != %d' % (hdr_length, len(pdu))
             return _status_error(1, msg)
-        values = struct.unpack('<iIIBBBx', pdu[8:])
+        values = struct.unpack('<iIIBBBx', pdu[8:v1_expected_length])
         status = {
             'settings_result': {
                 'value': values[0],
@@ -898,8 +1036,12 @@ class Device:
                 'units': '',
             },
         }
+        if hdr_length == v2_expected_length:
+            s = _statistics_unpack(pdu[v1_expected_length:])
+            self._statistics_callback_handler(s)
         for key, value in status.items():
             value['name'] = key
+
         return status
 
     def status(self):

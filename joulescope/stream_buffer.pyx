@@ -1434,6 +1434,7 @@ cdef _stats_to_api(c_running_statistics.statistics_s * stats, t_start, t_stop):
             'samples': {'value': k, 'units': 'samples'},
         },
         'signals': {},
+        'source': 'stream_buffer',
     }
     if stats is not NULL:
         for i, (signal, units, integral_units) in enumerate(_SIGNALS):
