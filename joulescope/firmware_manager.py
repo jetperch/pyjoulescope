@@ -37,8 +37,8 @@ VERSIONS = {
         'format': 'js110_{version}.img',
         # alpha
         # beta
-        'production': '1.1.0',
-        'available': ['1.1.0']
+        'production': '1.3.0',
+        'available': ['1.3.0']
     }
 }
 
