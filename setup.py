@@ -23,11 +23,15 @@ https://github.com/pypa/sampleproject
 
 # Always prefer setuptools over distutils
 import setuptools
-from distutils.command.build import build as build_orig
+import setuptools.dist
 import distutils.cmd
 from distutils.errors import DistutilsExecError
 import os
 import sys
+
+setuptools.dist.Distribution().fetch_build_eggs(['Cython>=0.20.1', 'numpy>=1.18'])
+
+import numpy as np
 
 
 MYPATH = os.path.dirname(os.path.abspath(__file__))
@@ -53,18 +57,18 @@ extensions = [
             'joulescope/stream_buffer' + ext,
             'joulescope/native/running_statistics.c',
         ],
-        include_dirs=[],
+        include_dirs=[np.get_include()],
     ),
     setuptools.Extension('joulescope.filter_fir',
         sources=[
             'joulescope/filter_fir' + ext,
             'joulescope/native/filter_fir.c',
         ],
-        include_dirs=[],
+        include_dirs=[np.get_include()],
     ),
     setuptools.Extension('joulescope.pattern_buffer',
         sources=['joulescope/pattern_buffer' + ext],
-        include_dirs=[],
+        include_dirs=[np.get_include()],
     ),
 ]
 
@@ -82,20 +86,6 @@ if sys.platform.startswith('win'):
     PLATFORM_INSTALL_REQUIRES = ['pypiwin32>=223']
 else:
     PLATFORM_INSTALL_REQUIRES = []
-
-
-# Hack to install numpy before numpy.get_include()
-# https://stackoverflow.com/questions/54117786/add-numpy-get-include-argument-to-setuptools-without-preinstalled-numpy
-class Build(build_orig):
-
-    def finalize_options(self):
-        super().finalize_options()
-        # I stole this line from ead's answer:
-        __builtins__.__NUMPY_SETUP__ = False
-        import numpy
-        for extension in self.distribution.ext_modules:
-            extension.include_dirs.append(numpy.get_include())
-        self.distribution.include_dirs.append(numpy.get_include())
 
 
 class CustomBuildDocs(distutils.cmd.Command):
@@ -181,7 +171,6 @@ setuptools.setup(
     packages=setuptools.find_packages(exclude=['native', 'docs', 'test', 'dist', 'build']),
     ext_modules=extensions,
     cmdclass={
-        'build': Build,
         'docs': CustomBuildDocs,
     },
     include_dirs=[],
