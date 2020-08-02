@@ -6,7 +6,7 @@ This file contains the list of changes made to pyjoulescope.
 
 ## 0.9.0
 
-2020 Aug 1 [in progress]
+2020 Aug 2
 
 *   Updated installation instructions.
 *   Clearly display matplotlib not installed error for recordings entry point.
@@ -15,10 +15,13 @@ This file contains the list of changes made to pyjoulescope.
 *   Added install troubleshooting section to documentation.
 *   Updated documentation to sphinx 3 and recommonmark (m2r not maintained).
 *   Improved installation instructions.
-*   Added support for sensor statistics.
+*   Added support for sensor statistics (modified USB status message).
 *   Added new driver API methods:
     * statistics_callback_register, statistics_callback_unregister
     * statistics_accumulators_clear
+*   Added JOULESCOPE_LOG_LEVEL environment variable.
+*   Reduced default runner log level to WARNING.
+*   Added program "upgrade" option for easy, complete firmware update.
 
 
 ## 0.8.14
