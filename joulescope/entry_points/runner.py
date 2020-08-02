@@ -16,6 +16,7 @@
 """Joulescope command-line utility."""
 
 
+import os
 import sys
 import argparse
 import logging
@@ -30,6 +31,23 @@ parser_config(subparser) function.  The function must return the callable(args)
 that will be executed for the command."""
 
 
+_LOG_LEVELS = {
+    'OFF': 100,
+    'CRITICAL': logging.CRITICAL,
+    'ERROR': logging.ERROR,
+    'WARNING': logging.WARNING,
+    'INFO': logging.INFO,
+    'DEBUG': logging.DEBUG,
+    'ALL': 0,
+}
+
+_EPILOG = f"""\
+Set the JOULESCOPE_LOG_LEVEL environment variable to change the logging level.
+Options are [{', '.join(_LOG_LEVELS.keys())}].
+The default is WARNING.
+"""
+
+
 try:
     from joulescope_ui.entry_points import ui as ui_entry_point
     entry_points.insert(0, ui_entry_point)
@@ -38,7 +56,10 @@ except ImportError:
 
 
 def get_parser():
-    parser = argparse.ArgumentParser(description='Joulescope™ command line tools.')
+    parser = argparse.ArgumentParser(
+        description='Joulescope™ command line tools.',
+        epilog=_EPILOG,
+    )
     subparsers = parser.add_subparsers(
         dest='subparser_name',
         help='The command to execute')
@@ -59,7 +80,9 @@ def get_parser():
 
 
 def run():
-    logging.basicConfig(level=logging.INFO,
+    log_level = os.environ.get('JOULESCOPE_LOG_LEVEL', 'WARNING').upper()
+    log_level = _LOG_LEVELS.get(log_level, logging.WARNING)
+    logging.basicConfig(level=log_level,
                         format="%(levelname)s:%(asctime)s:%(filename)s:%(lineno)d:%(name)s:%(message)s")
     parser = get_parser()
     args = parser.parse_args()
