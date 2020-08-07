@@ -4,6 +4,14 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 0.9.1
+
+2020 Aug 7
+
+*   Fixed PatternBuffer.__len__, which was breaking the unit test in Python 3.8.
+
+
+
 ## 0.9.0
 
 2020 Aug 2
