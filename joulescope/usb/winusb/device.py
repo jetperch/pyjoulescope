@@ -840,11 +840,12 @@ class WinUsbDevice:
                 log.info(msg)
                 if endpoint.stop_code > 0:
                     self._abort(endpoint.stop_code, msg)
-            self._control_transfer.process()
-            if self._control_transfer.stop_code is not None and self._control_transfer.stop_code > 0:
-                msg = 'Control pipe %r stopped: %s' % (pipe_id, self._control_transfer.stop_code)
-                log.info(msg)
-                self._abort(self._control_transfer.stop_code, msg)
+            if self._control_transfer is not None:
+                self._control_transfer.process()
+                if self._control_transfer.stop_code is not None and self._control_transfer.stop_code > 0:
+                    msg = 'Control pipe %r stopped: %s' % (pipe_id, self._control_transfer.stop_code)
+                    log.info(msg)
+                    self._abort(self._control_transfer.stop_code, msg)
 
 
 def scan(name: str) -> List[WinUsbDevice]:
