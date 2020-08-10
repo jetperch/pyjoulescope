@@ -229,8 +229,20 @@ class TestRawProcessor(unittest.TestCase):
                 np.testing.assert_allclose(g * 550, cal[16:z, 0])
                 np.testing.assert_allclose(g * 100, cal[z:, 0])
 
+    def test_interp_1_7_1(self):
+        k = 7
+        cal, _ = self.generate(f'interp_1_{k}_1', i_range=(3, 2))
+        g = 0.1 ** 3
+        idx_end = 15 + k + 2
+        v_start = g * 1000
+        v_end = g * 10000
+        v_interp = np.linspace(v_start, v_end, k + 2)
+        np.testing.assert_allclose(v_start, cal[10:15, 0])
+        np.testing.assert_allclose(v_interp, cal[15:idx_end, 0])
+        np.testing.assert_allclose(v_end, cal[idx_end:, 0])
+
     def test_suppress_history_rollover_2_1_0(self):
-        for k in range(16, 25):
+        for k in range(14, 25):
             with self.subTest(i=k):
                 cal, _ = self.generate('mean_2_1_0', range_idx=k)
                 y = np.mean(cal[(k - 2):k, 0])

@@ -207,17 +207,18 @@ PARAMETERS = [
         name='current_ranging_type',
         brief='The filter type.',
         path='current_ranging',
-        default='mean',
+        default='interp',
         options=[
             ('off', 'off'),
             ('mean', 'mean'),
+            ('interp', 'interp', ['interpolate']),
             ('NaN', 'nan', ['nan'])
         ],
     ),
     Parameter(
         name='current_ranging_samples_pre',
         brief='The number of samples before the range switch to include.',
-        detail='Only valid for type "mean" - ignored for "off" and "NaN".',
+        detail='Only valid for type "mean" - ignored for "off", "interp", and "NaN".',
         path='current_ranging',
         default='2',
         options=[(str(d), d, [d]) for d in range(9)]
@@ -233,7 +234,7 @@ PARAMETERS = [
     Parameter(
         name='current_ranging_samples_post',
         brief='The number of samples after the range switch to include.',
-        detail='Only valid for type "mean" - ignored for "off" and "NaN".',
+        detail='Only valid for type "mean" - ignored for "off", "interp", and "NaN".',
         path='current_ranging',
         default='2',
         options=[(str(d), d, [d]) for d in range(9)]
