@@ -27,7 +27,6 @@ def parser_config(p):
 
 def on_cmd(args):
     device = scan_require_one(name='Joulescope', config='auto')
-    update_period = 0.033
     quit_ = False
     data_queue = Queue()
 

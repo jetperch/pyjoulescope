@@ -226,10 +226,11 @@ PARAMETERS = [
     Parameter(
         name='current_ranging_samples_window',
         brief='The number of samples to adjust.',
-        detail='Use "n" for automatic duration based upon known response time.',
+        detail='Use "n" for automatic duration based upon known response time. ' +
+               'Use "m" for shorter automatic duration that may result in min/max distortion.',
         path='current_ranging',
         default='n',
-        options=[('n', 'n', [])] + [(str(d), d, [d]) for d in range(13)]
+        options=[('m', 'm'), ('n', 'n')] + [(str(d), d, [d]) for d in range(13)]
     ),
     Parameter(
         name='current_ranging_samples_post',

@@ -28,17 +28,31 @@ DEF SUPPRESS_MODE_NAN = 3
 SUPPRESS_SAMPLES_MAX = _SUPPRESS_SAMPLES_MAX
 I_RANGE_MISSING = _I_RANGE_MISSING
 
+# experimentally determined charge coupling durations in samples at 2 MSPS
+# These values are aggressive and result in min/max distortion
+cdef uint8_t[9][9] SUPPRESS_MATRIX_M = [   # [to][from]
+    #0, 1, 2, 3, 4, 5, 6, 7, 8    # from this current select
+    [0, 5, 5, 5, 5, 5, 6, 6, 0],  # to 0
+    [3, 0, 5, 5, 5, 6, 7, 8, 0],  # to 1
+    [4, 4, 0, 6, 6, 7, 7, 8, 0],  # to 2
+    [4, 4, 4, 0, 6, 6, 7, 7, 0],  # to 3
+    [4, 4, 4, 4, 0, 6, 7, 6, 0],  # to 4
+    [4, 4, 4, 4, 4, 0, 7, 6, 0],  # to 5
+    [4, 4, 4, 4, 4, 4, 0, 6, 0],  # to 6
+    [0, 0, 0, 0, 0, 0, 0, 0, 0],  # to 7 (off)
+    [0, 0, 0, 0, 0, 0, 0, 0, 0],  # to 8 (missing)
+]
 
 # experimentally determined charge coupling durations in samples at 2 MSPS
-cdef uint8_t[9][9] SUPPRESS_MATRIX = [   # SUPPRESS_MATRIX[to][from]
+cdef uint8_t[9][9] SUPPRESS_MATRIX_N = [   # [to][from]
     #0, 1, 2, 3, 4, 5, 6, 7, 8    # from this current select
     [0, 5, 7, 7, 7, 7, 7, 8, 0],  # to 0
     [3, 0, 7, 7, 7, 7, 7, 8, 0],  # to 1
-    [4, 4, 0, 7, 7, 7, 7, 8, 0],  # to 2
-    [4, 4, 4, 0, 7, 7, 7, 8, 0],  # to 3
-    [4, 4, 4, 4, 0, 7, 7, 8, 0],  # to 4
-    [4, 4, 4, 4, 4, 0, 7, 8, 0],  # to 5
-    [4, 4, 4, 4, 4, 4, 0, 8, 0],  # to 6
+    [5, 5, 0, 7, 7, 7, 7, 8, 0],  # to 2
+    [5, 5, 5, 0, 7, 7, 7, 8, 0],  # to 3
+    [5, 5, 5, 5, 0, 7, 7, 8, 0],  # to 4
+    [5, 5, 5, 5, 5, 0, 7, 8, 0],  # to 5
+    [5, 5, 5, 5, 5, 5, 0, 8, 0],  # to 6
     [0, 0, 0, 0, 0, 0, 0, 0, 0],  # to 7 (off)
     [0, 0, 0, 0, 0, 0, 0, 0, 0],  # to 8 (missing)
 ]
@@ -71,7 +85,8 @@ cdef class RawProcessor:
     cdef float d_cal[_SUPPRESS_SAMPLES_MAX][2]  # as i, v
     cdef uint8_t d_bits[_SUPPRESS_SAMPLES_MAX]   # packed bits: 7:6=0 , 5=voltage_lsb, 4=current_lsb, 3:0=i_range
     cdef float d_history[SUPPRESS_HISTORY_MAX][2]  # as i, v
-    cdef uint8_t d_history_idx
+    cdef uint8_t d_history_idx    
+    cdef uint8_t _suppress_start_idx
     cdef js_stream_buffer_calibration_s _cal
     cdef float cal_i_pre
     cdef raw_processor_cbk_fn _cbk_fn
@@ -89,6 +104,7 @@ cdef class RawProcessor:
     cdef int32_t _suppress_samples_pre     # the number of samples to use before range change
     cdef int32_t _suppress_samples_window  # the total number of samples to suppress after range change
     cdef int32_t _suppress_samples_post
+    cdef uint8_t (*_suppress_matrix)[9][9]
 
     cdef int32_t suppress_count  # the suppress counter, 1 = replace previous
     cdef uint8_t _suppress_mode
@@ -106,9 +122,10 @@ cdef class RawProcessor:
     def __cinit__(self):
         cal_init(&self._cal)
         self._suppress_samples_pre = 2
-        self._suppress_samples_window = 255  # lookup = 'n'
+        self._suppress_samples_window = 0  # use N
         self._suppress_samples_post = 2
         self._suppress_mode = SUPPRESS_MODE_MEAN
+        self._suppress_matrix = &SUPPRESS_MATRIX_N
 
     def __init__(self):
         self.reset()
@@ -140,7 +157,12 @@ cdef class RawProcessor:
             name = 'interp'
         else:
             name = 'mean'
-        window = 'n' if self._suppress_samples_window == 255 else self._suppress_samples_window
+        if self._suppress_matrix == &SUPPRESS_MATRIX_M:
+            window = 'm'
+        elif self._suppress_matrix == &SUPPRESS_MATRIX_N:
+            window = 'n'
+        else:
+            window = self._suppress_samples_window
         return f'{name}_{self._suppress_samples_pre}_{window}_{self._suppress_samples_post}'
 
     @suppress_mode.setter
@@ -164,6 +186,7 @@ cdef class RawProcessor:
         self._suppress_samples_pre = 0
         self._suppress_samples_window = 0
         self._suppress_samples_post = 0
+        self._suppress_matrix = <uint8_t (*)[9][9]> NULL
 
         if isinstance(value, str):
             value = value.lower()
@@ -178,8 +201,10 @@ cdef class RawProcessor:
         pre = max(0, int(parts[1]))
         post = max(0, int(parts[3]))
 
-        if parts[2] == 'n':
-            self._suppress_samples_window = 255
+        if parts[2] == 'm':
+            self._suppress_matrix = &SUPPRESS_MATRIX_M
+        elif parts[2] == 'n':
+            self._suppress_matrix = &SUPPRESS_MATRIX_N
         else:
             window = int(parts[2])
             if window > SUPPRESS_WINDOW_MAX:
@@ -226,6 +251,7 @@ cdef class RawProcessor:
         self.sample_toggle_mask = 0
         self._voltage_range = 0
         self._idx_out = 0
+        self._suppress_start_idx = 0
 
         for idx in range(SUPPRESS_HISTORY_MAX):
             self.d_history[idx][0] = NAN
@@ -308,8 +334,9 @@ cdef class RawProcessor:
 
         # process i_range for glitch suppression
         if (i_range != self._i_range_last) and (SUPPRESS_MODE_OFF != self._suppress_mode):
-            suppress_window = SUPPRESS_MATRIX[i_range][self._i_range_last]
-            if suppress_window and self._suppress_samples_window != 255:
+            if self._suppress_matrix is not NULL:
+                suppress_window = self._suppress_matrix[0][i_range][self._i_range_last]
+            else:
                 suppress_window = self._suppress_samples_window
             if suppress_window:
                 idx = suppress_window + self._suppress_samples_post

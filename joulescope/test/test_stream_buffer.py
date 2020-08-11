@@ -218,11 +218,22 @@ class TestRawProcessor(unittest.TestCase):
         np.testing.assert_allclose(mean_expect, cal[16:19, 0])
         np.testing.assert_allclose(100, cal[19:, 0])
 
+    def test_mean_1_m_1(self):
+        for k in range(6):
+            with self.subTest(i=k):
+                cal, _ = self.generate('mean_1_m_1', i_range=(k, k + 1))
+                n = 3 if k == 0 else 4
+                z = 16 + n
+                g = 0.1 ** k
+                np.testing.assert_allclose(g * 1000, cal[10:16, 0])
+                np.testing.assert_allclose(g * 550, cal[16:z, 0])
+                np.testing.assert_allclose(g * 100, cal[z:, 0])
+
     def test_mean_1_n_1(self):
         for k in range(6):
             with self.subTest(i=k):
                 cal, _ = self.generate('mean_1_n_1', i_range=(k, k + 1))
-                n = 3 if k == 0 else 4
+                n = 3 if k == 0 else 5
                 z = 16 + n
                 g = 0.1 ** k
                 np.testing.assert_allclose(g * 1000, cal[10:16, 0])
