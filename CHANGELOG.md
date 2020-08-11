@@ -11,6 +11,8 @@ This file contains the list of changes made to pyjoulescope.
 *   Fixed PatternBuffer.__len__, which was breaking the unit test in Python 3.8.
 *   Eliminated None control transfer reference when closing device under Windows.
 *   Improved statistics entry point to display both statistics sources.
+*   Updated parameter current_ranging value "n" to be more conservative.
+*   Added parameter current_ranging value "m" with original "n" values.
 
 
 ## 0.9.0
