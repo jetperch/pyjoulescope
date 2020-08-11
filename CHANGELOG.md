@@ -13,6 +13,8 @@ This file contains the list of changes made to pyjoulescope.
 *   Improved statistics entry point to display both statistics sources.
 *   Updated parameter current_ranging value "n" to be more conservative.
 *   Added parameter current_ranging value "m" with original "n" values.
+*   Simplified current range filtering.
+*   Bumped firmware revision to 1.3.1 which fixes sensor-based statistics computation.
 
 
 ## 0.9.0
