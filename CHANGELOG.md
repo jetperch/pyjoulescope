@@ -6,7 +6,7 @@ This file contains the list of changes made to pyjoulescope.
 
 ## 0.9.1
 
-2020 Aug 7
+2020 Aug 11
 
 *   Fixed PatternBuffer.__len__, which was breaking the unit test in Python 3.8.
 *   Eliminated None control transfer reference when closing device under Windows.
