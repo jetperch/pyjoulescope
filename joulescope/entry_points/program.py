@@ -112,7 +112,10 @@ def calibration_program(data, is_factory):
 
 
 def _upgrade(filename):
-    d = scan_require_one(name='joulescope')
+    try:
+        d = scan_require_one(name='bootloader')
+    except RuntimeError:
+        d = scan_require_one(name='joulescope')
     d.open()
     upgrade(d, filename, progress_cbk=_progress)
     return 0
