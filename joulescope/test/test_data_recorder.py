@@ -160,7 +160,9 @@ class TestDataRecorder(unittest.TestCase):
 
     def test_write_read_stats_over_samples_offset(self):
         fh = self._create_file(0, 2)
-        r = DataReader().open(fh)
+        r = DataReader()
+        r.raw_processor.suppress_mode = 'off'
+        r.open(fh)
         data = r.data_get(7, 50, 10)
         np.testing.assert_allclose(np.arange(23, 90, 20), data[:, 0]['mean'])
 
@@ -373,7 +375,9 @@ class TestDataRecorderInsert(unittest.TestCase):
 
     def test_create_single(self):
         fh = self._create_file_insert(0, 2, 2)
-        r = DataReader().open(fh)
+        r = DataReader()
+        r.raw_processor.suppress_mode = 'off'
+        r.open(fh)
         self.assertEqual([0, 252], r.sample_id_range)
         self.assertEqual(1000, r.output_sampling_frequency)
         self.assertEqual(1000 / 200, r.reduction_frequency)

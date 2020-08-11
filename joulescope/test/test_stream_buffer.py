@@ -133,7 +133,7 @@ class TestRawProcessor(unittest.TestCase):
         range_idx = 16 if range_idx is None else int(range_idx)
         if i_range is None:
             i_range = 0, 1
-        length = 32
+        length = max(32, range_idx + 16)
         r = RawProcessor()
         r.suppress_mode = mode
         r.calibration_set([-1000] * 7, [0.1 ** x for x in range(7)],
@@ -253,7 +253,7 @@ class TestRawProcessor(unittest.TestCase):
         np.testing.assert_allclose(v_end, cal[idx_end:, 0])
 
     def test_suppress_history_rollover_2_1_0(self):
-        for k in range(14, 25):
+        for k in range(14, 72):
             with self.subTest(i=k):
                 cal, _ = self.generate('mean_2_1_0', range_idx=k)
                 y = np.mean(cal[(k - 2):k, 0])
