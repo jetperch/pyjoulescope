@@ -20,6 +20,9 @@ from joulescope.driver import scan_require_one
 
 def parser_config(p):
     """Display Joulescope statistics."""
+    p.add_argument('--compare',
+                   action='store_true',
+                   help='Compare sensor statistics to host stream_buffer statistics.')
     return on_cmd
 
 
@@ -31,7 +34,8 @@ def on_cmd(args):
         nonlocal quit_
         quit_ = 'quit from SIGINT'
 
-    def statistics_cbk(s):
+    def statistics_cbk(s, indicator=None):
+        indicator = '' if indicator is None else indicator
         t = s['time']['range']['value'][0]
         i = s['signals']['current']['µ']
         v = s['signals']['voltage']['µ']
@@ -46,14 +50,25 @@ def on_cmd(args):
             value = f'{value} {k["units"]}'
             values.append(value)
         ', '.join(values)
-        print(f"{t:.1f}: " + ', '.join(values))
+        print(f"{indicator}{t:.1f}: " + ', '.join(values))
+
+    def on_stop(event=0, message=''):
+        print(f'on_stop {event}: {message}')
 
     signal.signal(signal.SIGINT, do_quit)
     try:
-        device.statistics_callback_register(statistics_cbk, 'sensor')
+        if args.compare:
+            device.statistics_callback_register(lambda s: statistics_cbk(s, '< '), 'sensor')
+            device.statistics_callback_register(lambda s: statistics_cbk(s, '> '), 'stream_buffer')
+        else:
+            device.statistics_callback_register(statistics_cbk, 'sensor')
+        device.parameter_set('buffer_duration', 1)
         device.open()
         device.parameter_set('i_range', 'auto')
         device.parameter_set('v_range', '15V')
+        if args.compare:
+            device.parameter_set('source', 'raw')
+            device.start(stop_fn=on_stop)
         while not quit_:
             device.status()
             time.sleep(0.100)
