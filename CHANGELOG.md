@@ -6,7 +6,7 @@ This file contains the list of changes made to pyjoulescope.
 
 ## 0.9.1
 
-2020 Aug 11
+2020 Aug 12
 
 *   Fixed PatternBuffer.__len__, which was breaking the unit test in Python 3.8.
 *   Eliminated None control transfer reference when closing device under Windows.
@@ -15,6 +15,7 @@ This file contains the list of changes made to pyjoulescope.
 *   Added parameter current_ranging value "m" with original "n" values.
 *   Simplified current range filtering.
 *   Bumped firmware revision to 1.3.1 which fixes sensor-based statistics computation.
+*   Included CREDITS.html and CHANGELOG.md with package.
 
 
 ## 0.9.0
