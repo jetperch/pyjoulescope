@@ -1255,7 +1255,8 @@ class DataReader:
             'seconds' is in floating point seconds relative to the view.
             'samples' or None is in stream buffer sample indices.
         :return: The statistics data structure.
-            See :func:`joulescope.stream_buffer.stats_to_api` for details.
+            See the `statistics documentation <statistics.html>`_
+            for details.
         """
         log.debug('statistics_get(%s, %s, %s)', start, stop, units)
         s1, s2 = self.normalize_time_arguments(start, stop, units)

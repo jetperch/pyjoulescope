@@ -1449,70 +1449,18 @@ cdef _stats_to_api(c_running_statistics.statistics_s * stats, t_start, t_stop):
                 data['signals'][signal]['∫'] = {'value': v_mean * dt, 'units': integral_units}
     return data
 
+
 def stats_to_api(stats, t_start, t_stop):
     """Convert StreamBuffer statistics to API statistics.
 
     :param stats: The np.ndarray(FIELD_COUNT, dtype=DTYPE), such as returned
-        by :method:`StreamBuffer.stats_get`.
+        by :meth:`StreamBuffer.stats_get`.
     :param t_start: The start time in seconds.
     :param t_stop: The stop time in seconds.
     :return: The API statistics data structure.
 
-    The statistics data structure looks like:
-
-        {
-          "time": {
-            "range": {"value": [29.975386, 29.999424], "units": "s"},
-            "delta": {"value": 0.024038, "units": "s"},
-            "samples": {"value": 48076, "units": "samples"}
-          },
-          "signals": {
-            "current": {
-              "µ": {"value": 0.000299379503657111, "units": "A"},
-              "σ2": {"value": 2.2021878912979553e-12, "units": "A"},
-              "min": {"value": 0.00029360855114646256, "units": "A"},
-              "max": {"value": 0.0003051375679206103, "units": "A"},
-              "p2p": {"value": 1.1529016774147749e-05, "units": "A"},
-              "∫": {"value": 0.008981212667119223, "units": "C"}
-            },
-            "voltage": {
-              "µ": {"value": 2.99890387873055,"units": "V"},
-              "σ2": {"value": 1.0830626821348923e-06, "units": "V"},
-              "min": {"value": 2.993824005126953, "units": "V"},
-              "max": {"value": 3.002903699874878, "units": "V"},
-              "p2p": {"value": 0.009079694747924805, "units": "V"}
-            },
-            "power": {
-              "µ": {"value": 0.000897810357252683, "units": "W"},
-              "σ2": {"value": 1.9910494110256852e-11, "units": "W"},
-              "min": {"value": 0.0008803452947176993, "units": "W"},
-              "max": {"value": 0.0009152597631327808, "units": "W"},
-              "p2p": {"value": 3.49144684150815e-05, "units": "W"},
-              "∫": {"value": 0.026933793578814716, "units": "J"}
-            },
-            "current_range": {
-              "µ": {"value": 4.0, "units": ""},
-              "σ2": {"value": 0.0, "units": ""},
-              "min": {"value": 4.0, "units": ""},
-              "max": {"value": 4.0, "units": ""},
-              "p2p": {"value": 0.0, "units": ""}
-            },
-            "current_lsb": {
-              "µ": {"value": 0.5333222397870035, "units": ""},
-              "σ2": {"value": 0.24889270730539995, "units": ""},
-              "min": {"value": 0.0, "units": ""},
-              "max": {"value": 1.0, "units": ""},
-              "p2p": {"value": 1.0, "units": ""}
-            },
-            "voltage_lsb": {
-              "µ": {"value": 0.5333430401863711, "units": ""},
-              "σ2": {"value": 0.24889309698100895, "units": ""},
-              "min": {"value": 0.0, "units": ""},
-              "max": {"value": 1.0, "units": ""},
-              "p2p": {"value": 1.0, "units": ""}
-            }
-          }
-        }
+    For details on the data structure, see the
+    `statistics documentation <statistics.html>`_.
     """
     cdef c_running_statistics.statistics_s [::1] s = stats
     if stats is None:

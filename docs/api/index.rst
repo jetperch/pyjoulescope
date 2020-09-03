@@ -15,6 +15,8 @@ This section is for you!
     device
     stream_buffer
     streaming
+    statistics
     datafile
     data_recorder
+    view
 

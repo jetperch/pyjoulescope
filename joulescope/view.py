@@ -52,6 +52,11 @@ def data_array_to_update(x_limits, x, data_array):
 class View:
 
     def __init__(self, stream_buffer, calibration):
+        """Create a new view instance.
+
+        :param stream_buffer: The stream buffer providing the data.
+        :param calibration: The device calibration data structure.
+        """
         self._state = 'idle'
         self._stream_buffer = None
         self._calibration = calibration
@@ -97,12 +102,14 @@ class View:
 
     @property
     def sampling_frequency(self):
+        """The output sampling frequency."""
         if self._stream_buffer is None:
             return None
         return self._stream_buffer.output_sampling_frequency
 
     @property
     def calibration(self):
+        """The device calibration."""
         return self._calibration
 
     @property
@@ -147,7 +154,7 @@ class View:
         # self._log.debug('_cmd_process %s - done', cmd)
         return rv
 
-    def run(self):
+    def _run(self):
         cmd_count = 0
         timeout = 1.0
         self._log.info('View.run start')
@@ -359,7 +366,9 @@ class View:
     def _statistics_get(self, start=None, stop=None, units=None):
         """Get the statistics for the collected sample data over a time range.
 
-        :return: The statistics data structure.  Here is an example:
+        :return: The statistics data structure.
+            See the :`statistics documentation <statistics.html>`_
+            for details on the data format.
         """
         s1, s2 = self._convert_time_range_to_samples(start, stop, units)
         # self._log.debug('buffer %s, %s, %s => %s, %s', start, stop, units, s1, s2)
@@ -372,18 +381,21 @@ class View:
         return [self._statistics_get(x[0], x[1], units=units) for x in ranges]
 
     def open(self):
+        """Open the view and run the thread."""
         self.close()
         self._log.info('open')
         self._closing = False
-        self._thread = threading.Thread(name='view', target=self.run)
+        self._thread = threading.Thread(name='view', target=self._run)
         self._thread.start()
         self._post_block('ping')
         return
 
     def start(self, stream_buffer: StreamBuffer):
+        """Start streaming."""
         self._post_block('start')
 
     def stop(self):
+        """Stop streaming."""
         if self._thread is not None:
             self._post_block('stop')
 
@@ -398,6 +410,7 @@ class View:
             self._thread = None
 
     def close(self):
+        """Close the view and stop the thread."""
         if self._thread is not None:
             self._log.info('close')
             self._join()
@@ -448,7 +461,8 @@ class View:
 
         Note: this same format is used by the
         :meth:`Driver.statistics_callback_register`.
-        See joulescope.stream_buffer.stats_to_api for details.
+        See the `statistics documentation <statistics.html>`_
+        for details on the data format.
         """
         args = {'start': start, 'stop': stop, 'units': units}
         if callback is None:

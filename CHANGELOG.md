@@ -4,6 +4,13 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 0.9.3
+
+2020 Sep 3 [in progress]
+
+*   Updated documentation: added Statistics API and View.
+
+
 ## 0.9.1
 
 2020 Aug 12
