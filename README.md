@@ -19,7 +19,7 @@ and voltage:
     import numpy as np
     with joulescope.scan_require_one(config='auto') as js:
         data = js.read(contiguous_duration=0.1)
-    current, voltage = np.mean(data, axis=0)
+    current, voltage = np.mean(data, axis=0, dtype=np.float64)
     print(f'{current} A, {voltage} V')
 
 This package also installs the "joulescope" command line tool:
