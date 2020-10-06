@@ -6,7 +6,7 @@ This file contains the list of changes made to pyjoulescope.
 
 ## 0.9.3
 
-2020 Oct 6 [in progress]
+2020 Oct 6
 
 *   Updated documentation: added Statistics API and View.
 *   Updated initial documentation examples to show float64 accumulator.
