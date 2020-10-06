@@ -673,6 +673,7 @@ class Device:
             except:
                 log.exception('USB close failed')
             self._stream_process_call('close')
+            self.stream_buffer.callback = None
             self.stream_buffer = None
 
     def _wait_for_sensor_command(self, timeout=None):

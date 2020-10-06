@@ -11,6 +11,7 @@ This file contains the list of changes made to pyjoulescope.
 *   Updated documentation: added Statistics API and View.
 *   Updated initial documentation examples to show float64 accumulator.
 *   Fixed "calibrated" option to device read().
+*   Clear stream buffer callback on device close.
 
 
 ## 0.9.1
