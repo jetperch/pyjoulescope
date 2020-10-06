@@ -915,7 +915,7 @@ class Device:
         """
         log.info('read(duration=%s, contiguous_duration=%s, out_format=%s)',
                  duration, contiguous_duration, out_format)
-        if out_format not in ['raw', 'calibrate', 'samples_get', None]:
+        if out_format not in ['raw', 'calibrated', 'samples_get', None]:
             raise ValueError(f'Invalid out_format {out_format}')
         if duration is None and contiguous_duration is None:
             raise ValueError('Must specify duration or contiguous_duration')
