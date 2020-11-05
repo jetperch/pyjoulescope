@@ -124,7 +124,7 @@ cdef class RawProcessor:
         self._suppress_samples_pre = 2
         self._suppress_samples_window = 0  # use N
         self._suppress_samples_post = 2
-        self._suppress_mode = SUPPRESS_MODE_MEAN
+        self._suppress_mode = SUPPRESS_MODE_INTERP
         self._suppress_matrix = &SUPPRESS_MATRIX_N
 
     def __init__(self):
@@ -175,6 +175,7 @@ cdef class RawProcessor:
               * 'off': Use the data as provided with no filtering
               * 'nan': Insert NaNs into the window.
               * 'mean': Compute the mean over pre and post, then insert into window.
+              * 'interp': Compute the mean over pre and post, then interpolate.
             * pre: The number of samples before the current range change used to
               compute the value for window.
             * window: The number of samples to modify after the current range change.
@@ -193,7 +194,7 @@ cdef class RawProcessor:
         if value is None or not bool(value) or value == 'off':
             return
         if value == 'normal':
-            value = 'mean_0_n_1'
+            value = 'interp_1_n_1'
         parts = value.split('_')
         if len(parts) != 4:
             raise ValueError(f'Invalid suppress_mode: {value}')
