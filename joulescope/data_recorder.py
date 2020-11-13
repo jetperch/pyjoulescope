@@ -28,8 +28,10 @@ import logging
 log = logging.getLogger(__name__)
 
 DATA_RECORDER_FORMAT_VERSION = '2'
-SAMPLES_PER_BLOCK = 100000
-_REDUCTION_SAMPLES_MINIMUM = 200
+SAMPLES_PER_REDUCTION = 20000   # 100 Hz @ 2 MSPS
+REDUCTIONS_PER_TLV = 20         # 5 Hz @ 2 MSPS
+TLVS_PER_BLOCK = 5              # 1 Hz @ 2 MSPS
+
 _STATS_VALUES_V1 = 4
 
 
@@ -121,12 +123,9 @@ class DataRecorder:
 
     def _initialize(self, sampling_frequency, data_format):
         self._sampling_frequency = sampling_frequency
-        if self._sampling_frequency > 100 * _REDUCTION_SAMPLES_MINIMUM:
-            self._samples_per_reduction = int(self._sampling_frequency) // 100  # 100 Hz @ 2 MSPS
-        else:
-            self._samples_per_reduction = _REDUCTION_SAMPLES_MINIMUM
-        self._samples_per_tlv = self._samples_per_reduction * 20  # ~ 5 Hz @ 2 MSPS
-        self._samples_per_block = self._samples_per_tlv * 5  # ~1 Hz @ 2 MSPS
+        self._samples_per_reduction = SAMPLES_PER_REDUCTION
+        self._samples_per_tlv = self._samples_per_reduction * REDUCTIONS_PER_TLV
+        self._samples_per_block = self._samples_per_tlv * TLVS_PER_BLOCK
 
         # dependent vars
         self._reductions_per_tlv = self._samples_per_tlv // self._samples_per_reduction

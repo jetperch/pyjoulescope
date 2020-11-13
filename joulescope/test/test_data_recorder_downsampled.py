@@ -53,6 +53,8 @@ class TestDataRecorderDownsampled(unittest.TestCase):
     def create_sinusoid_file(self, file_duration, input_sample_rate, output_sample_rate,
                              stream_buffer_duration=None, chunk_size=None):
         stream_buffer_duration = 1.0 if stream_buffer_duration is None else float(stream_buffer_duration)
+        min_duration = 400000 / output_sample_rate
+        stream_buffer_duration = max(stream_buffer_duration, min_duration)
         chunk_size = 1024 if chunk_size is None else int(chunk_size)
         cal = Calibration()
         cal.current_offset[:7] = -3000
@@ -118,3 +120,11 @@ class TestDataRecorderDownsampled(unittest.TestCase):
             i_mean = np.mean(k['signals']['current']['value'])
             np.testing.assert_allclose(s1['signals']['current']['µ']['value'], i_mean, rtol=0.0005)
         r.close()
+
+    @unittest.SkipTest
+    def test_regression_01(self):
+        fname = 'C:/Users/Matth/Documents/joulescope/20201009_185143.jls'
+        r = DataReader().open(fname)
+        s_start, s_stop = r.sample_id_range
+        increment = (s_stop - s_start) // 1000
+        r.data_get(s_start, s_stop, increment, units='samples')

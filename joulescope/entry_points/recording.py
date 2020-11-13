@@ -14,6 +14,7 @@
 
 
 from joulescope.data_recorder import DataReader
+from joulescope.datafile import DataFileReader
 import numpy as np
 import sys
 
@@ -51,6 +52,9 @@ def parser_config(p):
                    help='Plot the raw data with list of plots.'
                         "'i'=current, 'v'=voltage, 'r'=current range. "
                         'Time range must < 2,000,000 samples')
+    p.add_argument('--pretty_print',
+                   action='store_true',
+                   help='Print the file datastructure.')
     p.add_argument('--export',
                    help='Filename for export data.  ".csv" and ".npy" supported.')
     p.add_argument('--start',
@@ -78,6 +82,11 @@ def on_cmd(args):
     stop = args.stop
     if stop < 0:
         stop = r.sample_id_range[1] + 1 + stop
+
+    if args.pretty_print:
+        with open(args.filename, 'rb') as f:
+            rf = DataFileReader(f)
+            rf.pretty_print()
 
     if args.export is not None:
         k = r.samples_get(start, stop, units='samples', fields=['current', 'voltage'])
