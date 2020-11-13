@@ -179,13 +179,15 @@ setuptools.setup(
     python_requires='~=3.6',
 
     setup_requires=[
+        # https://developercommunity.visualstudio.com/content/problem/1207405/fmod-after-an-update-to-windows-2004-is-causing-a.html
         'numpy>=1.15.2',
         'Cython>=0.29.3',
     ],
 
     # See https://packaging.python.org/en/latest/requirements.html
     install_requires=[
-        'numpy>=1.15.2',
+        "numpy==1.19.3; platform_system=='Windows'",
+        "numpy>=1.15.2; platform_system!='Windows'",
         'psutil',
         'python-dateutil>=2.7.3',
         'pymonocypher>=0.1.3',

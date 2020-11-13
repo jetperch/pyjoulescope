@@ -14,6 +14,7 @@ This file contains the list of changes made to pyjoulescope.
 *   Clear stream buffer callback on device close.
 *   Modifed raw_processor suppress_mode to match current_ranging_type defaults.
 *   Improved JLS read performance for downsampled files.
+*   Fixed dependencies for numpy 1.19.4 which does not work on Windows.
 
 
 ## 0.9.1
