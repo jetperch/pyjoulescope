@@ -2,10 +2,10 @@ language: python
 matrix:
   include:
     - os: linux
-      dist: xenial   # required for Python >= 3.7
-      python: 3.7
+      dist: focal   # required for Python >= 3.7
+      python: 3.8
     - os: osx
-      osx_image: xcode11.3
+      osx_image: xcode12.2
       language: shell  # 'language: python' is an error on Travis CI macOS
       before_install:
       - |
@@ -16,10 +16,10 @@ matrix:
     - os: windows
       language: shell  # 'language: python' is an error on Travis CI windows 
       env: >-
-        PATH=/c/Python37:/c/Python37/Scripts:$PATH      
+        PATH=/c/Python39:/c/Python39/Scripts:$PATH      
       before_install:
-        - choco install python --version=3.7.6
-        - cp /c/Python37/python.exe /c/Python37/python3.exe
+        - choco install python --version=3.9.0
+        - cp /c/Python39/python.exe /c/Python39/python3.exe
 addons:
   apt:
     pacakges:
