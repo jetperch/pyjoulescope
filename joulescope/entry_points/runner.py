@@ -20,6 +20,7 @@ import os
 import sys
 import argparse
 import logging
+import traceback
 from joulescope.entry_points import bootloader_go, capture, capture_usb, \
     gpo_demo, info, parameter_set, program, recording, statistics, stream_test
 
@@ -49,9 +50,14 @@ The default is WARNING.
 
 
 try:
+    _ui_error_msg = None
     from joulescope_ui.entry_points import ui as ui_entry_point
     entry_points.insert(0, ui_entry_point)
 except ImportError:
+    if len(sys.argv) == 1 or sys.argv[1] == 'ui':
+        print('')
+        traceback.print_exc()
+        print('')
     ui_entry_point = None
 
 

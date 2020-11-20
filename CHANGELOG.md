@@ -6,7 +6,7 @@ This file contains the list of changes made to pyjoulescope.
 
 ## 0.9.3
 
-2020 Nov 11 [in progress]
+2020 Nov 20 [in progress]
 
 *   Updated documentation: added Statistics API and View.
 *   Updated initial documentation examples to show float64 accumulator.
@@ -15,6 +15,7 @@ This file contains the list of changes made to pyjoulescope.
 *   Modifed raw_processor suppress_mode to match current_ranging_type defaults.
 *   Improved JLS read performance for downsampled files.
 *   Fixed dependencies for numpy 1.19.4 which does not work on Windows.
+*   Added UI import traceback print when applicable.
 
 
 ## 0.9.1
