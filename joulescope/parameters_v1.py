@@ -220,7 +220,7 @@ PARAMETERS = [
         brief='The number of samples before the range switch to include.',
         detail='Only valid for type "mean" - ignored for "off", "interp", and "NaN".',
         path='current_ranging',
-        default='2',
+        default='1',
         options=[(str(d), d, [d]) for d in range(9)]
     ),
     Parameter(
@@ -237,7 +237,7 @@ PARAMETERS = [
         brief='The number of samples after the range switch to include.',
         detail='Only valid for type "mean" - ignored for "off", "interp", and "NaN".',
         path='current_ranging',
-        default='2',
+        default='1',
         options=[(str(d), d, [d]) for d in range(9)]
     ),
 
