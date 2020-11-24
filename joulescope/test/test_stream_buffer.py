@@ -374,8 +374,9 @@ class TestStreamBuffer(unittest.TestCase):
         r = b.get_reduction(0, 0, 126)
         self.assertTrue(all(np.isfinite(r[:, 0]['mean'])))
 
-    def test_get_over_reduction_direct_with_reduction0_nan(self):
+    def test_get_over_reduction_direct_with_reduction0_nan_mean(self):
         b = StreamBuffer(2.0, [10, 10], 1000.0)
+        b.suppress_mode = 'mean_1_n_1'
         frame = usb_packet_factory(0, 1)
         frame[8+10*4:8+22*4:] = 0xff
         b.insert(frame)
@@ -383,7 +384,19 @@ class TestStreamBuffer(unittest.TestCase):
         r0 = b.get_reduction(0, 0, 126)
         self.assertFalse(np.isfinite(r0[1, 0]['mean']))
         r1 = b.get_reduction(1, 0, 126)
-        self.assertTrue(np.isfinite(r0[0, 0]['mean']))
+        self.assertTrue(np.isfinite(r1[0, 0]['mean']))
+
+    def test_get_over_reduction_direct_with_reduction0_nan_interp(self):
+        b = StreamBuffer(2.0, [10, 10], 1000.0)
+        self.assertEqual('interp_1_n_1', b.suppress_mode)
+        frame = usb_packet_factory(0, 1)
+        frame[8+10*4:8+22*4:] = 0xff
+        b.insert(frame)
+        b.process()
+        r0 = b.get_reduction(0, 0, 126)
+        self.assertFalse(np.isfinite(r0[1, 0]['mean']))
+        r1 = b.get_reduction(1, 0, 126)
+        self.assertTrue(np.isfinite(r1[0, 0]['mean']))
 
     def test_calibration(self):
         b = StreamBuffer(2.0, [10, 10], 1000.0)

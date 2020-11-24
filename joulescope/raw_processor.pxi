@@ -121,9 +121,9 @@ cdef class RawProcessor:
 
     def __cinit__(self):
         cal_init(&self._cal)
-        self._suppress_samples_pre = 2
+        self._suppress_samples_pre = 1
         self._suppress_samples_window = 0  # use N
-        self._suppress_samples_post = 2
+        self._suppress_samples_post = 1
         self._suppress_mode = SUPPRESS_MODE_INTERP
         self._suppress_matrix = &SUPPRESS_MATRIX_N
 
@@ -246,7 +246,7 @@ cdef class RawProcessor:
 
         self._suppress_samples_remaining = 0
         self._suppress_samples_counter = 0
-        self._i_range_last = 7
+        self._i_range_last = 7  # off
 
         self.sample_toggle_last = 0
         self.sample_toggle_mask = 0
@@ -280,6 +280,7 @@ cdef class RawProcessor:
         cdef uint8_t suppress_window
         cdef int32_t suppress_idx
         cdef int32_t idx
+        cdef int32_t idx_wrap
         cdef uint8_t bits
         cdef uint8_t i_range
         cdef uint16_t sample_toggle_current
@@ -318,6 +319,7 @@ cdef class RawProcessor:
         if i_range > 7:  # missing sample
             cal_i = NAN
             cal_v = NAN
+            i_range = _I_RANGE_MISSING
         else:
             cal_i = <float> raw_i
             cal_i += self._cal.current_offset[i_range]
@@ -348,11 +350,11 @@ cdef class RawProcessor:
                     # sum samples over pre for mean computation
                     self.cal_i_pre = 0
                     for idx in range(self._suppress_samples_pre):
-                        idx = (self._idx_out - self._suppress_samples_pre + idx) & _SUPPRESS_SAMPLES_MASK
-                        self.cal_i_pre += self.d_cal[idx][0]
+                        idx_wrap = (self._idx_out - self._suppress_samples_pre + idx) & _SUPPRESS_SAMPLES_MASK
+                        self.cal_i_pre += self.d_cal[idx_wrap][0]
                 else:
-                    idx = (self._idx_out - 1) & _SUPPRESS_SAMPLES_MASK
-                    self.cal_i_pre = self.d_cal[idx][0]
+                    idx_wrap = (self._idx_out - 1) & _SUPPRESS_SAMPLES_MASK
+                    self.cal_i_pre = self.d_cal[idx_wrap][0]
 
         # Suppress Joulescope range switching glitch (at least for now).
         if self._suppress_samples_remaining > 0:  # defer output until suppress computed
@@ -372,14 +374,18 @@ cdef class RawProcessor:
                 if SUPPRESS_MODE_INTERP == self._suppress_mode:
                     if not isfinite(self.cal_i_pre):
                         self.cal_i_pre = cal_i
-                    cal_i_step = (cal_i - self.cal_i_pre) / self._suppress_samples_counter
+                    if self._suppress_samples_counter <= 0:
+                        log.warning('self._suppress_samples_counter <= 0')
+                        cal_i_step = 0.0
+                    else:
+                        cal_i_step = (cal_i - self.cal_i_pre) / self._suppress_samples_counter
                     for idx in range(self._suppress_samples_counter - 1):  # exclude the 1 post sample
                         self.cal_i_pre += cal_i_step
-                        idx = (self._idx_suppress_start + idx) & _SUPPRESS_SAMPLES_MASK
+                        idx_wrap = (self._idx_suppress_start + idx) & _SUPPRESS_SAMPLES_MASK
                         self._cbk_fn(self._cbk_user_data,
                                      self.cal_i_pre,
-                                     self.d_cal[idx][1],
-                                     self.d_bits[idx])
+                                     self.d_cal[idx_wrap][1],
+                                     self.d_bits[idx_wrap])
 
                 elif SUPPRESS_MODE_MEAN == self._suppress_mode:
                     # sum samples over post for mean computation
@@ -388,8 +394,8 @@ cdef class RawProcessor:
                         suppress_idx = 0
                         self.cal_i_pre = 0
                     for idx in range(self._suppress_samples_post):
-                        idx = (self._idx_out - idx) & _SUPPRESS_SAMPLES_MASK
-                        self.cal_i_pre += self.d_cal[idx][0]
+                        idx_wrap = (self._idx_out - idx) & _SUPPRESS_SAMPLES_MASK
+                        self.cal_i_pre += self.d_cal[idx_wrap][0]
                         suppress_idx += 1
                     if suppress_idx:
                         cal_i = self.cal_i_pre / suppress_idx
@@ -399,16 +405,16 @@ cdef class RawProcessor:
 
                     # update suppressed samples
                     for idx in range(self._suppress_samples_counter - self._suppress_samples_post):
-                        idx = (self._idx_suppress_start + idx) & _SUPPRESS_SAMPLES_MASK
+                        idx_wrap = (self._idx_suppress_start + idx) & _SUPPRESS_SAMPLES_MASK
                         self._cbk_fn(self._cbk_user_data,
                                      cal_i,
-                                     self.d_cal[idx][1],
-                                     self.d_bits[idx])
+                                     self.d_cal[idx_wrap][1],
+                                     self.d_bits[idx_wrap])
 
                 elif SUPPRESS_MODE_NAN == self._suppress_mode:
                     for idx in range(self._suppress_samples_counter):
-                        idx = (self._idx_suppress_start + idx) & _SUPPRESS_SAMPLES_MASK
-                        self._cbk_fn(self._cbk_user_data, NAN, NAN, self.d_bits[idx])
+                        idx_wrap = (self._idx_suppress_start + idx) & _SUPPRESS_SAMPLES_MASK
+                        self._cbk_fn(self._cbk_user_data, NAN, NAN, self.d_bits[idx_wrap])
 
                 else:
                     # SUPPRESS_MODE_OFF should never get here
@@ -416,11 +422,11 @@ cdef class RawProcessor:
 
                 # update post samples
                 for idx in range(self._suppress_samples_post):
-                    idx = (self._idx_out + 1 - self._suppress_samples_post + idx) & _SUPPRESS_SAMPLES_MASK
+                    idx_wrap = (self._idx_out + 1 - self._suppress_samples_post + idx) & _SUPPRESS_SAMPLES_MASK
                     self._cbk_fn(self._cbk_user_data,
-                                 self.d_cal[idx][0],
-                                 self.d_cal[idx][1],
-                                 self.d_bits[idx])
+                                 self.d_cal[idx_wrap][0],
+                                 self.d_cal[idx_wrap][1],
+                                 self.d_bits[idx_wrap])
                 self._suppress_samples_counter = 0
             self._suppress_samples_remaining -= 1
 
