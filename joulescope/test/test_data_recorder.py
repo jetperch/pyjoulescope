@@ -343,6 +343,17 @@ class TestDataRecorder(unittest.TestCase):
         #r.pretty_print()
         r = DataReader().open(fh)
 
+    def test_user_footer_data(self):
+        header_data = ['hello', {'there': 'world'}]
+        footer_data = ['goodbye', {'for': 'now'}]
+        fh = io.BytesIO()
+        d = DataRecorder(fh, user_data=header_data)
+        d.close(footer_user_data=footer_data)
+        fh.seek(0)
+        r = DataReader().open(fh)
+        self.assertEqual(r.user_data, header_data)
+        self.assertEqual(r.footer_user_data, footer_data)
+
 
 class TestDataRecorderInsert(unittest.TestCase):
 

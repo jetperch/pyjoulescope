@@ -4,6 +4,13 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 0.9.4
+
+2021 Feb 3 [in progress]
+
+*   Added user footer data to JLS data files.
+
+
 ## 0.9.3
 
 2020 Nov 20

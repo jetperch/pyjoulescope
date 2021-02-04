@@ -373,15 +373,18 @@ class DataRecorder:
         if data is None:
             self._insert_next()  # short data finalize
 
-    def _append_meta(self):
+    def _append_meta(self, footer_user_data=None):
         index = {
             'type': 'footer',
             'size': self._total_size,  # in samples
         }
         data = json.dumps(index).encode('utf-8')
         self._writer.append(datafile.TAG_META_JSON, data)
+        if footer_user_data is not None:
+            data = json.dumps(footer_user_data).encode('utf-8')
+            self._writer.append(datafile.TAG_USER_JSON, data)
 
-    def close(self):
+    def close(self, footer_user_data=None):
         """Finalize and close the recording."""
         if self._closed:
             return
@@ -398,7 +401,7 @@ class DataRecorder:
                 self._collection_end(collection)
             else:
                 self._writer.collection_end()
-        self._append_meta()
+        self._append_meta(footer_user_data)
         self._writer.finalize()
         if self._fh is not None:
             self._fh.close()
@@ -424,6 +427,7 @@ class DataReader:
         self._statistics_get_handler = None
         self.raw_processor = RawProcessor()
         self.user_data = None
+        self.footer_user_data = None
 
     def __str__(self):
         if self._f is not None:
@@ -485,11 +489,15 @@ class DataReader:
                     self._configure(meta)
                 elif type_ == 'footer':
                     self.footer = meta
-                    break
                 else:
                     log.warning('Unknown JSON section type=%s', type_)
             elif tag == datafile.TAG_USER_JSON:
-                self.user_data = json.loads(value.decode('utf-8'))
+                if self.footer is None:
+                    self.user_data = json.loads(value.decode('utf-8'))
+                else:
+                    self.footer_user_data = json.loads(value.decode('utf-8'))
+            elif tag == datafile.TAG_END:
+                break
             self._f.skip()
         if self.config is None or self.footer is None:
             raise ValueError('could not read file')

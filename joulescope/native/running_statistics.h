@@ -30,6 +30,7 @@
  * @see https://en.wikipedia.org/wiki/Variance
  * @see https://en.wikipedia.org/wiki/Unbiased_estimation_of_standard_deviation
  * @see https://www.johndcook.com/blog/standard_deviation/
+ * @see https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
  */
 struct statistics_s {
     uint64_t k; // number of samples
