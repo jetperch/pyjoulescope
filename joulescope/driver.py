@@ -1334,7 +1334,7 @@ def scan(name: str = None, config=None) -> List[Device]:
         else:
             devices = [Device(d, config=config) for d in devices]
         return devices
-    except:
+    except Exception:
         log.exception('while scanning for devices')
         return []
 
