@@ -35,6 +35,6 @@ def on_cmd(args):
         print(f'Found {d}')
         try:
             d.go()
-        except:
+        except Exception:
             print(f'Could not start application on {d}')
     return 0

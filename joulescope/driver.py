@@ -666,11 +666,11 @@ class Device:
         if self.stream_buffer is not None:
             try:
                 self.stop()
-            except:
+            except Exception:
                 log.exception('USB stop failed')
             try:
                 self._usb.close()
-            except:
+            except Exception:
                 log.exception('USB close failed')
             self._stream_process_call('close')
             self.stream_buffer.callback = None
@@ -883,7 +883,7 @@ class Device:
             self._streaming = False
             try:
                 self._stream_settings_send()
-            except:
+            except Exception:
                 log.warning('Device.stop() while attempting _stream_settings_send')
             self._stream_process_call('stop')
             return True
@@ -1404,12 +1404,12 @@ def bootloaders_run_application():
     for d in scan(name='bootloader'):
         try:
             d.open()
-        except:
+        except Exception:
             log.exception('while attempting to open bootloader')
             continue
         try:
             d.go()
-        except:
+        except Exception:
             log.exception('while attempting to run the application')
 
 

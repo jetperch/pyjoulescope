@@ -82,12 +82,12 @@ class DeviceThread:
                 rv = str(self._device)
             else:
                 log.warning('unsupported command %s', cmd)
-        except:
+        except Exception:
             log.exception('While running command')
         if not delegate_cbk and callable(cbk):
             try:
                 cbk(rv)
-            except:
+            except Exception:
                 log.exception('in callback')
         log.debug('_cmd_process %s - done', cmd)
 
@@ -200,7 +200,7 @@ class DeviceThread:
         self._closing = False
         try:
             return self._post_block('open', event_callback_fn, timeout=TIMEOUT_OPEN)
-        except:
+        except Exception:
             self.close()
             raise
 

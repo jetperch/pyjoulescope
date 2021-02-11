@@ -72,7 +72,7 @@ def on_cmd(args):
     if args.plot_reduction or args.plot or args.plot_raw:
         try:
             import matplotlib.pyplot as plt
-        except:
+        except Exception:
             print(MATPLOTLIB_IMPORT_ERROR)
             return 1
 

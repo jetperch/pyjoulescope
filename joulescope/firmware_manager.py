@@ -156,7 +156,7 @@ def upgrade(device, image, progress_cbk=None, stage_cbk=None, done_cbk=None):
             if rc:
                 raise IOError('controller firmware programming failed: %d', rc)
             next_stage()
-        except:
+        except Exception:
             b.close()
             raise
         d = bootloader_go(b, progress_cbk=cbk)
@@ -169,7 +169,7 @@ def upgrade(device, image, progress_cbk=None, stage_cbk=None, done_cbk=None):
         if done_cbk:
             done_cbk(d)
         return d
-    except:
+    except Exception:
         if done_cbk:
             done_cbk(None)
         raise

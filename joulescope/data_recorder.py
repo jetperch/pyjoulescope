@@ -570,7 +570,7 @@ class DataReader:
         try:
             if self._f is not None:
                 f = self.config['sampling_frequency'] / self.config['samples_per_reduction']
-        except:
+        except Exception:
             log.warning('Could not get reduction frequency.')
         if f <= 0.0:
             log.warning('Invalid input sampling frequency %r, assume 1.0 Hz.', f)

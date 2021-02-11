@@ -838,7 +838,7 @@ class LibUsbDevice:
             message = '' if message is None else str(message)
             try:
                 event_callback_fn(status, message)
-            except:
+            except Exception:
                 log.exception('while in _event_callback_fn')
 
     def _control_transfer_pend(self, cbk_fn, setup_packet, data):

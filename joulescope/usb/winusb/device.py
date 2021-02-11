@@ -397,7 +397,7 @@ class EndpointIn:
             try:
                 if callable(self._process_fn):
                     return self._process_fn()
-            except:
+            except Exception:
                 log.exception('_process_fn exception: stop streaming')
                 return True  # force stop
         return False
@@ -620,7 +620,7 @@ class WinUsbDevice:
             # vid, pid = [x.split('_')[1] for x in parts[1].split('&')]
             serial_number = parts[2]
             return 'Joulescope:' + serial_number
-        except:
+        except Exception:
             return 'Joulescope'
 
     def _update_event_list(self):
@@ -814,7 +814,7 @@ class WinUsbDevice:
         if callable(event_callback_fn):
             try:
                 event_callback_fn(stop_code, msg)
-            except:
+            except Exception:
                 log.exception('while in _event_callback_fn')
 
     def process(self, timeout):

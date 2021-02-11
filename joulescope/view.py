@@ -149,7 +149,7 @@ class View:
                 self._quit = True
             else:
                 self._log.warning('unsupported command %s', cmd)
-        except:
+        except Exception:
             self._log.exception('While running command')
         # self._log.debug('_cmd_process %s - done', cmd)
         return rv
@@ -176,7 +176,7 @@ class View:
             if callable(cbk):
                 try:
                     cbk(rv)
-                except:
+                except Exception:
                     self._log.exception('in callback')
         self._data = None
         self._log.info('View.run done')

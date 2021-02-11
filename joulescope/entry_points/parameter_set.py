@@ -47,11 +47,11 @@ def on_cmd(args):
                     try:
                         name, value = name_value.split('=')
                         device.parameter_set(name, value)
-                    except:
+                    except Exception:
                         logging.exception(f'{device} parameter {name_value} failed')
                         print(f'{device} parameter {name_value} failed')
                 pass
-        except:
+        except Exception:
             logging.exception(f'{device}: failed')
             print(f'{device}: failed')
             rv = 1

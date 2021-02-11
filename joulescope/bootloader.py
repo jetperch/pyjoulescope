@@ -101,7 +101,7 @@ class Bootloader:
         self._is_open = False
         try:
             self._usb.close()
-        except:
+        except Exception:
             log.exception('USB close failed')
 
     def comm_test(self):

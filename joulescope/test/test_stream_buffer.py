@@ -42,7 +42,7 @@ def _init(data):
 def single_stat_as_array(a):
     try:
         a = [a[name] for name in a.dtype.names]
-    except:
+    except Exception:
         pass
     return a
 

@@ -57,7 +57,7 @@ def on_cmd(args):
             ctl_fw = info.get('ctl', {}).get('fw', {}).get('ver', '')
             sensor_fw = info.get('sensor', {}).get('fw', {}).get('ver', '')
             info = f'  ctl={ctl_fw:<15}  sensor={sensor_fw}'
-        except:
+        except Exception:
             info = ''
         print(f'    {device} {info}')
 
