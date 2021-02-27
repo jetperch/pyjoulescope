@@ -83,11 +83,12 @@ void statistics_combine(struct statistics_s * tgt,
     } else {
         f1 = a->k / (double) kt;
         f2 = 1.0 - f1;
-        tgt->m = f1 * a->m + f2 * b->m;
-        m1_diff = a->m - tgt->m;
-        m2_diff = b->m - tgt->m;
+        double mean_new = f1 * a->m + f2 * b->m;
+        m1_diff = a->m - mean_new;
+        m2_diff = b->m - mean_new;
         tgt->s = ((a->s + a->k * m1_diff * m1_diff) +
                   (b->s + b->k * m2_diff * m2_diff));
+        tgt->m = mean_new;
         tgt->min = (a->min < b->min) ? a->min : b->min;
         tgt->max = (a->max > b->max) ? a->max : b->max;
         tgt->k = kt;
