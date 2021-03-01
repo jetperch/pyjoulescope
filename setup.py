@@ -186,7 +186,7 @@ setuptools.setup(
 
     # See https://packaging.python.org/en/latest/requirements.html
     install_requires=[
-        "numpy==1.19.3; platform_system=='Windows'",
+        "numpy>=1.20; platform_system=='Windows'",
         "numpy>=1.15.2; platform_system!='Windows'",
         'psutil',
         'python-dateutil>=2.7.3',
