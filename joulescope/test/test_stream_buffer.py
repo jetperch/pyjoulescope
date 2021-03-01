@@ -78,7 +78,7 @@ class TestStatistics(unittest.TestCase):
     def test_combine(self):
         d1 = _init([[1, 1, 0, 1, 1], [1, 2, 0, 2, 2], [1, 3, 0, 3, 3], [1, 4, 0, 4, 4], [1, 0, 0, 0, 0], [1, 1, 0, 1, 1]])
         d2 = _init([[1, 3, 0, 3, 3], [1, 4, 0, 4, 4], [1, 5, 0, 5, 5], [1, 6, 0, 6, 6], [1, 1, 0, 1, 1], [1, 0, 0, 0, 0]])
-        e = _init([[2, 2, 1, 1, 3], [2, 3, 1, 2, 4], [2, 4, 1, 3, 5], [2, 5, 1, 4, 6], [2, 0.5, 0.25, 0, 1], [2, 0.5, 0.25, 0, 1]])
+        e = _init([[2, 2, 2, 1, 3], [2, 3, 2, 2, 4], [2, 4, 2, 3, 5], [2, 5, 2, 4, 6], [2, 0.5, 0.5, 0, 1], [2, 0.5, 0.5, 0, 1]])
         s1 = Statistics(stats=d1)
         s2 = Statistics(stats=d2)
         s1.combine(s2)
@@ -361,9 +361,9 @@ class TestStreamBuffer(unittest.TestCase):
         b.process()
         data = b.data_get(0, 40, 20)
         self.assertEqual((2, STATS_FIELD_COUNT), data.shape)
-        assert_single_stat_close([20, 19.0, 1660.0, 0.0, 38.0], data[0, 0])
-        assert_single_stat_close([20, 20.0, 1660.0, 1.0, 39.0], data[0, 1])
-        assert_single_stat_close([20, 59.0, 1660.0, 40.0, 78.0], data[1, 0])
+        assert_single_stat_close([20, 19.0, 2660.0, 0.0, 38.0], data[0, 0])
+        assert_single_stat_close([20, 20.0, 2660.0, 1.0, 39.0], data[0, 1])
+        assert_single_stat_close([20, 59.0, 2660.0, 40.0, 78.0], data[1, 0])
 
     def test_get_over_reduction_direct_with_raw_nan(self):
         b = StreamBuffer(2.0, [10, 10], 1000.0)

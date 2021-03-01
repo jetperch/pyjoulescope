@@ -240,7 +240,7 @@ class TestDataRecorder(unittest.TestCase):
         self.assertEqual(sample_count // 20000, len(reduction))
 
     def create_sinusoid_data(self, sample_rate, samples):
-        x = np.arange(samples, dtype=np.float)
+        x = np.arange(samples, dtype=np.float32)
         x *= (1 / sample_rate)
         data = np.empty(samples * 2, dtype=np.uint16)
         data[0::2] = (2000 * np.sin(2 * np.pi * 1000 * x) + 5000).astype(np.uint16)

@@ -6,7 +6,7 @@ This file contains the list of changes made to pyjoulescope.
 
 ## 0.9.4
 
-2021 Feb 27
+2021 Mar 1
 
 *   Added user footer data to JLS v1 data files.
 *   Reduced exception catching from all to Exception in scan() #20.

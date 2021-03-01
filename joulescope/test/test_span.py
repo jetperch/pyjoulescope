@@ -40,14 +40,14 @@ class TestSpan(unittest.TestCase):
         sc, spans_per, x = s.conform_discrete([0.0, 40.0])
         np.testing.assert_allclose([10.0, 30.0], sc)
         self.assertEqual(2, spans_per)
-        np.testing.assert_allclose(np.arange(10, 31, 2, dtype=np.float), x)
+        np.testing.assert_allclose(np.arange(10, 31, 2, dtype=np.float64), x)
 
     def test_conform_discrete_min_gain(self):
         s = Span([10.0, 30.0], 1.0, 11)
         sc, spans_per, x = s.conform_discrete([19.5, 20.5])
         np.testing.assert_allclose([16, 26], sc)
         self.assertEqual(1, spans_per)
-        np.testing.assert_allclose(np.arange(16, 27, dtype=np.float), x)
+        np.testing.assert_allclose(np.arange(16, 27, dtype=np.float64), x)
 
     def test_conform_discrete_small(self):
         s = Span([10.0, 30.0], 1.0, 11)
