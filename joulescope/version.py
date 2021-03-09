@@ -6,5 +6,4 @@ __url__ = 'https://joulescope.readthedocs.io'
 __author__ = 'Jetperch LLC'
 __author_email__ = 'joulescope-dev@jetperch.com'
 __license__ = 'Apache 2.0'
-__copyright__ = 'Copyright 2018-2020 Jetperch LLC'
-
+__copyright__ = 'Copyright 2018-2021 Jetperch LLC'

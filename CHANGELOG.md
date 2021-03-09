@@ -6,11 +6,14 @@ This file contains the list of changes made to pyjoulescope.
 
 ## 0.9.4
 
-2021 Mar 1
+2021 Mar 9
 
 *   Added user footer data to JLS v1 data files.
 *   Reduced exception catching from all to Exception in scan() #20.
 *   Fixed running statistics variance computation.
+*   Added numpy requirement to >= 1.17 and Windows from 1.19 to 1.20.
+*   Officially dropped Python 3.6 support.
+*   Officially dropped Win 7, 8, 8.1 support.
 
 
 ## 0.9.3

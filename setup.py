@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2018 Jetperch LLC
+# Copyright 2018-2021 Jetperch LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -29,7 +29,7 @@ from distutils.errors import DistutilsExecError
 import os
 import sys
 
-setuptools.dist.Distribution().fetch_build_eggs(['Cython>=0.20.1', 'numpy>=1.18'])
+setuptools.dist.Distribution().fetch_build_eggs(['Cython>=0.20.1', 'numpy>=1.17'])
 
 import numpy as np
 
@@ -143,16 +143,12 @@ setuptools.setup(
 
         # Operating systems
         'Operating System :: Microsoft :: Windows :: Windows 10',
-        'Operating System :: Microsoft :: Windows :: Windows 8.1',
-        'Operating System :: Microsoft :: Windows :: Windows 8',
-        'Operating System :: Microsoft :: Windows :: Windows 7',
         'Operating System :: MacOS :: MacOS X',
         'Operating System :: POSIX :: Linux',
 
         # Supported Python versions
         'Programming Language :: Python',
         'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
         'Programming Language :: Python :: 3.9',
@@ -180,14 +176,16 @@ setuptools.setup(
 
     setup_requires=[
         # https://developercommunity.visualstudio.com/content/problem/1207405/fmod-after-an-update-to-windows-2004-is-causing-a.html
-        'numpy>=1.15.2',
+        "numpy>=1.20; platform_system=='Windows'",
+        "numpy>=1.17; platform_system!='Windows'",
         'Cython>=0.29.3',
     ],
 
     # See https://packaging.python.org/en/latest/requirements.html
+    # https://numpy.org/neps/nep-0029-deprecation_policy.html
     install_requires=[
         "numpy>=1.20; platform_system=='Windows'",
-        "numpy>=1.15.2; platform_system!='Windows'",
+        "numpy>=1.17; platform_system!='Windows'",
         'psutil',
         'python-dateutil>=2.7.3',
         'pymonocypher>=0.1.3',

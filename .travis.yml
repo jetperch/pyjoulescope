@@ -18,7 +18,7 @@ matrix:
       env: >-
         PATH=/c/Python39:/c/Python39/Scripts:$PATH      
       before_install:
-        - choco install python --version=3.9.0
+        - choco install python --version=3.9.2
         - cp /c/Python39/python.exe /c/Python39/python3.exe
 addons:
   apt:
