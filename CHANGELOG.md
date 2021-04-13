@@ -4,6 +4,13 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 0.9.6
+
+2021 Apr 13
+
+*   Updated macOS libusb distribution files for homebrew and arm64 support.
+
+
 ## 0.9.4
 
 2021 Mar 9
