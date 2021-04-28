@@ -18,7 +18,7 @@ device over USB. You can use this package to automate and script Joulescope
 operation. You can also incorporate Joulescope into a custom application.
 Most users will run the graphical user interface which is in the 
 `pyjoulescope_ui <https://github.com/jetperch/pyjoulescope_ui>`_ package. 
-The majority of code is written in Python 3.6+, but it does contain some C and
+The majority of code is written in Python 3.8+, but it does contain some C and
 Cython for better performance. 
 
 This package runs under Windows 10, Linux (Ubuntu is tested) and Mac OS X.

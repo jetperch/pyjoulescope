@@ -14,7 +14,7 @@ want to develop pyjoulescope, see **Install from Source**.
 Install Python
 ==============
 
-You will need to install Python 3.6+ x64 for your platform, if it is not already
+You will need to install Python 3.8+ x64 for your platform, if it is not already
 on your system.
 
 
@@ -27,7 +27,7 @@ If in doubt, select the "Windows x86-64 executable installer".  Install Python
 and allow it to update your path.  Open a Command Prompt and type::
 
     > python -VV
-    Python 3.7.6 (tags/v3.7.6:43364a7ae0, Dec 19 2019, 00:42:30) [MSC v.1916 64 bit (AMD64)]
+    Python 3.9.4 (tags/v3.9.4:1f2e308, Apr  6 2021, 13:40:21) [MSC v.1928 64 bit (AMD64)]
 
 Note that Windows usually installs python 3 as python.exe.  This documentation
 often uses the executable "python3".
