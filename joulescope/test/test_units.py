@@ -78,3 +78,21 @@ class TestUnits(unittest.TestCase):
         self.assertEqual('-150 mA', units.three_sig_figs(-0.15, 'A'))
         self.assertEqual('-15.0 mA', units.three_sig_figs(-0.015, 'A'))
         self.assertEqual('-1.50 mA', units.three_sig_figs(-0.0015, 'A'))
+
+    def test_duration_to_seconds(self):
+        with self.assertRaises(ValueError):
+            units.duration_to_seconds(None)
+        with self.assertRaises(ValueError):
+            units.duration_to_seconds('')
+        self.assertEqual(1.0, units.duration_to_seconds(1))
+        self.assertEqual(1.0, units.duration_to_seconds(1.0))
+        self.assertEqual(1.0, units.duration_to_seconds('1'))
+        self.assertEqual(1.0, units.duration_to_seconds('1s'))
+        self.assertEqual(1.5, units.duration_to_seconds('1.5'))
+        self.assertEqual(1.5, units.duration_to_seconds('1.5s'))
+        self.assertEqual(60.0, units.duration_to_seconds('1m'))
+        self.assertEqual(90.0, units.duration_to_seconds('1.5m'))
+        self.assertEqual(3600.0, units.duration_to_seconds('1h'))
+        self.assertEqual(86400.0, units.duration_to_seconds('1d'))
+        with self.assertRaises(ValueError):
+            units.duration_to_seconds('hello')

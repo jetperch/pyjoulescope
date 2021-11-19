@@ -4,6 +4,14 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 0.9.7
+
+2021 Aug 18
+
+*   Added jls_writer for JLS v2 write support.
+*   Added pyjls dependency.  
+
+
 ## 0.9.6
 
 2021 Apr 13

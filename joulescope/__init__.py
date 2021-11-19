@@ -14,14 +14,17 @@
 
 from joulescope.driver import scan, scan_require_one, scan_for_changes, \
     bootloaders_run_application, bootloader_go
+from joulescope.jls_v2_writer import JlsWriter
 import sys
 import platform
-from .version import __version__, __title__, __description__, __url__
-from .version import __author__, __author_email__, __license__, __copyright__
+from .version import __version__, __title__, __description__, __url__, \
+    __author__, __author_email__, __license__, __copyright__
 
 VERSION = __version__  # for backwards compatibility
-__all__ = [scan, scan_require_one, scan_for_changes, bootloaders_run_application,
-           bootloader_go]
+__all__ = ['scan', 'scan_require_one', 'scan_for_changes', 'bootloaders_run_application',
+           'bootloader_go', 'JlsWriter',
+           '__version__', '__title__', '__description__', '__url__',
+           '__author__', '__author_email__', '__license__', '__copyright__']
 
 
 if sys.hexversion < 0x030700:

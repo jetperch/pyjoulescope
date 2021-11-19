@@ -139,3 +139,31 @@ def str_to_number(s):
                 v = int(v)
             number *= v
     return number
+
+
+def duration_to_seconds(d):
+    """Convert a duration to float seconds.
+
+    :param d: The duration specification, which is one of:
+        * A string formatted as fz where f is a valid floating-point value
+          and z is either omitted, 's', 'm', 'h', 'd'.
+        * An integer in seconds.
+        * A floating-point value in seconds.
+    """
+    if d is None:
+        raise ValueError('cannot convert None')
+    if isinstance(d, str):
+        if not len(d):
+            raise ValueError('cannot convert empty string')
+        if d[-1] == 's':
+            return float(d[:-1])
+        elif d[-1] == 'm':
+            return 60 * float(d[:-1])
+        elif d[-1] == 'h':
+            return 60 * 60 * float(d[:-1])
+        elif d[-1] == 'd':
+            return 60 * 60 * 24 * float(d[:-1])
+        else:
+            return float(d)
+    else:
+        return float(d)
