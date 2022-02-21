@@ -4,6 +4,13 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 0.9.11
+
+2022 Feb 21
+
+* Fixed Mac crashes due to incorrect libusb usage.
+
+
 ## 0.9.7
 
 2021 Aug 18

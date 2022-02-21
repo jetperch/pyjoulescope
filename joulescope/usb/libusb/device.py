@@ -168,6 +168,13 @@ _lib.libusb_get_device_list.argtypes = [c_void_p, POINTER(POINTER(c_void_p))]
 _lib.libusb_free_device_list.restype = None
 _lib.libusb_free_device_list.argtypes = [POINTER(c_void_p), c_int]
 
+# libusb_device * libusb_ref_device (libusb_device *dev)
+_lib.libusb_ref_device.restype = POINTER(c_void_p)
+_lib.libusb_ref_device.argtypes = [POINTER(c_void_p)]
+
+# void 	libusb_unref_device (libusb_device *dev)
+_lib.libusb_unref_device.restype = None
+_lib.libusb_unref_device.argtypes = [POINTER(c_void_p)]
 
 # int LIBUSB_CALL libusb_open(libusb_device *dev, libusb_device_handle **dev_handle);
 _lib.libusb_open.restype = c_int
@@ -376,8 +383,13 @@ class Transfer:
         transfer.timeout_ms = TRANSFER_TIMEOUT_MS  # milliseconds
         transfer.callback = _transfer_callback_discard_fn
 
+    def close(self):
+        if self.buffer is not None:
+            buffer, self.buffer = self.buffer, None
+            _lib.libusb_free_transfer(self.transfer)
+
     def __del__(self):
-        _lib.libusb_free_transfer(self.transfer)
+        self.close()
 
 
 class ControlTransferAsync:
@@ -405,18 +417,20 @@ class ControlTransferAsync:
         return 0 != len(self._commands)
 
     def _transfer_callback(self, transfer_void_ptr):
-        if self._transfer_pending is None:
+        transfer, self._transfer_pending = self._transfer_pending, None
+        if transfer is None:
             log.warning('Transfer callback when none pending')
             return
-        if self._transfer_pending.addr != transfer_void_ptr:
+        if transfer.addr != transfer_void_ptr:
             log.warning('Transfer mismatch')
             return
-        transfer, self._transfer_pending = self._transfer_pending, None
         if self._commands:
             self._finish(self._commands.pop(0), transfer)
         else:
             log.warning('Transfer callback when no commands')
-        self._issue()
+        transfer.close()
+        if self._handle is not None:
+            self._issue()
 
     def _abort_all(self):
         commands, self._commands = self._commands, []
@@ -596,6 +610,9 @@ class EndpointIn:
             self._stop_fn(self.stop_code, self.stop_message)
         except Exception:
             log.exception('_stop_fn exception')
+        for transfer in self._transfers_free:
+            transfer.close()
+        self._transfers_free.clear()
         self._state = self.ST_IDLE
         log.info('%s transfer_done %d: %s', self, self.stop_code, self.stop_message)
 
@@ -764,20 +781,23 @@ class LibUsbDevice:
         try:
             for idx in range(sz):
                 device = devices[idx]
-                if _lib.libusb_get_device_descriptor(device, pointer(descriptor)):
-                    continue
-                if vid == descriptor.idVendor and pid == descriptor.idProduct:
+                if self._handle:
+                    pass
+                elif _lib.libusb_get_device_descriptor(device, pointer(descriptor)):
+                    pass
+                elif vid == descriptor.idVendor and pid == descriptor.idProduct:
                     dh = c_void_p(None)
                     rv = _lib.libusb_open(device, dh)
                     if rv < 0:
                         log.info('Could not open device: %04x/%04x', vid, pid)
-                        continue
-                    if serial_number == _get_string_descriptor(dh, descriptor.iSerialNumber):
+                    elif serial_number == _get_string_descriptor(dh, descriptor.iSerialNumber):
                         self._handle = dh
-                        log.info('open: success')
-                        return
-            log.warning('open:failed')
-            raise IOError('open:failed')
+                        log.info('open: found device handle')
+                        continue
+                _lib.libusb_unref_device(device)
+            if not self._handle:
+                log.warning('open:failed')
+                raise IOError('open:failed')
         finally:
             _lib.libusb_free_device_list(devices, 0)
 
@@ -822,7 +842,6 @@ class LibUsbDevice:
                 break
             timeval = TimeVal(tv_sec=0, tv_usec=25000)
             _lib.libusb_handle_events_timeout(self._ctx, byref(timeval))
-        self._control_transfer = None
         self._endpoints.clear()
 
     def close(self, status=None, message=None):
@@ -1012,7 +1031,7 @@ def scan(name: str) -> List[LibUsbDevice]:
                         path = '%04x/%04x/%s' % (vid, pid, serial_number)
                         paths.append(path)
         finally:
-            _lib.libusb_free_device_list(devices, 0)
+            _lib.libusb_free_device_list(devices, 1)
 
         if not len(paths):
             log.info('scan found no devices')
@@ -1022,6 +1041,10 @@ def scan(name: str) -> List[LibUsbDevice]:
         return devices
 
 
+def _on_device_notify(inserted, info):
+    print(f'_on_device_notify({inserted}, {info})')
+
+
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
     devices = scan('Joulescope')
@@ -1029,7 +1052,7 @@ if __name__ == '__main__':
     if len(devices):
         d = devices[0]
         d.open()
-        rv = d.control_transfer_in('device', 'vendor', request=4,
+        rv = d.control_transfer_in(None, 'device', 'vendor', request=4,
             value=0, index=0, length=128)
         print(rv)
         d.close()
