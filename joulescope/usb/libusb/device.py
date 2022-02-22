@@ -160,13 +160,13 @@ _lib.libusb_exit.argtypes = [c_void_p]
 # ssize_t LIBUSB_CALL libusb_get_device_list(libusb_context *ctx,
 #	libusb_device ***list);
 _lib.libusb_get_device_list.restype = c_ssize_t
-_lib.libusb_get_device_list.argtypes = [c_void_p, POINTER(POINTER(c_void_p))]
+_lib.libusb_get_device_list.argtypes = [c_void_p, POINTER(POINTER(POINTER(c_void_p)))]
 
 
 # void LIBUSB_CALL libusb_free_device_list(libusb_device **list,
 #	int unref_devices);
 _lib.libusb_free_device_list.restype = None
-_lib.libusb_free_device_list.argtypes = [POINTER(c_void_p), c_int]
+_lib.libusb_free_device_list.argtypes = [POINTER(POINTER(c_void_p)), c_int]
 
 # libusb_device * libusb_ref_device (libusb_device *dev)
 _lib.libusb_ref_device.restype = POINTER(c_void_p)
@@ -775,7 +775,7 @@ class LibUsbDevice:
         log.info('open: start %s', self._path)
         self._ctx = _libusb_context_create()
         descriptor = _libusb_device_descriptor()
-        devices = POINTER(c_void_p)()
+        devices = POINTER(POINTER(c_void_p))()
         vid, pid, serial_number = _path_split(self._path)
         sz = _lib.libusb_get_device_list(self._ctx, pointer(devices))
         try:
@@ -1008,7 +1008,7 @@ def scan(name: str) -> List[LibUsbDevice]:
         paths = []
         infos = INFO[name.lower()]
         descriptor = _libusb_device_descriptor()
-        devices = POINTER(c_void_p)()
+        devices = POINTER(POINTER(c_void_p))()
         sz = _lib.libusb_get_device_list(ctx, pointer(devices))
         try:
             for idx in range(sz):
