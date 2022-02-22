@@ -37,14 +37,14 @@ STRING_LENGTH_MAX = 255
 TRANSFER_TIMEOUT_MS = 1000  # default in milliseconds
 
 
-find_lib = ctypes.util.find_library('usb-1.0')
-if find_lib is None:
-    if platform.system() == 'Darwin' and getattr(sys, 'frozen', False):
-        machine = platform.machine()
-        os_version = platform.release().split('.')[0]
-        find_lib = os.path.join(sys._MEIPASS, f'{machine}_{os_version}_libusb-1.0.0.dylib')
-        log.info('Darwin lib: %s', find_lib)
-    else:
+if platform.system() == 'Darwin' and getattr(sys, 'frozen', False):
+    machine = platform.machine()
+    os_version = platform.release().split('.')[0]
+    find_lib = os.path.join(sys._MEIPASS, f'{machine}_{os_version}_libusb-1.0.0.dylib')
+    log.info('Darwin lib: %s', find_lib)
+else:
+    find_lib = ctypes.util.find_library('usb-1.0')
+    if find_lib is None:
         raise RuntimeError('Could not import libusb')
 _lib = ctypes.cdll.LoadLibrary(find_lib)
 
