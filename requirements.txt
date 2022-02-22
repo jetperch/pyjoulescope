@@ -2,6 +2,7 @@ check-manifest>=0.37
 coverage>=4.5.2
 Cython>=0.29.3
 m2r
+mistune==0.8.4; python_version <= '3.7'
 # https://developercommunity.visualstudio.com/content/problem/1207405/fmod-after-an-update-to-windows-2004-is-causing-a.html
 numpy>=1.20; sys_platform == 'win32'
 numpy>=1.17; sys_platform != 'win32'

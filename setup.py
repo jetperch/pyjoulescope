@@ -152,6 +152,7 @@ setuptools.setup(
         'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
         'Programming Language :: Python :: 3.9',
+        'Programming Language :: Python :: 3.10',
         'Programming Language :: Python :: Implementation :: CPython',
         
         # Topics
@@ -184,6 +185,7 @@ setuptools.setup(
     # See https://packaging.python.org/en/latest/requirements.html
     # https://numpy.org/neps/nep-0029-deprecation_policy.html
     install_requires=[
+        "mistune==0.8.4; python_version <= '3.7'",
         "numpy>=1.20; platform_system=='Windows'",
         "numpy>=1.17; platform_system!='Windows'",
         'psutil',
