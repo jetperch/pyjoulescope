@@ -15,12 +15,12 @@ working properly with the package::
     
 To get help for all available commands::
     
-    joulescope --help
+    joulescope help
 
 You can also run the package directly, which comes in handy when running
 directly from the source code::
 
-    python3 -m joulescope --help
+    python3 -m joulescope
 
 
 
