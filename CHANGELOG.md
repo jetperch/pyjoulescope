@@ -4,6 +4,13 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 0.9.12
+
+2022 May 31 [in progress]
+
+* Fixed DownsamplingStreamBuffer to use reductions correctly #26
+
+
 ## 0.9.11
 
 2022 Feb 22

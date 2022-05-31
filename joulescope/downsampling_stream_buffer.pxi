@@ -15,7 +15,6 @@
 
 from .decimators import DECIMATORS
 from .filter_fir cimport FilterFir, filter_fir_cbk
-STREAM_BUFFER_REDUCTIONS = [200, 100, 50]  # in samples in sample units of the previous reduction
 STREAM_BUFFER_DURATION = 1.0  # seconds
 
 
@@ -60,7 +59,7 @@ cdef class DownsamplingStreamBuffer:
         self._output_sampling_frequency = output_sampling_frequency
         self._downsample_m = input_sampling_frequency / self._output_sampling_frequency
         if input_sampling_frequency:
-            self._stream_buffer = StreamBuffer(STREAM_BUFFER_DURATION, STREAM_BUFFER_REDUCTIONS, input_sampling_frequency)
+            self._stream_buffer = StreamBuffer(STREAM_BUFFER_DURATION, reductions, input_sampling_frequency)
             self._stream_buffer.process_stats_callback_set(<stream_buffer_process_fn> self._stream_buffer_process_cbk, <void *> self)
         reduction_step = int(np.prod(reductions))
         length = int(duration * output_sampling_frequency)
