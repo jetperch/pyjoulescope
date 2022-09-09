@@ -21,7 +21,7 @@ no longer automatically launch the application.  This command forces
 all connected Joulescopes running the bootloder to start the application.
 """
 
-from joulescope.driver import scan
+from joulescope.v0.driver import scan
 
 
 def parser_config(p):

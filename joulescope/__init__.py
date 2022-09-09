@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from joulescope.driver import scan, scan_require_one, scan_for_changes, \
+from joulescope.v0.driver import scan, scan_require_one, scan_for_changes, \
     bootloaders_run_application, bootloader_go
-from joulescope.jls_v2_writer import JlsWriter
+from joulescope.v0.jls_v2_writer import JlsWriter
 import sys
 import platform
 from .version import __version__, __title__, __description__, __url__, \

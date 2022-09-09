@@ -1,0 +1,18 @@
+Parameter,JS220,JS110
+sensor_power,ignored,ignored
+source,ignored,ignored
+i_range,✔,✔
+v_range,"15V,5V→15V,2V",✔
+ovr_to_lsb,❌,❌
+io_voltage,ignored; use Vref,✔
+gpo0,✔,✔
+gpo1,✔,✔
+current_lsb,enables gpi0,✔
+voltage_lsb,enables gpi1,✔
+current_ranging_type,ignored,✔
+current_ranging_samples_pre,ignored,✔
+current_ranging_samples_window,ignored,✔
+current_ranging_samples_post,ignored,✔
+buffer_duration,✔,✔
+reduction_frequency,✔,✔
+sampling_frequency,✔,✔

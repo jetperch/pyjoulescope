@@ -12,13 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from joulescope import usb
-from joulescope.usb.device_thread import DeviceThread
+from joulescope.v0.usb.device_thread import DeviceThread
 from .parameters_v1 import PARAMETERS, PARAMETERS_DICT, PARAMETERS_DEFAULTS, name_to_value, value_to_name
-from . import datafile
-from . import bootloader
-from joulescope.stream_buffer import StreamBuffer, DownsamplingStreamBuffer
-from joulescope.calibration import Calibration
+from . import bootloader, datafile, usb
+from joulescope.v0.stream_buffer import StreamBuffer, DownsamplingStreamBuffer
+from joulescope.v0.calibration import Calibration
 from joulescope.view import View
 import struct
 import copy

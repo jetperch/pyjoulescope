@@ -20,7 +20,7 @@ development tool and is not intended for customer use.
 
 import signal
 import time
-from joulescope.pattern_buffer import PatternBuffer
+from joulescope.v0.pattern_buffer import PatternBuffer
 import logging
 from joulescope import scan
 

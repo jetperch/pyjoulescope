@@ -15,8 +15,8 @@
 
 import unittest
 import numpy as np
-from joulescope.stream_buffer import RunningStatistics as Statistics
-from joulescope.stream_buffer import stats_compute, stats_array_factory
+from joulescope.v0.stream_buffer import RunningStatistics as Statistics
+from joulescope.v0.stream_buffer import stats_compute, stats_array_factory
 
 
 

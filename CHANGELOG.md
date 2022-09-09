@@ -4,9 +4,18 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 1.0.0
+
+2022 Sep 9
+
+* JS220 support
+  * Refactored code for v0 & v1 support.
+  * Migrated to joulescope_driver as default backend.
+
+
 ## 0.9.12
 
-2022 May 31 [in progress]
+2022 May 31
 
 * Fixed DownsamplingStreamBuffer to use reductions correctly #26
 

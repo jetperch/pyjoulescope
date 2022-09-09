@@ -56,7 +56,7 @@ cdef class FilterFir:
 
         for idx in range(self._filters_length - 1):
             c_filter_fir.filter_fir_callback_set(self._filters[idx],
-                <c_filter_fir.filter_fir_cbk> c_filter_fir.filter_fir_single, self._filters[idx + 1])
+                                                 <c_filter_fir.filter_fir_cbk> c_filter_fir.filter_fir_single, self._filters[idx + 1])
 
     def __dealloc__(self):
         PyMem_Free(self._filters)

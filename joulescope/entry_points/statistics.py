@@ -15,7 +15,7 @@
 import signal
 import time
 import logging
-from joulescope.driver import scan_require_one
+from joulescope.v0.driver import scan_require_one
 
 
 def parser_config(p):

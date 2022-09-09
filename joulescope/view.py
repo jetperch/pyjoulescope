@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from joulescope import span
-from joulescope.stream_buffer import StreamBuffer, stats_to_api, \
+from joulescope.v0.stream_buffer import StreamBuffer, stats_to_api, \
     stats_array_factory, stats_array_invalidate
 import threading
 import queue

@@ -13,8 +13,8 @@
 # limitations under the License.
 
 import time
-from joulescope.driver import scan_require_one
-from joulescope.firmware_manager import upgrade
+from joulescope.v0.driver import scan_require_one
+from joulescope.v0.firmware_manager import upgrade
 import sys
 
 

@@ -19,7 +19,7 @@ Threaded wrapper for the device API.
 import threading
 import queue
 import logging
-from joulescope.usb.api import DeviceDriverApi
+from joulescope.v0.usb.api import DeviceDriverApi
 
 
 log = logging.getLogger(__name__)

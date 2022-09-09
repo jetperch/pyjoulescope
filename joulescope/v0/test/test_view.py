@@ -18,7 +18,7 @@ Test the view
 
 import unittest
 from joulescope.view import View
-from joulescope.stream_buffer import StreamBuffer, usb_packet_factory
+from joulescope.v0.stream_buffer import StreamBuffer, usb_packet_factory
 import numpy as np
 
 

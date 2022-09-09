@@ -19,7 +19,7 @@ Test stream buffer
 import unittest
 import numpy as np
 import pyximport; pyximport.install(setup_args={'include_dirs': np.get_include()})
-from joulescope.stream_buffer import Statistics, RawProcessor, StreamBuffer, \
+from joulescope.v0.stream_buffer import Statistics, RawProcessor, StreamBuffer, \
     usb_packet_factory, STATS_DTYPE, STATS_FIELD_COUNT
 
 SAMPLES_PER = 126

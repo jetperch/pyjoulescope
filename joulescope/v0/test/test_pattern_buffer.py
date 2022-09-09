@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import unittest
-from joulescope.pattern_buffer import PatternBuffer
+from joulescope.v0.pattern_buffer import PatternBuffer
 import numpy as np
 
 

@@ -13,10 +13,10 @@ Brewfile.lock.json
 *.pyd
 
 # Ignore Python compiled modules
-joulescope/filter_fir.c
-joulescope/stream_buffer.c
-joulescope/stream_buffer.html
-joulescope/pattern_buffer.c
+joulescope/v0/filter_fir.c
+joulescope/v0/stream_buffer.c
+joulescope/v0/stream_buffer.html
+joulescope/v0/pattern_buffer.c
 joulescope/libjoulescope.dll
 
 # Compiled Object files

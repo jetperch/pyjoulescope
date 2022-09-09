@@ -13,8 +13,8 @@
 # limitations under the License.
 
 
-from joulescope.data_recorder import DataReader
-from joulescope.datafile import DataFileReader
+from joulescope.v0.data_recorder import DataReader
+from joulescope.v0.datafile import DataFileReader
 import numpy as np
 import sys
 

@@ -40,7 +40,7 @@ VERSION_PATH = os.path.join(MYPATH, 'joulescope', 'version.py')
 
 try:
     from Cython.Build import cythonize
-    USE_CYTHON = os.path.isfile(os.path.join(MYPATH, 'joulescope', 'stream_buffer.pyx'))
+    USE_CYTHON = os.path.isfile(os.path.join(MYPATH, 'joulescope', 'v0', 'stream_buffer.pyx'))
 except ImportError:
     USE_CYTHON = False
 
@@ -52,22 +52,22 @@ with open(VERSION_PATH, 'r', encoding='utf-8') as f:
 
 ext = '.pyx' if USE_CYTHON else '.c'
 extensions = [
-    setuptools.Extension('joulescope.stream_buffer',
+    setuptools.Extension('joulescope.v0.stream_buffer',
         sources=[
-            'joulescope/stream_buffer' + ext,
-            'joulescope/native/running_statistics.c',
+            'joulescope/v0/stream_buffer' + ext,
+            'joulescope/v0/native/running_statistics.c',
         ],
         include_dirs=[np.get_include()],
     ),
-    setuptools.Extension('joulescope.filter_fir',
+    setuptools.Extension('joulescope.v0.filter_fir',
         sources=[
-            'joulescope/filter_fir' + ext,
-            'joulescope/native/filter_fir.c',
+            'joulescope/v0/filter_fir' + ext,
+            'joulescope/v0/native/filter_fir.c',
         ],
         include_dirs=[np.get_include()],
     ),
-    setuptools.Extension('joulescope.pattern_buffer',
-        sources=['joulescope/pattern_buffer' + ext],
+    setuptools.Extension('joulescope.v0.pattern_buffer',
+        sources=['joulescope/v0/pattern_buffer' + ext],
         include_dirs=[np.get_include()],
     ),
 ]
