@@ -12,4 +12,5 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .driver import scan, scan_require_one, scan_for_changes, Driver
+
+from joulescope.v0.stream_buffer import single_stat_to_api

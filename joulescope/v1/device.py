@@ -20,6 +20,7 @@ class Device:
         while device_path.endswith('/'):
             device_path = device_path[:-1]
         self._path = device_path
+        self.is_open = False
 
     def __str__(self):
         return str(self._path)
@@ -81,9 +82,12 @@ class Device:
             * None: equivalent to 'defaults'.
         :param timeout: The timeout in seconds.  None uses the default timeout.
         """
-        return self._driver.open(self._path, mode, timeout)
+        rc = self._driver.open(self._path, mode, timeout)
+        self.is_open = True
+        return rc
 
     def close(self, timeout=None):
+        self.is_open = False
         return self._driver.close(self._path, timeout)
 
     @property

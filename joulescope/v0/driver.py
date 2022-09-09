@@ -1336,63 +1336,6 @@ def scan(name: str = None, config=None) -> List[Device]:
         log.exception('while scanning for devices')
         return []
 
-
-def scan_require_one(name: str = None, config=None) -> Device:
-    """Scan for one and only one device.
-
-    :param name: The case-insensitive device name to scan.
-        None (default) is equivalent to 'Joulescope'.
-    :param config: The configuration for the :class:`Device`.
-    :return: The :class:`Device` found.
-    :raise RuntimeError: If no devices or more than one device was found.
-    """
-    devices = scan(name, config=config)
-    if not len(devices):
-        raise RuntimeError("no devices found")
-    if len(devices) > 1:
-        raise RuntimeError("multiple devices found")
-    return devices[0]
-
-
-def scan_for_changes(name: str = None, devices=None, config=None):
-    """Scan for device changes.
-
-    :param name: The case-insensitive device name to scan.
-        None (default) is equivalent to 'Joulescope'.
-    :param devices: The list of existing :class:`Device` instances returned
-        by a previous scan.  Pass None or [] if no scan has yet been performed.
-    :param config: The configuration for the :class:`Device`.
-    :return: The tuple of lists (devices_now, devices_added, devices_removed).
-        "devices_now" is the list of all currently connected devices.  If the
-        device was in "devices", then return the :class:`Device` instance from
-        "devices".
-        "devices_added" is the list of connected devices not in "devices".
-        "devices_removed" is the list of devices in "devices" but not "devices_now".
-    """
-    devices_prev = [] if devices is None else devices
-    devices_next = scan(name, config=config)
-    devices_added = []
-    devices_removed = []
-    devices_now = []
-
-    for d in devices_next:
-        matches = [x for x in devices_prev if str(x) == str(d)]
-        if len(matches):
-            devices_now.append(matches[0])
-        else:
-            devices_added.append(d)
-            devices_now.append(d)
-
-    for d in devices_prev:
-        matches = [x for x in devices_next if str(x) == str(d)]
-        if not len(matches):
-            devices_removed.append(d)
-
-    log.info('scan_for_changes %d devices: %d added, %d removed',
-             len(devices_now), len(devices_added), len(devices_removed))
-    return devices_now, devices_added, devices_removed
-
-
 def bootloaders_run_application():
     """Command all connected bootloaders to run the application.
 

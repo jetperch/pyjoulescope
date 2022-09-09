@@ -51,6 +51,9 @@ class DriverWrapper:
             self._on_device_add('@/!add', d)
 
     def _finalize(self):
+        while len(self.devices):
+            _, device = self.devices.popitem()
+            device.close()
         d, self.driver = self.driver, None
         d.finalize()
 
