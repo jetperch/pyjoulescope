@@ -12,4 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .driver import scan
+
+from .device import Device
+
+
+class DeviceJs110(Device):
+
+    def __init__(self, driver, device_path):
+        super().__init__(driver, device_path)
+
+    def info(self):
+        return {
+            'type': 'info',
+            'ver': 2,
+            'model': self.model,
+        }

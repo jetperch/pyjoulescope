@@ -12,4 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .driver import scan
+"""
+This executable displays all connected Joulescope devices.
+"""
+
+import joulescope
+
+
+def parser_config(p):
+    """Display all connected Joulescope devices."""
+    return on_cmd
+
+
+def on_cmd(args):
+    for device in joulescope.scan():
+        print(device)

@@ -12,13 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from joulescope.v0.driver import scan, scan_require_one, scan_for_changes, \
-    bootloaders_run_application, bootloader_go
-from joulescope.v0.jls_v2_writer import JlsWriter
+import os
 import sys
 import platform
 from .version import __version__, __title__, __description__, __url__, \
     __author__, __author_email__, __license__, __copyright__
+
+
+if os.environ.get('JOULESCOPE_DRIVER', '1').lower() in ['1', 'v1', 'true']:
+    from joulescope.v1 import scan
+else:
+    from joulescope.v0.driver import scan, scan_require_one, scan_for_changes, \
+        bootloaders_run_application, bootloader_go
+    from joulescope.v0.jls_v2_writer import JlsWriter
+
 
 VERSION = __version__  # for backwards compatibility
 __all__ = ['scan', 'scan_require_one', 'scan_for_changes', 'bootloaders_run_application',
