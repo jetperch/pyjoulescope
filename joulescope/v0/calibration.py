@@ -13,7 +13,8 @@
 # limitations under the License.
 
 import binascii
-from joulescope.v0 import public_keys, datafile
+from joulescope.v0 import public_keys
+from joulescope import datafile
 from joulescope.time import seconds_to_timestamp
 import io
 import json

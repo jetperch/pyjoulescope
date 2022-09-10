@@ -14,13 +14,29 @@
 
 
 from .device import Device
+from .stream_buffer import StreamBuffer
+from joulescope.view import View
+from joulescope.parameters_v1 import PARAMETERS, PARAMETERS_DICT, name_to_value
+import copy
+import logging
 
 
-PARAM_IGNORE = ['sensor_power', 'source', 'io_voltage',
-                'current_ranging_type', 'current_ranging_samples_pre',
-                'current_ranging_samples_window', 'current_ranging_samples_post',
-                'reduction_frequency',
-                ]
+_log = logging.getLogger(__name__)
+_I_RANGE_LOOKUP = {
+    0x01: '10 A',
+    0x02: '10 A',
+    0x04: '180 mA',
+    0x08: '18 mA',
+    0x10: '1.8 mA',
+    0x20: '180 µA',
+    0x40: '18 µA',
+}
+_SAMPLING_FREQUENCIES = [
+    1, 2, 5, 10, 20, 50, 100, 200, 500,
+    1_000, 2_000, 5_000, 10_000, 20_000, 50_000,
+    100_000, 200_000, 500_000, 1_000_000,
+]
+_STREAM_TOPICS = ['s/i/', 's/v/']  #, 's/i/range/', 's/gpi/0/', 's/gpi/1/']  # todo p when not full rate
 
 
 def _version_u32_to_str(v):
@@ -36,20 +52,44 @@ class DeviceJs220(Device):
     def __init__(self, driver, device_path):
         super().__init__(driver, device_path)
         self._param_map = {
-            'i_range': self._i_range,
-            'v_range': self._v_range,
-            # 'gpo0':
-            # 'gpi1':
-            # current_lsb,enables gpi0,✔
-            # voltage_lsb,enables gpi1,✔
-            'buffer_duration': self._buffer_duration,
-            # reduction_frequency,✔,✔
-            # sampling_frequency,✔,✔'
+            'i_range': self._on_i_range,
+            'v_range': self._on_v_range,
+            'buffer_duration': self._on_buffer_duration,
+            'reduction_frequency': self._on_reduction_frequency,
+            'sampling_frequency': self._on_sampling_frequency,
         }
+        self._stream_cbk_objs = []
+        self._stream_cbk_objs_add = []
+        self._stop_fn = None
+        self._input_sampling_frequency = 1000000
+        self._output_sampling_frequency = 1000000
+        self._buffer_duration = 30
         self._parameter_set_queue = []
         self._statistics_callbacks = []
         self._on_stats_cbk = self._on_stats  # hold reference for unsub
+        self._on_stream_cbk = self._on_stream  # hold reference for unsub
         self._statistics_offsets = []
+        self.stream_buffer = None
+        self._parameters = {}
+        self._is_streaming = False
+        for p in PARAMETERS:
+            if p.default is not None:
+                self._parameters[p.name] = name_to_value(p.name, p.default)
+
+    @property
+    def input_sampling_frequency(self):
+        """The original input sampling frequency."""
+        return self._input_sampling_frequency
+
+    @property
+    def output_sampling_frequency(self):
+        """The output sampling frequency."""
+        return self._output_sampling_frequency
+
+    @property
+    def sampling_frequency(self):
+        """The output sampling frequency."""
+        return self._output_sampling_frequency
 
     @property
     def statistics_callback(self):
@@ -142,47 +182,135 @@ class DeviceJs220(Device):
         """Clear the charge and energy accumulators."""
         self._statistics_offsets.clear()
 
+    @property
+    def calibration(self):
+        return None
+
     def view_factory(self):
         """Construct a new View into the device's data.
 
         :return: A View-compatible instance.
         """
-        pass  # todo
+        view = View(self.stream_buffer, self.calibration)
+        view.on_close = lambda: self.stream_process_unregister(view)
+        self.stream_process_register(view)
+        return view
+
+    def parameters(self, name=None):
+        if name is not None:
+            for p in PARAMETERS:
+                if p.name == name:
+                    return copy.deepcopy(p)
+            return None
+        return copy.deepcopy(PARAMETERS)
 
     def parameter_set(self, name, value):
-        if name in PARAM_IGNORE:
+        p = PARAMETERS_DICT[name]
+        if name == 'current_ranging':
+            self._current_ranging_split(value)
             return
-        k = self._param_map[name]
-        if not self.is_open:
-            self._parameter_set_queue.append((name, value))
+        if 'read_only' in p.flags:
+            _log.warning('Attempting to set read_only parameter %s', name)
             return
-        if callable(k):
+        try:
+            value = name_to_value(name, value)
+        except KeyError:
+            if p.validator is None:
+                raise KeyError(f'value {value} not allowed for parameter {name}')
+            else:
+                value = p.validator(value)
+        self._parameters[name] = value
+        k = self._param_map.get(name)
+        if k is not None:
+            if not self.is_open:
+                self._parameter_set_queue.append((name, value))
+                return
             k(value)
-        else:
-            self.publish(k, value)
 
-    def _i_range(self, value):
-        if value == 'auto':
-            self.publish('s/i/range/mode', value)
+    def _on_i_range(self, value):
+        if value == 0x80:
+            self.publish('s/i/range/mode', 'auto')
+        elif value == 0:
+            self.publish('s/i/range/mode', 'off')
         else:
+            value = _I_RANGE_LOOKUP[value]
             self.publish('s/i/range/select', value)
             self.publish('s/i/range/mode', 'manual')
 
-    def _v_range(self, value):
+    def _on_v_range(self, value):
         if value == 'auto':
             self.publish('s/v/range/mode', 'auto')
         else:
+            # JS110 current ranges are 5 and 15 V, cannot map to 2 V
             self.publish('s/v/range/select', '15 V')
             self.publish('s/v/range/mode', 'manual')
 
-    def _buffer_duration(self, value):
+    def _on_buffer_duration(self, value):
+        self._buffer_duration = value
+
+    def _on_reduction_frequency(self, value):
         pass  # todo
+
+    def _on_sampling_frequency(self, value):
+        value = min(value, 1000000)
+        if value not in _SAMPLING_FREQUENCIES:
+            raise ValueError(f'invalid sampling frequency {value}')
+        self._output_sampling_frequency = value
+
+    def _stream_process_call(self, method, *args, **kwargs):
+        rv = False
+        b, self._stream_cbk_objs, self._stream_cbk_objs_add = self._stream_cbk_objs + self._stream_cbk_objs_add, [], []
+        for obj in b:
+            fn = getattr(obj, method, None)
+            if not callable(fn):
+                continue
+            if obj.driver_active:
+                try:
+                    rv |= bool(fn(*args, **kwargs))
+                    self._stream_cbk_objs.append(obj)
+                except Exception:
+                    _log.exception('%s %s() exception', obj, method)
+                    obj.driver_active = False
+            if not obj.driver_active:
+                try:
+                    if hasattr(obj, 'close'):
+                        obj.close()
+                except Exception:
+                    _log.exception('%s close() exception', obj)
+        return rv
+
+    def _on_stream(self, topic, value):
+        b = self.stream_buffer
+        _, e1 = b.sample_id_range
+        b.insert(topic, value)
+        _, e2 = b.sample_id_range
+
+        if e1 == e2:
+            return False
+        rv = self._stream_process_call('stream_notify', self.stream_buffer)
+        if rv:
+            self.stop()
 
     def start(self, stop_fn=None, duration=None, contiguous_duration=None):
-        pass  # todo
+        self.stop()
+        self.stream_buffer.reset()
+        self._stop_fn = stop_fn
+        for topic in _STREAM_TOPICS:
+            self.subscribe(topic + '!data', 'pub', self._on_stream_cbk)
+            self.publish(topic + 'ctrl', 1)
+        self._is_streaming = True
+        self._stream_process_call('start', self.stream_buffer)
 
     def stop(self):
-        pass  # todo
+        if self._is_streaming:
+            self._is_streaming = False
+            for topic in _STREAM_TOPICS:
+                self.unsubscribe(topic + '!data', self._on_stream_cbk)
+                self.publish(topic + 'ctrl', 0)
+            fn, self._stop_fn = self._stop_fn, None
+            if callable(fn):
+                fn(0, '')  # status, message
+            self._stream_process_call('stop')
 
     def read(self, duration=None, contiguous_duration=None, out_format=None, fields=None):
         pass  # todo
@@ -193,7 +321,7 @@ class DeviceJs220(Device):
 
         :return: True if streaming.  False if not streaming.
         """
-        return self._streaming
+        return self._is_streaming
 
     def stream_process_register(self, obj):
         """Register a stream process object.
@@ -204,7 +332,10 @@ class DeviceJs220(Device):
 
         Call :meth:`stream_process_unregister` to disconnect the instance.
         """
-        pass
+        if self._is_streaming and hasattr(obj, 'start'):
+            obj.start(self.stream_buffer)
+        obj.driver_active = True
+        self._stream_cbk_objs_add.append(obj)
 
     def stream_process_unregister(self, obj):
         """Unregister a stream process object.
@@ -212,7 +343,7 @@ class DeviceJs220(Device):
         :param obj: The instance compatible with :class:`StreamProcessApi` that was
             previously registered using :meth:`stream_process_register`.
         """
-        pass
+        obj.driver_active = False
 
     def info(self):
         info = {
@@ -243,7 +374,36 @@ class DeviceJs220(Device):
         return info
 
     def status(self):
-        return {}
+        return {
+            'driver': {
+                'settings_result': {
+                    'value': 0,
+                    'units': ''},
+                'fpga_frame_counter': {
+                    'value': 0,
+                    'units': 'frames'},
+                'fpga_discard_counter': {
+                    'value': 0,
+                    'units': 'frames'},
+                'sensor_flags': {
+                    'value': 0,
+                    'format': '0x{:02x}',
+                    'units': ''},
+                'sensor_i_range': {
+                    'value': 0,
+                    'format': '0x{:02x}',
+                    'units': ''},
+                'sensor_source': {
+                    'value': 0,
+                    'format': '0x{:02x}',
+                    'units': ''},
+                'return_code': {
+                    'value': 0,
+                    'format': '{}',
+                    'units': '',
+                },
+            }
+        }
 
     def extio_status(self):
         """Read the EXTIO GPI value.
@@ -258,15 +418,17 @@ class DeviceJs220(Device):
         """
         return {}  # todo
 
-    def open(self, mode=None, timeout=None):
+    def open(self, event_callback_fn=None, mode=None, timeout=None):
         super().open(mode, timeout)
         while len(self._parameter_set_queue):
             name, value = self._parameter_set_queue.pop(0)
             self.parameter_set(name, value)
         if len(self._statistics_callbacks):
             self._statistics_start()
+        self.stream_buffer = StreamBuffer(self._buffer_duration)
 
     def close(self, timeout=None):
         if len(self._statistics_callbacks):
             self._statistics_stop()
+        self.stop()
         super().close(timeout)

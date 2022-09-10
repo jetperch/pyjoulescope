@@ -74,8 +74,11 @@ class DriverWrapper:
         if d is not None:
             d.close()
 
-    def scan(self):
-        return sorted(self.devices.values(), key=lambda x: str(x))
+    def scan(self, name: str = None, config=None):
+        if name is None or name == 'joulescope':
+            return sorted(self.devices.values(), key=lambda x: str(x))
+        else:
+            return []
 
 
 _device_wrapper = DriverWrapper()
@@ -93,7 +96,7 @@ def scan(name: str = None, config=None) -> List[Device]:
     :raises: None - guaranteed not to raise an exception
     """
     d = DriverWrapper()
-    return d.scan()
+    return d.scan(name, config)
 
 
 def scan_require_one(name: str = None, config=None) -> Device:

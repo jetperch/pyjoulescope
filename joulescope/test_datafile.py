@@ -18,7 +18,7 @@ Test the datafile
 """
 
 import unittest
-from joulescope.v0 import datafile
+from joulescope import datafile
 import io
 import binascii
 import struct

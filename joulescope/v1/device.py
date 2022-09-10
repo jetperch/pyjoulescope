@@ -72,9 +72,13 @@ class Device:
     def unsubscribe_all(self, fn, timeout=None):
         return self._driver.unsubscribe(fn, timeout)
 
-    def open(self, mode=None, timeout=None):
+    def open(self, event_callback_fn=None, mode=None, timeout=None):
         """Open this device.
 
+        :param event_callback_fn: The function(event, message) to call on
+            asynchronous events, mostly to allow robust handling of device
+            errors.  "event" is one of the :class:`DeviceEvent` values,
+            and the message is a more detailed description of the event.
         :param mode: The open mode which is one of:
             * 'defaults': Reconfigure the device for default operation.
             * 'restore': Update our state with the current device state.

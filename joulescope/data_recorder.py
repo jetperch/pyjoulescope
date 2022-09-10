@@ -16,9 +16,10 @@ from joulescope.v0.calibration import Calibration
 from joulescope.v0.stream_buffer import reduction_downsample, Statistics, stats_to_api, \
     stats_invalidate, \
     stats_factory, stats_array_factory, stats_array_clear, stats_array_invalidate, \
-    STATS_DTYPE, STATS_FIELD_NAMES, STATS_FIELD_COUNT, NP_STATS_NAMES, \
+    STATS_FIELD_NAMES, NP_STATS_NAMES, \
     I_RANGE_MISSING, SUPPRESS_SAMPLES_MAX, RawProcessor, stats_compute
-from joulescope.v0 import array_storage, datafile
+from joulescope.v0 import array_storage
+from joulescope import datafile
 import json
 import numpy as np
 import datetime

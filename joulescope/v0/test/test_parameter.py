@@ -17,7 +17,7 @@ Test parameter
 """
 
 import unittest
-from joulescope.v0.parameter import Parameter
+from joulescope.parameter import Parameter
 
 
 class TestParameter(unittest.TestCase):
