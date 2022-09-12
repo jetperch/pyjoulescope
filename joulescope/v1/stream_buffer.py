@@ -235,7 +235,7 @@ class StreamBuffer:
         :param stop: The ending sample id (exclusive).
         :param fields: The single field or list of field names to return.
             None (default) is equivalent to
-            ['current', 'voltage', 'power'].
+            ['current', 'voltage', 'power', 'current_range', 'current_lsb', 'voltage_lsb'].
             The available fields are:
 
             * raw: The raw u16 data from Joulescope.
@@ -260,7 +260,7 @@ class StreamBuffer:
             return that field's value.
         """
         if fields is None:
-            fields = ['current', 'voltage', 'power']
+            fields = ['current', 'voltage', 'power', 'current_range', 'current_lsb', 'voltage_lsb']
         self_start, self_stop = self.sample_id_range
         start = max(start, self_start)
         stop = min(stop, self_stop)
@@ -289,6 +289,8 @@ class StreamBuffer:
                 units = 'W'
                 # todo: driver should compute power
                 out = self._buffer[1].get_range(start, stop) * self._buffer[2].get_range(start, stop)
+            elif field in ['current_range', 'current_lsb', 'voltage_lsb']:
+                out = np.zeros(stop - start, dtype=np.uint8)
             else:
                 raise ValueError(f'Unsupported field {field}')
             result['signals'][field] = {'value': out, 'units': units}
