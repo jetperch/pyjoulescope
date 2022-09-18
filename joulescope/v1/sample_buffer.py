@@ -20,7 +20,14 @@ import numpy as np
 class SampleBuffer:
 
     def __init__(self, size, dtype, decimate=None):
+        """Construct a new sample buffer.
+
+        :param size: The size in samples.
+        :param dtype: The numpy data type for holding the samples.
+        :param decimate: The sample_id decimation factor.  None is 1.
+        """
         self._decimate = 1 if decimate is None else int(decimate)
+        print(f'SampleBuffer({size}, {dtype}, {self._decimate}')
         self._size = size
         self._first = None   # first sample_id
         self._head = None    # head sample_id

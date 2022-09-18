@@ -36,11 +36,12 @@ class StreamBuffer:
     :param duration: The total length of the buffering in seconds.
     """
 
-    def __init__(self, duration):
+    def __init__(self, duration, frequency, decimate=None):
         # current, voltage, power, current_range, gpi0, gpi1
-        self._sampling_frequency = 1000000
+        self._decimate = 1 if decimate is None else int(decimate)
+        self._sampling_frequency = frequency
         self._duration = duration
-        self.length = self._duration * self._sampling_frequency
+        self.length = int(self._duration * self._sampling_frequency)
         self._buffer = {
             1: SampleBuffer(self.length, dtype=np.float32),
             2: SampleBuffer(self.length, dtype=np.float32),
@@ -146,7 +147,7 @@ class StreamBuffer:
 
     def insert(self, topic, value):
         b = self._buffer[value["field_id"]]
-        b.add(value["sample_id"] // 2, value["data"])
+        b.add(value["sample_id"] // self._decimate, value["data"])
         # print(f'{topic} {value["field_id"]}.{value["index"]} {value["sample_id"]} {len(value["data"])}')
 
     def statistics_get(self, start, stop, out=None):
@@ -287,7 +288,7 @@ class StreamBuffer:
                 out = self._buffer[2].get_range(start, stop)
             elif field == 'power':
                 units = 'W'
-                # todo: driver should compute power
+                # todo: JS220 driver should compute power
                 out = self._buffer[1].get_range(start, stop) * self._buffer[2].get_range(start, stop)
             elif field in ['current_range', 'current_lsb', 'voltage_lsb']:
                 out = np.zeros(stop - start, dtype=np.uint8)

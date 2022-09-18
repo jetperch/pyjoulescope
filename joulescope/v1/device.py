@@ -312,7 +312,9 @@ class Device:
             self.parameter_set(name, value)
         if len(self._statistics_callbacks):
             self._statistics_start()
-        self.stream_buffer = StreamBuffer(self._buffer_duration)
+        self.stream_buffer = StreamBuffer(self._buffer_duration,
+                                          frequency=self._output_sampling_frequency,
+                                          decimate=1 if 'js110' in self._path else 2)
         return rc
 
     def close(self, timeout=None):
