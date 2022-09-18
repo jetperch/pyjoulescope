@@ -43,8 +43,8 @@ class StreamBuffer:
         self._duration = duration
         self.length = int(self._duration * self._sampling_frequency)
         self._buffer = {
-            1: SampleBuffer(self.length, dtype=np.float32),
-            2: SampleBuffer(self.length, dtype=np.float32),
+            1: SampleBuffer(self.length, dtype=np.float32),  # current
+            2: SampleBuffer(self.length, dtype=np.float32),  # voltage
         }
         self._sample_id_max = 0
         self._contiguous_max = 0

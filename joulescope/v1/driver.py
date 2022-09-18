@@ -153,3 +153,43 @@ def scan_for_changes(name: str = None, devices=None, config=None):
     _log.info('scan_for_changes %d devices: %d added, %d removed',
               len(devices_now), len(devices_added), len(devices_removed))
     return devices_now, devices_added, devices_removed
+
+
+class DeviceNotify:
+
+    def __init__(self, cbk):
+        """Start device insertion/removal notification.
+
+        :param cbk: The function called on device insertion or removal.  The
+            arguments are (inserted, info).  "inserted" is True on insertion
+            and False on removal.  "info" contains platform-specific details
+            about the device.  In general, the application should rescan for
+            relevant devices.
+        """
+        self._on_add_fn = self._on_add
+        self._on_remove_fn = self._on_remove
+        self._cbk = cbk
+        self._driver = None
+        self.open()
+
+    def _on_add(self, topic, value):
+        print(f'DeviceNotify.add {value}')
+        self._cbk(True, value)
+
+    def _on_remove(self, topic, value):
+        print(f'DeviceNotify.remove {value}')
+        self._cbk(False, value)
+
+    def open(self):
+        self.close()
+        self._driver = DriverWrapper()
+        d = self._driver.driver
+        d.subscribe('@/!add', 'pub', self._on_add_fn)
+        d.subscribe('@/!remove', 'pub', self._on_remove_fn)
+
+    def close(self):
+        if self._driver is not None:
+            d = self._driver.driver
+            self._driver = None
+            d.unsubscribe('@/!add', self._on_add_fn)
+            d.unsubscribe('@/!remove', self._on_remove_fn)

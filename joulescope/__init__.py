@@ -20,16 +20,17 @@ from .version import __version__, __title__, __description__, __url__, \
 
 
 if os.environ.get('JOULESCOPE_BACKEND', '1').lower() in ['1', 'v1', 'true']:
-    from joulescope.v1 import scan, scan_require_one, scan_for_changes
+    from joulescope.v1 import scan, scan_require_one, scan_for_changes, DeviceNotify
 else:
     from joulescope.v0.driver import scan, scan_require_one, scan_for_changes, \
         bootloaders_run_application, bootloader_go
+    from joulescope.v0.usb import DeviceNotify
     from joulescope.jls_v2_writer import JlsWriter
 
 
 VERSION = __version__  # for backwards compatibility
 __all__ = ['scan', 'scan_require_one', 'scan_for_changes', 'bootloaders_run_application',
-           'bootloader_go', 'JlsWriter',
+           'bootloader_go', 'JlsWriter', 'DeviceNotify',
            '__version__', '__title__', '__description__', '__url__',
            '__author__', '__author_email__', '__license__', '__copyright__']
 

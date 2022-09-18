@@ -27,7 +27,7 @@ class SampleBuffer:
         :param decimate: The sample_id decimation factor.  None is 1.
         """
         self._decimate = 1 if decimate is None else int(decimate)
-        print(f'SampleBuffer({size}, {dtype}, {self._decimate}')
+        # print(f'SampleBuffer({size}, {dtype}, {self._decimate}')
         self._size = size
         self._first = None   # first sample_id
         self._head = None    # head sample_id
