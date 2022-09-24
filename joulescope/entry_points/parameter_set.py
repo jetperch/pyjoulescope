@@ -16,7 +16,7 @@
 This executable configures Joulescope parameters.
 """
 
-from joulescope.v0.driver import scan
+from joulescope import scan
 import logging
 
 

@@ -75,10 +75,15 @@ class DriverWrapper:
             d.close()
 
     def scan(self, name: str = None, config=None):
-        if name is None or name == 'joulescope':
-            return sorted(self.devices.values(), key=lambda x: str(x))
+        if name is None or name.lower() == 'joulescope':
+            devices = self.devices.values()
+            devices = [d for d in devices if d.device_path[2] != '&']
+            devices = sorted(devices, key=lambda x: str(x))
+            for d in devices:
+                d.config = config
         else:
-            return []
+            devices = []
+        return devices
 
 
 _device_wrapper = DriverWrapper()
@@ -123,7 +128,8 @@ def scan_for_changes(name: str = None, devices=None, config=None):
         None (default) is equivalent to 'Joulescope'.
     :param devices: The list of existing :class:`Device` instances returned
         by a previous scan.  Pass None or [] if no scan has yet been performed.
-    :param config: The configuration for the :class:`Device`.
+    :param config: The configuration for the :class:`Device` which is one of
+        ['auto', 'ignore', 'off'].  None is equivalent to 'auto'.
     :return: The tuple of lists (devices_now, devices_added, devices_removed).
         "devices_now" is the list of all currently connected devices.  If the
         device was in "devices", then return the :class:`Device` instance from
@@ -170,14 +176,13 @@ class DeviceNotify:
         self._on_remove_fn = self._on_remove
         self._cbk = cbk
         self._driver = None
+        self._cbk(True, None)
         self.open()
 
     def _on_add(self, topic, value):
-        print(f'DeviceNotify.add {value}')
         self._cbk(True, value)
 
     def _on_remove(self, topic, value):
-        print(f'DeviceNotify.remove {value}')
         self._cbk(False, value)
 
     def open(self):

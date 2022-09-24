@@ -4,6 +4,17 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 1.0.1
+
+2022 Sep 24
+
+* Fixed JS220 stream callback.
+* Fixed entry points to work with selected backend (not just v0).
+* Removed capture_usb entry point, which is no longer valid.
+* Fixed JS220 device remove.
+* Fixed JS220 scan_for_changes.
+
+
 ## 1.0.0
 
 2022 Sep 9

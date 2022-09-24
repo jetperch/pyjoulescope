@@ -13,18 +13,21 @@
 # limitations under the License.
 
 
-from joulescope.parameters_v1 import PARAMETERS, PARAMETERS_DICT, name_to_value
+from joulescope.parameters_v1 import PARAMETERS, PARAMETERS_DICT, name_to_value, value_to_name
 from .stream_buffer import StreamBuffer
 from joulescope.view import View
 import copy
+import logging
 
 
 class Device:
 
     def __init__(self, driver, device_path):
+        self.config = None
         self._driver = driver
         while device_path.endswith('/'):
             device_path = device_path[:-1]
+        self._log = logging.getLogger(__name__ + '.' + device_path.replace('/', '.'))
         self._path = device_path
         self.is_open = False
         self._stream_cbk_objs = []
@@ -48,6 +51,14 @@ class Device:
 
     def __str__(self):
         return f'Device({self._path})'
+
+    @property
+    def device_path(self):
+        return self._path
+
+    @property
+    def usb_device(self):
+        return self._path
 
     @property
     def input_sampling_frequency(self):
@@ -291,6 +302,13 @@ class Device:
         """
         return self._driver.unsubscribe(fn, timeout)
 
+    def _config_apply(self, config=None):
+        """Apply a configuration set by scan.
+
+        :param config: The configuration string.
+        """
+        pass
+
     def open(self, event_callback_fn=None, mode=None, timeout=None):
         """Open this device.
 
@@ -315,6 +333,7 @@ class Device:
         self.stream_buffer = StreamBuffer(self._buffer_duration,
                                           frequency=self._output_sampling_frequency,
                                           decimate=1 if 'js110' in self._path else 2)
+        self._config_apply(self.config)
         return rc
 
     def close(self, timeout=None):
@@ -358,20 +377,21 @@ class Device:
         for obj in b:
             fn = getattr(obj, method, None)
             if not callable(fn):
+                self._stream_cbk_objs.append(obj)
                 continue
             if obj.driver_active:
                 try:
                     rv |= bool(fn(*args, **kwargs))
                     self._stream_cbk_objs.append(obj)
                 except Exception:
-                    _log.exception('%s %s() exception', obj, method)
+                    self._log.exception('%s %s() exception', obj, method)
                     obj.driver_active = False
             if not obj.driver_active:
                 try:
                     if hasattr(obj, 'close'):
                         obj.close()
                 except Exception:
-                    _log.exception('%s close() exception', obj)
+                    self._log.exception('%s close() exception', obj)
         return rv
 
     def _on_stream(self, topic, value):

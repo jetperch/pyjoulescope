@@ -15,10 +15,8 @@
 
 from .device import Device
 from joulescope.parameters_v1 import PARAMETERS_DICT, name_to_value
-import logging
 
 
-_log = logging.getLogger(__name__)
 _I_RANGE_LOOKUP = {
     0x01: '10 A',
     0x02: '10 A',
@@ -61,7 +59,7 @@ class DeviceJs220(Device):
     def parameter_set(self, name, value):
         p = PARAMETERS_DICT[name]
         if 'read_only' in p.flags:
-            _log.warning('Attempting to set read_only parameter %s', name)
+            self._log.warning('Attempting to set read_only parameter %s', name)
             return
         try:
             value = name_to_value(name, value)
@@ -107,6 +105,18 @@ class DeviceJs220(Device):
         if value not in _SAMPLING_FREQUENCIES:
             raise ValueError(f'invalid sampling frequency {value}')
         self._output_sampling_frequency = value
+
+    def _config_apply(self, config=None):
+        if config is None or config.lower() == 'auto':
+            self.publish('s/i/range/mode', 'auto')
+            self.publish('s/v/range/mode', 'auto')
+        elif config == 'ignore':
+            pass  # do nothing
+        elif config == 'off':
+            for topic in self._stream_topics:
+                self.publish(topic + 'ctrl', 0)
+        else:
+            self._log.warning('Unsupported config %s', config)
 
     def info(self):
         info = {
