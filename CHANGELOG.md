@@ -4,6 +4,14 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 1.0.2
+
+2022 Sep 27
+
+* Added pyjoulescope_driver dependency.
+* Increased pyjls version dependency to >=0.4.2.
+
+
 ## 1.0.1
 
 2022 Sep 24

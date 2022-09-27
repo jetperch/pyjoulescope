@@ -6,7 +6,8 @@ mistune==0.8.4; python_version <= '3.7'
 # https://developercommunity.visualstudio.com/content/problem/1207405/fmod-after-an-update-to-windows-2004-is-causing-a.html
 numpy
 psutil
-pyjls>=0.3.4
+pyjls>=0.4.2
+pyjoulescope_driver>=0.2.5
 pymonocypher>=0.1.3
 pypiwin32>=223; sys_platform == 'win32'
 # python {path_to_python}\scripts\pywin32_postinstall.py -install
