@@ -4,6 +4,13 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 1.0.3
+
+2022 Oct 3 [in progress]
+
+* Updated udev rules for linux.
+
+
 ## 1.0.2
 
 2022 Sep 27
