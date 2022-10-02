@@ -23,16 +23,25 @@ class SampleBuffer:
         """Construct a new sample buffer.
 
         :param size: The size in samples.
-        :param dtype: The numpy data type for holding the samples.
+        :param dtype: The numpy data type, 'u4' or 'u1' for the incoming sample data type.
         :param decimate: The sample_id decimation factor.  None is 1.
         """
+        self._dtype = dtype
+        if dtype == 'u1':
+            dtype = np.uint8
+            size = ((size + 7) // 8) * 8
+        elif dtype == 'u4':
+            dtype = np.uint8
+            if size & 1:
+                size += 1
         self._decimate = 1 if decimate is None else int(decimate)
         # print(f'SampleBuffer({size}, {dtype}, {self._decimate}')
         self._size = size
         self._first = None   # first sample_id
         self._head = None    # head sample_id
         self._buffer = np.empty(size, dtype)
-        self._buffer[:] = np.nan
+        self.clear()
+        self.active = True
 
     def _wrap(self, ptr):
         return (ptr // self._decimate) % self._size
@@ -49,7 +58,10 @@ class SampleBuffer:
     def clear(self):
         self._first = None
         self._head = None
-        self._buffer[:] = np.nan
+        if self._buffer.dtype in [np.float32, np.float64]:
+            self._buffer[:] = np.nan
+        else:
+            self._buffer[:] = 0
 
     @property
     def range(self):
@@ -65,25 +77,37 @@ class SampleBuffer:
         return start // self._decimate, end // self._decimate
 
     def add(self, sample_id, data):
+        if self._dtype == 'u1':
+            data = np.unpackbits(data)
+        elif self._dtype == 'u4':
+            d = np.empty(len(data) * 2, dtype=np.uint8)
+            d[0::2] = np.logical_and(data, 0x0f)
+            d[1::2] = np.logical_and(np.right_shift(data, 4), 0x0f)
+            data = d
         sz = len(data)
         sz_max = self._size - 1
         if self._head != sample_id:
+            if self._dtype in [np.float32, np.float64]:
+                skip_fill = np.nan
+            else:
+                skip_fill = 0
             if self._head is None:
                 # first sample, set empty
                 self._first = sample_id
             else:
                 skip_sz = (sample_id - self._head) // self._decimate
                 if skip_sz >= sz_max:
-                    self._buffer[:] = np.nan
+                    self._buffer[:] = skip_fill
                 else:
                     ptr1 = self._wrap(self._head)
                     ptr2 = self._wrap(self._head + skip_sz)
                     if ptr2 > ptr1:
-                        self._buffer[ptr1:ptr2] = np.nan
+                        self._buffer[ptr1:ptr2] = skip_fill
                     else:
-                        self._buffer[ptr1:] = np.nan
-                        self._buffer[:ptr2] = np.nan
+                        self._buffer[ptr1:] = skip_fill
+                        self._buffer[:ptr2] = skip_fill
             self._head = sample_id
+
         ptr1 = self._wrap(self._head)
         ptr2 = self._wrap(self._head + sz * self._decimate)
         if ptr2 > ptr1:

@@ -49,7 +49,7 @@ class DeviceJs110(Device):
         }
         self._input_sampling_frequency = 2000000
         self._output_sampling_frequency = 2000000
-        self._stream_topics = ['s/i/', 's/v/']  # , 's/p/', 's/i/range/', 's/gpi/0/', 's/gpi/1/']  # todo
+        self._stream_topics = ['s/i/', 's/v/', 's/p/', 's/i/range/', 's/gpi/0/', 's/gpi/1/']
 
     def _on_current_ranging_samples_window(self, value):
         if value in ['m', 'n']:

@@ -28,7 +28,14 @@ NP_STATS_NAMES = ['length', 'mean', 'variance', 'min', 'max']
 STATS_FIELD_NAMES = ['current', 'voltage', 'power', 'current_range', 'current_lsb', 'voltage_lsb']
 STATS_DTYPE = np.dtype({'names': NP_STATS_NAMES, 'formats': NP_STATS_FORMAT})
 STATS_FIELD_COUNT = _STATS_FIELDS
-
+FIELDS = {
+    'current':       [(1, 0), 'A'],
+    'voltage':       [(2, 0), 'V'],
+    'power':         [(3, 0), 'W'],
+    'current_range': [(4, 0), ''],
+    'current_lsb':   [(5, 0), ''],
+    'voltage_lsb':   [(5, 1), ''],
+}
 
 class StreamBuffer:
     """Efficient real-time Joulescope data buffering.
@@ -36,16 +43,24 @@ class StreamBuffer:
     :param duration: The total length of the buffering in seconds.
     """
 
-    def __init__(self, duration, frequency, decimate=None):
+    def __init__(self, duration, frequency, device):
         # current, voltage, power, current_range, gpi0, gpi1
-        self._decimate = 1 if decimate is None else int(decimate)
         self._sampling_frequency = frequency
         self._duration = duration
         self.length = int(self._duration * self._sampling_frequency)
-        self._buffer = {
-            1: SampleBuffer(self.length, dtype=np.float32),  # current
-            2: SampleBuffer(self.length, dtype=np.float32),  # voltage
+        self.buffers = {
+            # (field_id, index): SampleBuffer
+            (1, 0): SampleBuffer(self.length, dtype=np.float32),  # current
+            (2, 0): SampleBuffer(self.length, dtype=np.float32),  # voltage
+            (3, 0): SampleBuffer(self.length, dtype=np.float32),  # power
+            (4, 0): SampleBuffer(self.length, dtype=np.uint8),    # current_range  (converted u4->u8 by pyjoulescope_driver binding)
+            (5, 0): SampleBuffer(self.length, dtype='u1'),        # gpi0
+            (5, 1): SampleBuffer(self.length, dtype='u1'),        # gpi1
         }
+        if device == 'js110':
+            self._decimate = 1
+        else:
+            self._decimate = 2
         self._sample_id_max = 0
         self._contiguous_max = 0
         self._callback = None
@@ -72,7 +87,7 @@ class StreamBuffer:
             Start and stop follow normal python indexing:
             start is inclusive, end is exclusive
         """
-        r = [b.range for b in self._buffer.values()]
+        r = [b.range for b in self.buffers.values() if b.active]
         start = max([b[0] for b in r])
         end = min([b[1] for b in r])
         return start, end
@@ -142,13 +157,17 @@ class StreamBuffer:
         pass
 
     def reset(self):
-        for b in self._buffer.values():
+        for b in self.buffers.values():
             b.clear()
 
     def insert(self, topic, value):
-        b = self._buffer[value["field_id"]]
-        b.add(value["sample_id"] // self._decimate, value["data"])
-        # print(f'{topic} {value["field_id"]}.{value["index"]} {value["sample_id"]} {len(value["data"])}')
+        try:
+            idx = (value['field_id'], value['index'])
+            b = self.buffers[idx]
+            b.add(value['sample_id'] // self._decimate, value['data'])
+            # print(f'{topic} {value["field_id"]}.{value["index"]} {value["sample_id"]} {len(value["data"])}')
+        except KeyError:
+            print('skip')  # buffer does not exist, skip
 
     def statistics_get(self, start, stop, out=None):
         """Get exact statistics over the specified range.
@@ -173,14 +192,14 @@ class StreamBuffer:
         out[:]['max'] = np.nan
         if stop >= self_start and start < self_stop:
             out[:]['length'] = stop - start
-            d = self._buffer[1].get_range(start, stop)
-            out[0]['mean'] = np.mean(d, dtype=np.float64)
-            out[0]['variance'] = np.var(d, dtype=np.float64)
-            out[0]['min'] = np.min(d)
-            out[0]['max'] = np.max(d)
-
-            d = self._buffer[2].get_range(start, stop)
-            out[1]['mean'] = np.mean(d, dtype=np.float64)
+            for i, b in enumerate(self.buffers.values()):
+                if not b.active:
+                    continue
+                d = b.get_range(start, stop)
+                out[i]['mean'] = np.mean(d, dtype=np.float64)
+                out[i]['variance'] = np.var(d, dtype=np.float64)
+                out[i]['min'] = np.min(d)
+                out[i]['max'] = np.max(d)
         return out, (start, stop)
 
     def data_get(self, start, stop, increment=None, out=None):
@@ -216,17 +235,17 @@ class StreamBuffer:
             out[n, :]['max'] = np.nan
             if k_start < self_start or k_end > self_end:
                 continue
-            d = self._buffer[1].get_range(k_start, k_end)
-            out[n, 0]['mean'] = np.mean(d, dtype=np.float64)
-            out[n, 0]['variance'] = np.var(d, dtype=np.float64)
-            out[n, 0]['min'] = np.min(d)
-            out[n, 0]['max'] = np.max(d)
-
-            d = self._buffer[2].get_range(k_start, k_end)
-            out[n, 1]['mean'] = np.mean(d, dtype=np.float64)
-            out[n, 1]['variance'] = np.var(d, dtype=np.float64)
-            out[n, 1]['min'] = np.min(d)
-            out[n, 1]['max'] = np.max(d)
+            for i, b in enumerate(self.buffers.values()):
+                if not b.active:
+                    continue
+                try:
+                    d = b.get_range(k_start, k_end)
+                    out[n, i]['mean'] = np.mean(d, dtype=np.float64)
+                    out[n, i]['variance'] = np.var(d, dtype=np.float64)
+                    out[n, i]['min'] = np.min(d)
+                    out[n, i]['max'] = np.max(d)
+                except KeyError:
+                    pass
         return out
 
     def samples_get(self, start, stop, fields=None):
@@ -280,19 +299,12 @@ class StreamBuffer:
             'signals': {},
         }
         for field in fields:
-            if field == 'current':
-                units = 'A'
-                out = self._buffer[1].get_range(start, stop)
-            elif field == 'voltage':
-                units = 'V'
-                out = self._buffer[2].get_range(start, stop)
-            elif field == 'power':
-                units = 'W'
-                # todo: JS220 driver should compute power
-                out = self._buffer[1].get_range(start, stop) * self._buffer[2].get_range(start, stop)
-            elif field in ['current_range', 'current_lsb', 'voltage_lsb']:
-                out = np.zeros(stop - start, dtype=np.uint8)
-            else:
-                raise ValueError(f'Unsupported field {field}')
-            result['signals'][field] = {'value': out, 'units': units}
+            try:
+                idx, units = FIELDS[field]
+                b = self.buffers.get[idx]
+                if b.active:
+                    out = b.get_range(start, stop)
+                    result['signals'][field] = {'value': out, 'units': units}
+            except KeyError:
+                pass  # cannot include this signal
         return result

@@ -330,9 +330,10 @@ class Device:
             self.parameter_set(name, value)
         if len(self._statistics_callbacks):
             self._statistics_start()
+        device = 'js110' if 'js110' in self._path else 'js220'
         self.stream_buffer = StreamBuffer(self._buffer_duration,
                                           frequency=self._output_sampling_frequency,
-                                          decimate=1 if 'js110' in self._path else 2)
+                                          device=device)
         self._config_apply(self.config)
         return rc
 
@@ -425,7 +426,11 @@ class Device:
         self.stop()
         self.stream_buffer.reset()
         self._stop_fn = stop_fn
-        for topic in self._stream_topics:
+        for topic, b in zip(self._stream_topics, self.stream_buffer.buffers.values()):
+            if topic is None:
+                b.active = False
+                continue
+            b.active = True
             self.subscribe(topic + '!data', 'pub', self._on_stream_cbk)
             self.publish(topic + 'ctrl', 1)
         self._is_streaming = True
@@ -442,8 +447,9 @@ class Device:
         if self._is_streaming:
             self._is_streaming = False
             for topic in self._stream_topics:
-                self.unsubscribe(topic + '!data', self._on_stream_cbk)
-                self.publish(topic + 'ctrl', 0)
+                if topic is not None:
+                    self.unsubscribe(topic + '!data', self._on_stream_cbk)
+                    self.publish(topic + 'ctrl', 0)
             fn, self._stop_fn = self._stop_fn, None
             if callable(fn):
                 fn(0, '')  # status, message
