@@ -98,7 +98,8 @@ class DeviceJs220(Device):
         self._buffer_duration = value
 
     def _on_reduction_frequency(self, value):
-        pass  # todo
+        scnt = int(1_000_000 / value)
+        self.publish('s/stats/scnt', scnt)
 
     def _on_sampling_frequency(self, value):
         value = min(value, 1000000)

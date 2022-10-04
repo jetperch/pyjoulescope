@@ -6,12 +6,15 @@ This file contains the list of changes made to pyjoulescope.
 
 ## 1.0.3
 
-2022 Oct 3 [in progress]
+2022 Oct 4
 
 * Updated udev rules for linux.
 * Improved signal support for v1 driver.
   * Add host-side power computation to JS220.
   * Added current range, GPI0, and GPI1 to JS110.
+  * JS220 produces empty current_range, GPI0, GPI1.
+* Fixed v1 variance computation.
+* Added JS220 reduction_frequency support.
 
 
 ## 1.0.2

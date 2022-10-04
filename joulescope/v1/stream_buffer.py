@@ -18,6 +18,7 @@ Stream Buffer implementation for v1 backend.
 
 from .sample_buffer import SampleBuffer
 import numpy as np
+import logging
 
 
 # statistics format for numpy structured data type
@@ -47,6 +48,7 @@ class StreamBuffer:
         # current, voltage, power, current_range, gpi0, gpi1
         self._sampling_frequency = frequency
         self._duration = duration
+        self._log = logging.getLogger(__name__)
         self.length = int(self._duration * self._sampling_frequency)
         self.buffers = {
             # (field_id, index): SampleBuffer
@@ -181,6 +183,7 @@ class StreamBuffer:
             available range.
         """
         self_start, self_stop = self.sample_id_range
+        #self._log.debug(f'statistics_get({start}, {stop}) in ({self_start}, {self_stop})')
         start = max(start, self_start)
         stop = min(stop, self_stop)
         if out is None:
@@ -191,13 +194,14 @@ class StreamBuffer:
         out[:]['min'] = np.nan
         out[:]['max'] = np.nan
         if stop >= self_start and start < self_stop:
-            out[:]['length'] = stop - start
+            out[:]['length'] = (stop - start) // self._decimate
             for i, b in enumerate(self.buffers.values()):
                 if not b.active:
                     continue
                 d = b.get_range(start, stop)
+                out[:]['length'] = len(d)
                 out[i]['mean'] = np.mean(d, dtype=np.float64)
-                out[i]['variance'] = np.var(d, dtype=np.float64)
+                out[i]['variance'] = np.var(d, dtype=np.float64) * len(d)
                 out[i]['min'] = np.min(d)
                 out[i]['max'] = np.max(d)
         return out, (start, stop)
@@ -216,7 +220,8 @@ class StreamBuffer:
         graphical display.  Applications should prefer using
         :meth:`samples_get` which provides metadata along with the samples.
         """
-        self_start, self_end = self.sample_id_range
+        self_start, self_stop = self.sample_id_range
+        #self._log.debug(f'data_get({start}, {stop}, {increment}) in ({self_start}, {self_stop})')
         expected_length = (stop - start) // increment
         n_total = (stop - start) // increment
         if out is not None:
@@ -233,15 +238,16 @@ class StreamBuffer:
             out[n, :]['variance'] = np.nan
             out[n, :]['min'] = np.nan
             out[n, :]['max'] = np.nan
-            if k_start < self_start or k_end > self_end:
+            if k_start < self_start or k_end > self_stop:
                 continue
             for i, b in enumerate(self.buffers.values()):
                 if not b.active:
                     continue
                 try:
                     d = b.get_range(k_start, k_end)
+                    out[n, :]['length'] = len(d)
                     out[n, i]['mean'] = np.mean(d, dtype=np.float64)
-                    out[n, i]['variance'] = np.var(d, dtype=np.float64)
+                    out[n, i]['variance'] = np.var(d, dtype=np.float64) * len(d)
                     out[n, i]['min'] = np.min(d)
                     out[n, i]['max'] = np.max(d)
                 except KeyError:
@@ -282,6 +288,7 @@ class StreamBuffer:
         if fields is None:
             fields = ['current', 'voltage', 'power', 'current_range', 'current_lsb', 'voltage_lsb']
         self_start, self_stop = self.sample_id_range
+        #self._log.debug(f'samples_get({start}, {stop}) in ({self_start}, {self_stop})')
         start = max(start, self_start)
         stop = min(stop, self_stop)
         t1 = self.sample_id_to_time(start)
@@ -301,9 +308,13 @@ class StreamBuffer:
         for field in fields:
             try:
                 idx, units = FIELDS[field]
-                b = self.buffers.get[idx]
+                b = self.buffers.get(idx)
                 if b.active:
                     out = b.get_range(start, stop)
+                    result['signals'][field] = {'value': out, 'units': units}
+                else:
+                    d = np.empty(stop - start, dtype=np.float32)
+                    d[:] = np.nan
                     result['signals'][field] = {'value': out, 'units': units}
             except KeyError:
                 pass  # cannot include this signal

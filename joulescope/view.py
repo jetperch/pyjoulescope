@@ -242,15 +242,19 @@ class View:
     def _update(self):
         if not callable(self.on_update_fn):
             return
-        self._update_from_buffer()
-        if self._data is None:
-            data = None
-        else:
-            data = data_array_to_update(self.limits, self._x, self._data)
-            if self._state != 'idle':
-                data['state']['source_type'] = 'realtime'
-        self._stream_notify_available = False
-        self._refresh_requested = False
+        try:
+            self._update_from_buffer()
+            if self._data is None:
+                data = None
+            else:
+                data = data_array_to_update(self.limits, self._x, self._data)
+                if self._state != 'idle':
+                    data['state']['source_type'] = 'realtime'
+            self._stream_notify_available = False
+            self._refresh_requested = False
+        except Exception:
+            self._log.exception('view could not get update data')
+            return
         try:
             self.on_update_fn(data)
         except Exception:
