@@ -44,7 +44,7 @@ class DeviceJs110(Device):
             'current_ranging_samples_post': 's/i/range/post',
 
             #'buffer_duration': self._on_buffer_duration,
-            #'reduction_frequency': self._on_reduction_frequency,
+            'reduction_frequency': self._on_reduction_frequency,
             #'sampling_frequency': self._on_sampling_frequency,
         }
         self._input_sampling_frequency = 2000000
@@ -67,6 +67,10 @@ class DeviceJs110(Device):
             raise ValueError(f'Invalid current_ranging value {value}')
         for p, v in zip(['type', 'samples_pre', 'samples_window', 'samples_post'], parts):
             self.parameter_set('current_ranging_' + p, v)
+
+    def _on_reduction_frequency(self, value):
+        scnt = int(2_000_000 / value)
+        self.publish('s/stats/scnt', scnt)
 
     def parameter_set(self, name, value):
         p = PARAMETERS_DICT[name]

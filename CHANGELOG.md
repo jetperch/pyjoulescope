@@ -16,6 +16,7 @@ This file contains the list of changes made to pyjoulescope.
 * Fixed v1 variance computation.
 * Added JS220 reduction_frequency support.
 * Simplified v1 device name string.
+* Added reduction_frequency support to JS110 v1.
 
 
 ## 1.0.2
