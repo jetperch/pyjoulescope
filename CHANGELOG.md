@@ -15,6 +15,7 @@ This file contains the list of changes made to pyjoulescope.
   * JS220 produces empty current_range, GPI0, GPI1.
 * Fixed v1 variance computation.
 * Added JS220 reduction_frequency support.
+* Simplified v1 device name string.
 
 
 ## 1.0.2

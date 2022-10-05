@@ -50,7 +50,8 @@ class Device:
                 self._parameters[p.name] = name_to_value(p.name, p.default)
 
     def __str__(self):
-        return f'Device({self._path})'
+        _, model, serial_number = self._path.split('/')
+        return f'{model.upper()}-{serial_number}'
 
     @property
     def device_path(self):
@@ -330,7 +331,7 @@ class Device:
             self.parameter_set(name, value)
         if len(self._statistics_callbacks):
             self._statistics_start()
-        device = 'js110' if 'js110' in self._path else 'js220'
+        device = 'js110' if 'js110' in self._path.lower() else 'js220'
         self.stream_buffer = StreamBuffer(self._buffer_duration,
                                           frequency=self._output_sampling_frequency,
                                           device=device)
