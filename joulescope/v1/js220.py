@@ -54,7 +54,7 @@ class DeviceJs220(Device):
         }
         self._input_sampling_frequency = 1000000
         self._output_sampling_frequency = 1000000
-        self._stream_topics = ['s/i/', 's/v/', 's/p/', None, None, None]  # skip 's/i/range/', 's/gpi/0/', 's/gpi/1/
+        self._stream_topics = ['s/i/', 's/v/', 's/p/', None, 's/gpi/0/', 's/gpi/1/']  # skip 's/i/range/', 's/gpi/0/', 's/gpi/1/'
 
     def parameter_set(self, name, value):
         p = PARAMETERS_DICT[name]

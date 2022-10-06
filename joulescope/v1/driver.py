@@ -81,8 +81,12 @@ class DriverWrapper:
             devices = sorted(devices, key=lambda x: str(x))
             for d in devices:
                 d.config = config
-        else:
-            devices = []
+        elif name.lower() == 'bootloader':
+            devices = self.devices.values()
+            devices = [d for d in devices if d.device_path[2] == '&']
+            devices = sorted(devices, key=lambda x: str(x))
+            for d in devices:
+                d.config = config
         return devices
 
 

@@ -233,7 +233,11 @@ class View:
             start_idx = self._data_idx * self._samples_per
             # self.log.debug('update(start=%s, stop=%s, increment=%s)', start_idx, sample_id_end, self.samples_per)
             self._data = np.roll(self._data, -delta, axis=0)
-            buffer.data_get(start_idx, sample_id_end, self._samples_per, self._data[-delta:, :])
+            try:
+                buffer.data_get(start_idx, sample_id_end, self._samples_per, self._data[-delta:, :])
+            except ValueError as ex:
+                self._log.warning(str(ex))
+                return
         else:
             stats_array_invalidate(self._data)
         self._data_idx = data_idx_view_end

@@ -234,21 +234,27 @@ class Device:
             topic = '/' + topic
         return self._path + topic
 
-    def publish(self, topic, value):
+    def publish(self, topic, value, timeout=None):
         """Publish to the underlying joulescope_driver instance.
 
         :param topic: The publish topic.
         :param value: The publish value.
+        :param timeout: The timeout in float seconds to wait for this operation
+            to complete.  None waits the default amount.
+            0 does not wait and subscription will occur asynchronously.
         """
-        return self._driver.publish(self._topic_make(topic), value)
+        return self._driver.publish(self._topic_make(topic), value, timeout)
 
-    def query(self, topic):
+    def query(self, topic, timeout=None):
         """Query the underlying joulescope_driver instance.
 
         :param topic: The publish topic to query.
+        :param timeout: The timeout in float seconds to wait for this operation
+            to complete.  None waits the default amount.
+            0 does not wait and subscription will occur asynchronously.
         :return: The value associated with topic.
         """
-        return self._driver.query(self._topic_make(topic))
+        return self._driver.query(self._topic_make(topic), timeout)
 
     def subscribe(self, topic, flags, fn, timeout=None):
         """Subscribe to receive topic updates.
@@ -518,7 +524,13 @@ class Device:
 
         :return: A dict containing status information.
         """
-        return {}
+        return {
+            'driver': {
+                'return_code': {
+                    'value': 0,
+                }
+            }
+        }
 
     def extio_status(self):
         """Read the EXTIO GPI value.
