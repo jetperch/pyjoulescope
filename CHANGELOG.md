@@ -4,6 +4,18 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 1.0.4
+
+2022 Oct 6
+
+* Added optional timeouts to v1 device publish and query.
+* Fixed v1 device status stub return value to be compatible with UI. 
+* Added v1 scan support for bootloader. 
+* Enabled JS220 gpi0 and gpi1 streaming by default.
+* Ignore view get_samples exception for short-term fix.
+  Will be addressed long-term by upcoming memory buffer reimplementation.
+
+
 ## 1.0.3
 
 2022 Oct 4
