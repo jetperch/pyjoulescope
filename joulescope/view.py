@@ -228,7 +228,11 @@ class View:
             if data_idx_view_end > 0:
                 start_idx = (data_idx_view_end - length) * self._samples_per
                 # self.log.debug('recompute(start=%s, stop=%s, increment=%s)', start_idx, sample_id_end, self.samples_per)
-                buffer.data_get(start_idx, sample_id_end, self._samples_per, self._data)
+                try:
+                    buffer.data_get(start_idx, sample_id_end, self._samples_per, self._data)
+                except ValueError as ex:
+                    self._log.warning(str(ex))
+                    return
         elif data_idx_view_end > 0:
             start_idx = self._data_idx * self._samples_per
             # self.log.debug('update(start=%s, stop=%s, increment=%s)', start_idx, sample_id_end, self.samples_per)
