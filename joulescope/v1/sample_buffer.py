@@ -35,7 +35,7 @@ class SampleBuffer:
             if size & 1:
                 size += 1
         self._decimate = 1 if decimate is None else int(decimate)
-        # print(f'SampleBuffer({size}, {dtype}, {self._decimate}')
+        #print(f'SampleBuffer({size}, {dtype}, {self._decimate})')
         self._size = size
         self._first = None   # first sample_id
         self._head = None    # head sample_id
@@ -44,7 +44,7 @@ class SampleBuffer:
         self.active = True
 
     def _wrap(self, ptr):
-        return (ptr // self._decimate) % self._size
+        return ptr % self._size
 
     @property
     def len_max(self):
@@ -53,7 +53,7 @@ class SampleBuffer:
     def __len__(self):
         if self._first is None:
             return 0
-        return min((self._head - self._first) // self._decimate, self.len_max)
+        return min(self._head - self._first, self.len_max)
 
     def clear(self):
         self._first = None
@@ -71,19 +71,23 @@ class SampleBuffer:
         start = max(h - self._size + 1, self._first)
         return start, self._head
 
-    @property
-    def range_decimated(self):
-        start, end = self.range
-        return start // self._decimate, end // self._decimate
-
     def add(self, sample_id, data):
+        sample_id //= self._decimate
         if self._dtype == 'u1':
             data = np.unpackbits(data)
+            if self._decimate > 1:
+                data = data[::self._decimate]
         elif self._dtype == 'u4':
-            d = np.empty(len(data) * 2, dtype=np.uint8)
-            d[0::2] = np.logical_and(data, 0x0f)
-            d[1::2] = np.logical_and(np.right_shift(data, 4), 0x0f)
-            data = d
+            if self._decimate == 2:
+                data = np.logical_and(data, 0x0f)
+            else:
+                d = np.empty(len(data) * 2, dtype=np.uint8)
+                d[0::2] = np.logical_and(data, 0x0f)
+                d[1::2] = np.logical_and(np.right_shift(data, 4), 0x0f)
+                data = d[::self._decimate]
+        elif self._dtype in ['u8', np.uint8]:
+            l1 = len(data)
+            data = data[::self._decimate]
         sz = len(data)
         sz_max = self._size - 1
         if self._head != sample_id:
@@ -95,7 +99,7 @@ class SampleBuffer:
                 # first sample, set empty
                 self._first = sample_id
             else:
-                skip_sz = (sample_id - self._head) // self._decimate
+                skip_sz = sample_id - self._head
                 if skip_sz >= sz_max:
                     self._buffer[:] = skip_fill
                 else:
@@ -109,14 +113,14 @@ class SampleBuffer:
             self._head = sample_id
 
         ptr1 = self._wrap(self._head)
-        ptr2 = self._wrap(self._head + sz * self._decimate)
+        ptr2 = self._wrap(self._head + sz)
         if ptr2 > ptr1:
             self._buffer[ptr1:ptr2] = data
         else:
             k = self._size - ptr1
             self._buffer[ptr1:] = data[:k]
             self._buffer[:ptr2] = data[k:]
-        self._head += sz * self._decimate
+        self._head += sz
 
     def get_range(self, start, end):
         s_start, s_end = self.range

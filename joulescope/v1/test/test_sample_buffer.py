@@ -88,5 +88,4 @@ class TestSampleBuffer(unittest.TestCase):
         a = np.arange(9, 16, 2, dtype=np.float32)
         c.add(9, a)
         self.assertEqual(4, len(c))
-        self.assertEqual((9, 17), c.range)
-        self.assertEqual((4, 8), c.range_decimated)
+        self.assertEqual((4, 8), c.range)

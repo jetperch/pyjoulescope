@@ -50,19 +50,20 @@ class StreamBuffer:
         self._duration = duration
         self._log = logging.getLogger(__name__)
         self.length = int(self._duration * self._sampling_frequency)
+        if device == 'js110':
+            decimate = 1
+        else:
+            decimate = 2
+        self._decimate = decimate
         self.buffers = {
             # (field_id, index): SampleBuffer
-            (1, 0): SampleBuffer(self.length, dtype=np.float32),  # current
-            (2, 0): SampleBuffer(self.length, dtype=np.float32),  # voltage
-            (3, 0): SampleBuffer(self.length, dtype=np.float32),  # power
-            (4, 0): SampleBuffer(self.length, dtype=np.uint8),    # current_range  (converted u4->u8 by pyjoulescope_driver binding)
-            (5, 0): SampleBuffer(self.length, dtype='u1'),        # gpi0
-            (5, 1): SampleBuffer(self.length, dtype='u1'),        # gpi1
+            (1, 0): SampleBuffer(self.length, dtype=np.float32, decimate=decimate),  # current
+            (2, 0): SampleBuffer(self.length, dtype=np.float32, decimate=decimate),  # voltage
+            (3, 0): SampleBuffer(self.length, dtype=np.float32, decimate=decimate),  # power
+            (4, 0): SampleBuffer(self.length, dtype=np.uint8, decimate=decimate),    # current_range  (converted u4->u8 by pyjoulescope_driver binding)
+            (5, 0): SampleBuffer(self.length, dtype='u1', decimate=decimate),        # gpi0
+            (5, 1): SampleBuffer(self.length, dtype='u1', decimate=decimate),        # gpi1
         }
-        if device == 'js110':
-            self._decimate = 1
-        else:
-            self._decimate = 2
         self._sample_id_max = 0
         self._contiguous_max = 0
         self._callback = None
@@ -166,7 +167,7 @@ class StreamBuffer:
         try:
             idx = (value['field_id'], value['index'])
             b = self.buffers[idx]
-            b.add(value['sample_id'] // self._decimate, value['data'])
+            b.add(value['sample_id'], value['data'])
             # print(f'{topic} {value["field_id"]}.{value["index"]} {value["sample_id"]} {len(value["data"])}')
         except KeyError:
             print('skip')  # buffer does not exist, skip
@@ -194,7 +195,7 @@ class StreamBuffer:
         out[:]['min'] = np.nan
         out[:]['max'] = np.nan
         if stop >= self_start and start < self_stop:
-            out[:]['length'] = (stop - start) // self._decimate
+            out[:]['length'] = stop - start
             for i, b in enumerate(self.buffers.values()):
                 if not b.active:
                     continue

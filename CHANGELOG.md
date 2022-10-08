@@ -4,6 +4,14 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 1.0.5
+
+2022 Oct 8
+
+* Added JS220 support for current range streaming and fixed
+  output sample rate at 1 Msps for all channels.
+
+
 ## 1.0.4
 
 2022 Oct 6
