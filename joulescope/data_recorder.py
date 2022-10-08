@@ -807,7 +807,10 @@ class DataReader:
 
         result = {}
         for field, field_idx in field_idxs:
-            result[field] = rv[field_idx][:out_idx]
+            x = rv[field_idx][:out_idx]
+            idx = STATS_FIELD_NAMES.index(field)
+            fn = _DOWNSAMPLE_UNFORMATTERS[idx]
+            result[field] = fn(x)
         return result
 
     def _reduction_tlv(self, reduction_idx):

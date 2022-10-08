@@ -10,6 +10,7 @@ This file contains the list of changes made to pyjoulescope.
 
 * Added JS220 support for current range streaming and fixed
   output sample rate at 1 Msps for all channels.
+* Added JLS v1 viewer scale for GPI and current range signals.
 
 
 ## 1.0.4
