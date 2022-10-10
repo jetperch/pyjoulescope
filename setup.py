@@ -70,6 +70,10 @@ extensions = [
         sources=['joulescope/v0/pattern_buffer' + ext],
         include_dirs=[np.get_include()],
     ),
+    setuptools.Extension('joulescope.v1.stats',
+                         sources=['joulescope/v1/stats' + ext],
+                         include_dirs=[np.get_include()],
+                         ),
 ]
 
 if USE_CYTHON:

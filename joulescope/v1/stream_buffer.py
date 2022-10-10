@@ -17,6 +17,7 @@ Stream Buffer implementation for v1 backend.
 """
 
 from .sample_buffer import SampleBuffer
+from .stats import compute_stats
 import numpy as np
 import logging
 
@@ -189,22 +190,24 @@ class StreamBuffer:
         stop = min(stop, self_stop)
         if out is None:
             out = np.zeros(_STATS_FIELDS, dtype=STATS_DTYPE)
-        out[:]['length'] = 0
-        out[:]['mean'] = np.nan
-        out[:]['variance'] = np.nan
-        out[:]['min'] = np.nan
-        out[:]['max'] = np.nan
         if stop >= self_start and start < self_stop:
             out[:]['length'] = stop - start
             for i, b in enumerate(self.buffers.values()):
                 if not b.active:
+                    out[i]['length'] = 0
+                    out[i]['mean'] = np.nan
+                    out[i]['variance'] = np.nan
+                    out[i]['min'] = np.nan
+                    out[i]['max'] = np.nan
                     continue
                 d = b.get_range(start, stop)
-                out[:]['length'] = len(d)
-                out[i]['mean'] = np.mean(d, dtype=np.float64)
-                out[i]['variance'] = np.var(d, dtype=np.float64) * len(d)
-                out[i]['min'] = np.min(d)
-                out[i]['max'] = np.max(d)
+                compute_stats(d, out[i])
+        else:
+            out[:]['length'] = 0
+            out[:]['mean'] = np.nan
+            out[:]['variance'] = np.nan
+            out[:]['min'] = np.nan
+            out[:]['max'] = np.nan
         return out, (start, stop)
 
     def data_get(self, start, stop, increment=None, out=None):
@@ -234,23 +237,23 @@ class StreamBuffer:
         for n in range(n_total):
             k_start = start + n * increment
             k_end = k_start + increment
-            out[n, :]['length'] = increment
-            out[n, :]['mean'] = np.nan
-            out[n, :]['variance'] = np.nan
-            out[n, :]['min'] = np.nan
-            out[n, :]['max'] = np.nan
             if k_start < self_start or k_end > self_stop:
+                out[n, :]['length'] = 0
+                out[n, :]['mean'] = np.nan
+                out[n, :]['variance'] = np.nan
+                out[n, :]['min'] = np.nan
+                out[n, :]['max'] = np.nan
                 continue
             for i, b in enumerate(self.buffers.values()):
                 if not b.active:
-                    continue
+                    out[n, i]['length'] = increment
+                    out[n, i]['mean'] = np.nan
+                    out[n, i]['variance'] = np.nan
+                    out[n, i]['min'] = np.nan
+                    out[n, i]['max'] = np.nan
                 try:
                     d = b.get_range(k_start, k_end)
-                    out[n, :]['length'] = len(d)
-                    out[n, i]['mean'] = np.mean(d, dtype=np.float64)
-                    out[n, i]['variance'] = np.var(d, dtype=np.float64) * len(d)
-                    out[n, i]['min'] = np.min(d)
-                    out[n, i]['max'] = np.max(d)
+                    compute_stats(d, out[n, i])
                 except KeyError:
                     pass
         return out
