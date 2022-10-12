@@ -6,11 +6,12 @@ This file contains the list of changes made to pyjoulescope.
 
 ## 1.0.6
 
-2022 Oct 10
+2022 Oct 12
 
 * Improved v1 stream buffer performance.
   This improvement uses native cython code to still perform brute
   force computation.  Reductions could further improve performance.
+* Coalesced duplicate view requests to reduce processing. 
 
 
 ## 1.0.5

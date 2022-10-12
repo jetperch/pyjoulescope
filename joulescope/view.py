@@ -15,6 +15,7 @@
 from joulescope import span
 from joulescope.v0.stream_buffer import StreamBuffer, stats_to_api, \
     stats_array_factory, stats_array_invalidate
+from collections import OrderedDict
 import threading
 import queue
 import numpy as np
@@ -73,11 +74,13 @@ class View:
 
         self._thread = None
         self._closing = False
-        self._cmd_queue = queue.Queue()  # tuples of (command, args, callback)
+        self._cmd_queue = queue.Queue()  # tuples of (source_id, command, args, callback)
+        self._cmd_pend = OrderedDict()  # (source_id, command): (command, args, callback)
         self._response_queue = queue.Queue()
         self.on_update_fn = None  # callable(data)
         self._quit = False
         self.on_close = None  # optional callable() on close
+        self._source_id_next = 0
 
         if stream_buffer is not None:
             self._stream_buffer_assign(stream_buffer)
@@ -160,34 +163,37 @@ class View:
         self._log.info('View.run start')
         while not self._quit:
             try:
-                cmd, args, cbk = self._cmd_queue.get(timeout=timeout)
+                while True:
+                    source_id, cmd, args, cbk = self._cmd_queue.get(timeout=timeout)
+                    if source_id is None:
+                        k, self._source_id_next = self._source_id_next, self._source_id_next + 1
+                        source_id = f'__view{k}'
+                    self._cmd_pend[(source_id, cmd)] = (cmd, args, cbk)
+                    timeout = 0.0
             except queue.Empty:
+                pass
+            if not len(self._cmd_pend):
                 timeout = 1.0
-                if cmd_count and self._refresh_requested and (self._changed or self._stream_notify_available):
-                    self._update()
-                cmd_count = 0
                 continue
-            except Exception:
-                self._log.exception('Exception during View _cmd_queue get')
-                continue
-            cmd_count += 1
-            timeout = 0.0
+            _, (cmd, args, cbk) = self._cmd_pend.popitem(last=False)
             rv = self._cmd_process(cmd, args)
             if callable(cbk):
                 try:
                     cbk(rv)
                 except Exception:
                     self._log.exception('in callback')
+            if not len(self._cmd_pend) and self._refresh_requested and (self._changed or self._stream_notify_available):
+                self._update()
         self._data = None
         self._log.info('View.run done')
 
-    def _post(self, command, args=None, cbk=None):
+    def _post(self, command, args=None, cbk=None, source_id=None):
         if self._thread is None:
             self._log.info('View._post(%s) when thread not running', command)
         else:
-            self._cmd_queue.put((command, args, cbk))
+            self._cmd_queue.put((source_id, command, args, cbk))
 
-    def _post_block(self, command, args=None, timeout=None):
+    def _post_block(self, command, args=None, timeout=None, source_id=None):
         timeout = TIMEOUT if timeout is None else float(timeout)
         # self._log.debug('_post_block %s start', command)
         while not self._response_queue.empty():
@@ -198,7 +204,7 @@ class View:
                 pass
         if self._thread is None:
             raise IOError('View thread not running')
-        self._post(command, args, lambda rv_=None: self._response_queue.put(rv_))
+        self._post(command, args, lambda rv_=None: self._response_queue.put(rv_), source_id=source_id)
         try:
             rv = self._response_queue.get(timeout=timeout)
         except queue.Empty as ex:
@@ -486,9 +492,9 @@ class View:
     def statistics_get_multiple(self, ranges, units=None, callback=None, source_id=None):
         args = {'ranges': ranges, 'units': units, 'source_id': source_id}
         if callback is None:
-            return self._post_block('statistics_get_multiple', args)
+            return self._post_block('statistics_get_multiple', args, source_id=source_id)
         else:
-            self._post('statistics_get_multiple', args=args, cbk=callback)
+            self._post('statistics_get_multiple', args=args, cbk=callback, source_id=source_id)
             return None
 
     def ping(self, *args, **kwargs):
