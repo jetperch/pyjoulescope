@@ -18,6 +18,7 @@ joulescope/v0/stream_buffer.c
 joulescope/v0/stream_buffer.html
 joulescope/v0/pattern_buffer.c
 joulescope/libjoulescope.dll
+joulescope/v1/stats.c
 
 # Compiled Object files
 *.slo

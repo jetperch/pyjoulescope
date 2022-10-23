@@ -7,7 +7,8 @@ This file contains the list of changes made to pyjoulescope.
 ## 1.0.7
 
 2022 Oct 24 [in progress]
-
+ 
+* Fixed v1 linux support.
 * Fixed min/max limits on v1 statistics.
 
 
