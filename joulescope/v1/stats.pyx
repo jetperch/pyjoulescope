@@ -21,6 +21,7 @@ Optimized Cython native Joulescope code.
 # cython: boundscheck=True, wraparound=True, nonecheck=True, overflowcheck=True, cdivision=True
 
 from libc.stdint cimport uint8_t, uint64_t
+from libc.float cimport FLT_MAX
 import numpy as np
 cimport numpy as np
 
@@ -67,8 +68,8 @@ cdef compute_stats_f32(d, out):
     cdef float [:] d_f32
     cdef float v_f32
     cdef double v_accum = 0.0
-    cdef float v_min = 255
-    cdef float v_max = 0
+    cdef float v_min = FLT_MAX
+    cdef float v_max = -FLT_MAX
     cdef double v_f64
     cdef double v_mean
     cdef double v_var = 0.0
