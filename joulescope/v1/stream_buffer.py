@@ -45,17 +45,32 @@ class StreamBuffer:
     :param duration: The total length of the buffering in seconds.
     """
 
-    def __init__(self, duration, frequency, device):
+    def __init__(self, duration, frequency, device, output_frequency=None):
         # current, voltage, power, current_range, gpi0, gpi1
-        self._sampling_frequency = frequency
+        self._input_sampling_frequency = frequency
+        if output_frequency is not None:
+            self._sampling_frequency = output_frequency
+        else:
+            self._sampling_frequency = frequency
         self._duration = duration
         self._log = logging.getLogger(__name__)
-        self.length = int(self._duration * self._sampling_frequency)
+        self.length = 0
         if device == 'js110':
             decimate = 1
         else:
             decimate = 2
         self._decimate = decimate
+        self.buffers = {}
+        self._sample_id_max = 0
+        self._contiguous_max = 0
+        self._callback = None
+        self._update()
+
+    def _update(self):
+        self.length = int(self._duration * self._sampling_frequency)
+        decimate = self._decimate
+        decimate *= self._input_sampling_frequency // self._sampling_frequency
+        self.buffers.clear()
         self.buffers = {
             # (field_id, index): SampleBuffer
             (1, 0): SampleBuffer(self.length, dtype=np.float32, decimate=decimate),  # current
@@ -65,9 +80,6 @@ class StreamBuffer:
             (5, 0): SampleBuffer(self.length, dtype='u1', decimate=decimate),        # gpi0
             (5, 1): SampleBuffer(self.length, dtype='u1', decimate=decimate),        # gpi1
         }
-        self._sample_id_max = 0
-        self._contiguous_max = 0
-        self._callback = None
 
     def __len__(self):
         return self.length
@@ -92,6 +104,8 @@ class StreamBuffer:
             start is inclusive, end is exclusive
         """
         r = [b.range for b in self.buffers.values() if b.active]
+        if len(r) == 0:
+            return None, None
         start = max([b[0] for b in r])
         end = min([b[1] for b in r])
         return start, end
@@ -122,11 +136,25 @@ class StreamBuffer:
 
     @property
     def input_sampling_frequency(self):
-        return self._sampling_frequency
+        return self._input_sampling_frequency
 
     @property
     def output_sampling_frequency(self):
         return self._sampling_frequency
+
+    @output_sampling_frequency.setter
+    def output_sampling_frequency(self, value):
+        self._sampling_frequency = value
+        self._update()
+
+    @property
+    def duration(self):
+        return self._duration
+
+    @duration.setter
+    def duration(self, value):
+        self._duration = value
+        self._update()
 
     @property
     def limits_time(self):

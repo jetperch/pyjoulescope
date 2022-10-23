@@ -71,10 +71,27 @@ class Device:
         """The output sampling frequency."""
         return self._output_sampling_frequency
 
+    @output_sampling_frequency.setter
+    def output_sampling_frequency(self, value):
+        self._output_sampling_frequency = value
+        if self.stream_buffer is not None:
+            self.stream_buffer.output_sampling_frequency = self._output_sampling_frequency
+
     @property
     def sampling_frequency(self):
         """The output sampling frequency."""
-        return self._output_sampling_frequency
+        return self.output_sampling_frequency
+
+    @property
+    def buffer_duration(self):
+        """The stream buffer duration."""
+        return self._buffer_duration
+
+    @buffer_duration.setter
+    def buffer_duration(self, value):
+        self._buffer_duration = value
+        if self.stream_buffer is not None:
+            self.stream_buffer.duration = self._buffer_duration
 
     @property
     def statistics_callback(self):

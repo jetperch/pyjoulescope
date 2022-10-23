@@ -4,6 +4,13 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 1.0.7
+
+2022 Oct 24 [in progress]
+
+* Fixed min/max limits on v1 statistics.
+
+
 ## 1.0.6
 
 2022 Oct 12

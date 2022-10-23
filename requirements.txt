@@ -9,7 +9,7 @@ psutil
 pyjls>=0.4.2
 pyjoulescope_driver>=0.2.5
 pymonocypher>=0.1.3
-pypiwin32>=223; sys_platform == 'win32'
+pywin32; sys_platform == 'win32'
 # python {path_to_python}\scripts\pywin32_postinstall.py -install
 python-dateutil>=2.7.3
 recommonmark

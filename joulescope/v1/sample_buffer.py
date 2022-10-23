@@ -34,7 +34,7 @@ class SampleBuffer:
             dtype = np.uint8
             if size & 1:
                 size += 1
-        self._decimate = 1 if decimate is None else int(decimate)
+        self._decimate = 1 if decimate is None else max(1, int(decimate))
         #print(f'SampleBuffer({size}, {dtype}, {self._decimate})')
         self._size = size
         self._first = None   # first sample_id

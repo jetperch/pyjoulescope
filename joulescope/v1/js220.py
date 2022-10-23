@@ -95,7 +95,7 @@ class DeviceJs220(Device):
             self.publish('s/v/range/mode', 'manual')
 
     def _on_buffer_duration(self, value):
-        self._buffer_duration = value
+        self.buffer_duration = value
 
     def _on_reduction_frequency(self, value):
         scnt = int(1_000_000 / value)

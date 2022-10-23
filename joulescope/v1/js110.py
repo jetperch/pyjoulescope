@@ -42,10 +42,9 @@ class DeviceJs110(Device):
             'current_ranging_samples_pre': 's/i/range/pre',
             'current_ranging_samples_window': self._on_current_ranging_samples_window,
             'current_ranging_samples_post': 's/i/range/post',
-
-            #'buffer_duration': self._on_buffer_duration,
+            'buffer_duration': self._on_buffer_duration,
             'reduction_frequency': self._on_reduction_frequency,
-            #'sampling_frequency': self._on_sampling_frequency,
+            'sampling_frequency': self._on_sampling_frequency,
         }
         self._input_sampling_frequency = 2000000
         self._output_sampling_frequency = 2000000
@@ -68,9 +67,17 @@ class DeviceJs110(Device):
         for p, v in zip(['type', 'samples_pre', 'samples_window', 'samples_post'], parts):
             self.parameter_set('current_ranging_' + p, v)
 
+    def _on_buffer_duration(self, value):
+        self.buffer_duration = value
+
     def _on_reduction_frequency(self, value):
         scnt = int(2_000_000 / value)
         self.publish('s/stats/scnt', scnt)
+
+    def _on_sampling_frequency(self, value):
+        value = int(value)
+        self.publish('s/fs', int(value))
+        self.output_sampling_frequency = value
 
     def parameter_set(self, name, value):
         p = PARAMETERS_DICT[name]
