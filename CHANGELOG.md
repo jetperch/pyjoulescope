@@ -6,10 +6,11 @@ This file contains the list of changes made to pyjoulescope.
 
 ## 1.0.7
 
-2022 Oct 24 [in progress]
+2022 Oct 24
  
 * Fixed v1 linux support.
 * Fixed min/max limits on v1 statistics.
+* Updated to pyjoulescope_driver 1.0.3 for improved JS110 support.
 
 
 ## 1.0.6
