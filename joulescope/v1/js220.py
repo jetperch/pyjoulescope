@@ -33,6 +33,17 @@ _SAMPLING_FREQUENCIES = [
 ]
 
 
+def _signal_bool(value):
+    if isinstance(value, str):
+        value = value.lower()
+    if value in [0, False, '0', 'off', 'disable']:
+        return False
+    elif value in [1, True, '1', 'on', 'enable']:
+        return True
+    else:
+        raise ValueError('invalid signal level.')
+
+
 def _version_u32_to_str(v):
     v = int(v)
     major = (v >> 24) & 0xff
@@ -51,6 +62,8 @@ class DeviceJs220(Device):
             'buffer_duration': self._on_buffer_duration,
             'reduction_frequency': self._on_reduction_frequency,
             'sampling_frequency': self._on_sampling_frequency,
+            'gpo0': self._on_gpo0,
+            'gpo1': self._on_gpo1,
         }
         self._input_sampling_frequency = 1000000
         self._output_sampling_frequency = 1000000
@@ -106,6 +119,21 @@ class DeviceJs220(Device):
         if value not in _SAMPLING_FREQUENCIES:
             raise ValueError(f'invalid sampling frequency {value}')
         self._output_sampling_frequency = value
+
+    def _on_gpo(self, index, value):
+        index = int(index)
+        if _signal_bool(value):
+            topic = 's/gpo/+/!set'
+        else:
+            topic = 's/gpo/+/!clr'
+        value = 1 << index
+        self.publish(topic, value)
+
+    def _on_gpo0(self, value):
+        self._on_gpo(0, value)
+
+    def _on_gpo1(self, value):
+        self._on_gpo(1, value)
 
     def _config_apply(self, config=None):
         if config is None or config.lower() == 'auto':
