@@ -12,4 +12,4 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .driver import scan, scan_require_one, scan_for_changes, Driver, DeviceNotify
+from .driver import scan, scan_require_one, scan_for_changes, Driver, DriverWrapper, DeviceNotify

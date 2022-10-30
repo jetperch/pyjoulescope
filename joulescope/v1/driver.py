@@ -90,7 +90,7 @@ class DriverWrapper:
         return devices
 
 
-_device_wrapper = DriverWrapper()
+_driver_wrapper = DriverWrapper()
 
 
 def scan(name: str = None, config=None) -> List[Device]:
