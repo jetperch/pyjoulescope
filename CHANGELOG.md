@@ -6,9 +6,10 @@ This file contains the list of changes made to pyjoulescope.
 
 ## 1.0.8
 
-2022 Oct 30 [in progress]
+2022 Oct 30
 
 * Added JS220 GPO support.
+* Fixed entry point imports for deployment.
 
 
 ## 1.0.7

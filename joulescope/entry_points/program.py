@@ -13,8 +13,7 @@
 # limitations under the License.
 
 import time
-from joulescope.v0.driver import scan_require_one
-from joulescope.v0.firmware_manager import upgrade
+from joulescope import scan_require_one
 import sys
 
 
@@ -112,6 +111,7 @@ def calibration_program(data, is_factory):
 
 
 def _upgrade(filename):
+    from joulescope.v0.firmware_manager import upgrade
     try:
         d = scan_require_one(name='bootloader')
     except RuntimeError:
