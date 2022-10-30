@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import unittest
-from joulescope.filter_fir import FilterFir
+from joulescope.v0.filter_fir import FilterFir
 import numpy as np
 import time
 

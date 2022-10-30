@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from joulescope.usb import core as usb_core
-from joulescope.usb.api import DeviceEvent
-from joulescope.usb.impl_tools import RunUntilDone
-from joulescope.usb.core import SetupPacket, ControlTransferResponse
-from joulescope.usb.scan_info import INFO
+from joulescope.v0.usb import core as usb_core
+from joulescope.v0.usb.api import DeviceEvent
+from joulescope.v0.usb.impl_tools import RunUntilDone
+from joulescope.v0.usb.core import SetupPacket, ControlTransferResponse
+from joulescope.v0.usb.scan_info import INFO
 from typing import List
 import time
 import threading

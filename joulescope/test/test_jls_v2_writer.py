@@ -18,7 +18,7 @@ Test the JLS v2 writer.
 
 import unittest
 from joulescope import JlsWriter
-from joulescope.stream_buffer import StreamBuffer, usb_packet_factory
+from joulescope.v0.stream_buffer import StreamBuffer, usb_packet_factory
 from pyjls import Reader
 import tempfile
 import numpy as np

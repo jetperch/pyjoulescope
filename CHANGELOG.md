@@ -4,9 +4,100 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 1.0.8
+
+2022 Oct 30
+
+* Added JS220 GPO support.
+* Fixed entry point imports for deployment.
+
+
+## 1.0.7
+
+2022 Oct 24
+ 
+* Fixed v1 linux support.
+* Fixed min/max limits on v1 statistics.
+* Updated to pyjoulescope_driver 1.0.3 for improved JS110 support.
+
+
+## 1.0.6
+
+2022 Oct 12
+
+* Improved v1 stream buffer performance.
+  This improvement uses native cython code to still perform brute
+  force computation.  Reductions could further improve performance.
+* Coalesced duplicate view requests to reduce processing. 
+
+
+## 1.0.5
+
+2022 Oct 8
+
+* Added JS220 support for current range streaming and fixed
+  output sample rate at 1 Msps for all channels.
+* Added JLS v1 viewer scale for GPI and current range signals.
+
+
+## 1.0.4
+
+2022 Oct 6
+
+* Added optional timeouts to v1 device publish and query.
+* Fixed v1 device status stub return value to be compatible with UI. 
+* Added v1 scan support for bootloader. 
+* Enabled JS220 gpi0 and gpi1 streaming by default.
+* Ignore view get_samples exception for short-term fix.
+  Will be addressed long-term by upcoming memory buffer reimplementation.
+
+
+## 1.0.3
+
+2022 Oct 4
+
+* Updated udev rules for linux.
+* Improved signal support for v1 driver.
+  * Add host-side power computation to JS220.
+  * Added current range, GPI0, and GPI1 to JS110.
+  * JS220 produces empty current_range, GPI0, GPI1.
+* Fixed v1 variance computation.
+* Added JS220 reduction_frequency support.
+* Simplified v1 device name string.
+* Added reduction_frequency support to JS110 v1.
+
+
+## 1.0.2
+
+2022 Sep 27
+
+* Added pyjoulescope_driver dependency.
+* Increased pyjls version dependency to >=0.4.2.
+
+
+## 1.0.1
+
+2022 Sep 24
+
+* Fixed JS220 stream callback.
+* Fixed entry points to work with selected backend (not just v0).
+* Removed capture_usb entry point, which is no longer valid.
+* Fixed JS220 device remove.
+* Fixed JS220 scan_for_changes.
+
+
+## 1.0.0
+
+2022 Sep 9
+
+* JS220 support
+  * Refactored code for v0 & v1 support.
+  * Migrated to joulescope_driver as default backend.
+
+
 ## 0.9.12
 
-2022 May 31 [in progress]
+2022 May 31
 
 * Fixed DownsamplingStreamBuffer to use reductions correctly #26
 

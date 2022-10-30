@@ -12,13 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from joulescope import usb
-from joulescope.usb.device_thread import DeviceThread
-from .parameters_v1 import PARAMETERS, PARAMETERS_DICT, PARAMETERS_DEFAULTS, name_to_value, value_to_name
-from . import datafile
-from . import bootloader
-from joulescope.stream_buffer import StreamBuffer, DownsamplingStreamBuffer
-from joulescope.calibration import Calibration
+from joulescope.v0.usb.device_thread import DeviceThread
+from joulescope.parameters_v1 import PARAMETERS, PARAMETERS_DICT, PARAMETERS_DEFAULTS, name_to_value, value_to_name
+from . import bootloader, usb
+from joulescope import datafile
+from joulescope.v0.stream_buffer import StreamBuffer, DownsamplingStreamBuffer
+from joulescope.v0.calibration import Calibration
 from joulescope.view import View
 import struct
 import copy
@@ -26,7 +25,6 @@ import time
 import json
 import io
 import queue
-import numpy as np
 import binascii
 from typing import List
 import logging
@@ -1390,8 +1388,8 @@ def scan_for_changes(name: str = None, devices=None, config=None):
         if not len(matches):
             devices_removed.append(d)
 
-    log.info('scan_for_changes %d devices: %d added, %d removed',
-             len(devices_now), len(devices_added), len(devices_removed))
+    _log.info('scan_for_changes %d devices: %d added, %d removed',
+              len(devices_now), len(devices_added), len(devices_removed))
     return devices_now, devices_added, devices_removed
 
 

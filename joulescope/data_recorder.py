@@ -12,14 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from . import datafile
-from joulescope.calibration import Calibration
-from joulescope.stream_buffer import reduction_downsample, Statistics, stats_to_api, \
+from joulescope.v0.calibration import Calibration
+from joulescope.v0.stream_buffer import reduction_downsample, Statistics, stats_to_api, \
     stats_invalidate, \
     stats_factory, stats_array_factory, stats_array_clear, stats_array_invalidate, \
-    STATS_DTYPE, STATS_FIELD_NAMES, STATS_FIELD_COUNT, NP_STATS_NAMES, \
+    STATS_FIELD_NAMES, NP_STATS_NAMES, \
     I_RANGE_MISSING, SUPPRESS_SAMPLES_MAX, RawProcessor, stats_compute
-from joulescope import array_storage
+from joulescope.v0 import array_storage
+from joulescope import datafile
 import json
 import numpy as np
 import datetime
@@ -807,7 +807,10 @@ class DataReader:
 
         result = {}
         for field, field_idx in field_idxs:
-            result[field] = rv[field_idx][:out_idx]
+            x = rv[field_idx][:out_idx]
+            idx = STATS_FIELD_NAMES.index(field)
+            fn = _DOWNSAMPLE_UNFORMATTERS[idx]
+            result[field] = fn(x)
         return result
 
     def _reduction_tlv(self, reduction_idx):

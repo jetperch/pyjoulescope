@@ -17,7 +17,7 @@ Test the circular plot buffer with data reduction
 """
 
 import unittest
-from joulescope.calibration import Calibration
+from joulescope.v0.calibration import Calibration
 import monocypher
 import numpy as np
 import os

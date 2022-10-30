@@ -16,7 +16,7 @@
 This executable drives the general purpose outputs on a Joulescope."""
 
 import time
-from joulescope.driver import scan_require_one
+from joulescope import scan_require_one
 
 
 def parser_config(p):

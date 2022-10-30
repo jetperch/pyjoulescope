@@ -12,10 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from joulescope.usb import core as usb_core
-from joulescope.usb.api import DeviceEvent
-from joulescope.usb.impl_tools import RunUntilDone
-from joulescope.usb.scan_info import INFO
+from .. import core as usb_core
+from joulescope.v0.usb.api import DeviceEvent
+from joulescope.v0.usb.impl_tools import RunUntilDone
+from joulescope.v0.usb.scan_info import INFO
 from .setupapi import device_interface_guid_to_paths
 from ctypes import windll, Structure, POINTER, byref, sizeof, \
     c_ubyte, c_ushort, c_ulong, c_void_p, pointer
@@ -342,7 +342,7 @@ class EndpointIn:
                     break
                 ov = self._overlapped_pending.pop(0)
                 self._overlapped_free.append(ov)
-                msg = 'EndpointIn WinUsb_GetOverlappedResult fatal: %s' % (kernel32.get_error_str(ec), )
+                msg = 'EndpointIn WinUsb_GetOverlappedResult fatal: %s' % (kernel32.get_error_str(ec),)
                 rv = True
                 self._halt(DeviceEvent.COMMUNICATION_ERROR, msg)
         if count > self.transfer_expire_max:

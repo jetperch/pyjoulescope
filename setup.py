@@ -29,7 +29,7 @@ from distutils.errors import DistutilsExecError
 import os
 import sys
 
-setuptools.dist.Distribution().fetch_build_eggs(['Cython>=0.20.1', 'numpy>=1.17'])
+setuptools.dist.Distribution().fetch_build_eggs(['Cython', 'numpy'])
 
 import numpy as np
 
@@ -40,7 +40,7 @@ VERSION_PATH = os.path.join(MYPATH, 'joulescope', 'version.py')
 
 try:
     from Cython.Build import cythonize
-    USE_CYTHON = os.path.isfile(os.path.join(MYPATH, 'joulescope', 'stream_buffer.pyx'))
+    USE_CYTHON = os.path.isfile(os.path.join(MYPATH, 'joulescope', 'v0', 'stream_buffer.pyx'))
 except ImportError:
     USE_CYTHON = False
 
@@ -52,24 +52,28 @@ with open(VERSION_PATH, 'r', encoding='utf-8') as f:
 
 ext = '.pyx' if USE_CYTHON else '.c'
 extensions = [
-    setuptools.Extension('joulescope.stream_buffer',
+    setuptools.Extension('joulescope.v0.stream_buffer',
         sources=[
-            'joulescope/stream_buffer' + ext,
-            'joulescope/native/running_statistics.c',
+            'joulescope/v0/stream_buffer' + ext,
+            'joulescope/v0/native/running_statistics.c',
         ],
         include_dirs=[np.get_include()],
     ),
-    setuptools.Extension('joulescope.filter_fir',
+    setuptools.Extension('joulescope.v0.filter_fir',
         sources=[
-            'joulescope/filter_fir' + ext,
-            'joulescope/native/filter_fir.c',
+            'joulescope/v0/filter_fir' + ext,
+            'joulescope/v0/native/filter_fir.c',
         ],
         include_dirs=[np.get_include()],
     ),
-    setuptools.Extension('joulescope.pattern_buffer',
-        sources=['joulescope/pattern_buffer' + ext],
+    setuptools.Extension('joulescope.v0.pattern_buffer',
+        sources=['joulescope/v0/pattern_buffer' + ext],
         include_dirs=[np.get_include()],
     ),
+    setuptools.Extension('joulescope.v1.stats',
+                         sources=['joulescope/v1/stats' + ext],
+                         include_dirs=[np.get_include()],
+                         ),
 ]
 
 if USE_CYTHON:
@@ -83,7 +87,7 @@ with open(os.path.join(MYPATH, 'README.md'), 'r', encoding='utf-8') as f:
 
 
 if sys.platform.startswith('win'):
-    PLATFORM_INSTALL_REQUIRES = ['pypiwin32>=223']
+    PLATFORM_INSTALL_REQUIRES = ['pywin32']
 else:
     PLATFORM_INSTALL_REQUIRES = []
 
@@ -177,8 +181,7 @@ setuptools.setup(
 
     setup_requires=[
         # https://developercommunity.visualstudio.com/content/problem/1207405/fmod-after-an-update-to-windows-2004-is-causing-a.html
-        "numpy>=1.20; platform_system=='Windows'",
-        "numpy>=1.17; platform_system!='Windows'",
+        'numpy',
         'Cython>=0.29.3',
     ],
 
@@ -186,10 +189,10 @@ setuptools.setup(
     # https://numpy.org/neps/nep-0029-deprecation_policy.html
     install_requires=[
         "mistune==0.8.4; python_version <= '3.7'",
-        "numpy>=1.20; platform_system=='Windows'",
-        "numpy>=1.17; platform_system!='Windows'",
+        "numpy",
         'psutil',
-        'pyjls>=0.3.4',
+        'pyjls>=0.4.2',
+        'pyjoulescope_driver>=1.0.4',
         'python-dateutil>=2.7.3',
         'pymonocypher>=0.1.3',
     ] + PLATFORM_INSTALL_REQUIRES,

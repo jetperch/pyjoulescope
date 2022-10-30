@@ -17,7 +17,7 @@ Test the array_starage
 """
 
 import unittest
-from joulescope import array_storage
+from joulescope.v0 import array_storage
 import numpy as np
 
 
@@ -48,7 +48,7 @@ class TestArrayStorage(unittest.TestCase):
         array_storage.pack({}, sample_count=0)
         array_storage.pack({}, sample_count=2 ** 24 - 1)
         with self.assertRaises(ValueError):
-            array_storage.pack({}, sample_count=2**24)
+            array_storage.pack({}, sample_count=2 ** 24)
 
     def test_single_float32(self):
         x = np.arange(0, 10, 0.25, dtype=np.float32)

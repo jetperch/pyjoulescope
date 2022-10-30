@@ -15,7 +15,7 @@
 import signal
 import time
 import logging
-from joulescope.driver import scan_require_one
+from joulescope import scan_require_one
 import numpy as np
 from queue import Queue, Empty
 

@@ -26,8 +26,14 @@
 #     https://www.joulescope.com                 : product website
 #     https://github.com/jetperch/pyjoulescope   : source code
 
-# Development Joulescope
+# Joulescope JS110 application
 SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTRS{idVendor}=="16d0", ATTRS{idProduct}=="0e88", MODE="0666", GROUP="plugdev"
 
-# Development bootloader
+# Joulescope JS110 bootloader
 SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTRS{idVendor}=="16d0", ATTRS{idProduct}=="0e87", MODE="0666", GROUP="plugdev"
+
+# Joulescope JS220 application
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTRS{idVendor}=="16d0", ATTRS{idProduct}=="10ba", MODE="0666", GROUP="plugdev"
+
+# Joulescope JS220 updater
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTRS{idVendor}=="16d0", ATTRS{idProduct}=="10b9", MODE="0666", GROUP="plugdev"

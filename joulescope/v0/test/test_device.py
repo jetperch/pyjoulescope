@@ -19,9 +19,9 @@ This test requires that JouleScope hardware be attached to this PC!
 """
 
 import unittest
-from joulescope.driver import scan, UsbdRequest, LOOPBACK_BUFFER_SIZE, Device
-from joulescope.usb import hw_tests
-from joulescope.pattern_buffer import PatternBuffer
+from joulescope.v0.driver import scan, UsbdRequest, LOOPBACK_BUFFER_SIZE, Device
+from joulescope.v0.usb import hw_tests
+from joulescope.v0.pattern_buffer import PatternBuffer
 
 
 class TestPattern(unittest.TestCase):

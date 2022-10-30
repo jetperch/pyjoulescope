@@ -13,8 +13,8 @@
 # limitations under the License.
 
 
-from joulescope.bootloader import Bootloader
-from joulescope.driver import bootloader_go
+from joulescope.v0.bootloader import Bootloader
+from joulescope.v0.driver import bootloader_go
 from zipfile import ZipFile
 import monocypher
 import binascii
@@ -177,7 +177,7 @@ def upgrade(device, image, progress_cbk=None, stage_cbk=None, done_cbk=None):
 
 def run():
     import sys
-    from joulescope.driver import scan_require_one
+    from joulescope.v0.driver import scan_require_one
     with scan_require_one() as d:
         upgrade(d, sys.argv[1], progress_cbk=print, stage_cbk=print)
 
