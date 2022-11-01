@@ -87,7 +87,8 @@ cdef compute_stats_f32(d, out):
             v_max = v_f32
         count += 1
     v_mean = v_accum
-    v_mean /= count
+    if count > 0:
+        v_mean /= count
     for i in range(sz):
         v_f32 = d_f32[i]
         if isnan(v_f32):
