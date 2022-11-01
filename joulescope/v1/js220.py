@@ -138,7 +138,8 @@ class DeviceJs220(Device):
     def _config_apply(self, config=None):
         if config is None or config.lower() == 'auto':
             self.publish('s/i/range/mode', 'auto')
-            self.publish('s/v/range/mode', 'auto')
+            self.publish('s/v/range/select', '15 V')
+            self.publish('s/v/range/mode', 'manual')
         elif config == 'ignore':
             pass  # do nothing
         elif config == 'off':

@@ -14,7 +14,7 @@
 
 
 from .device import Device
-from joulescope.parameters_v1 import PARAMETERS_DICT, name_to_value
+from joulescope.parameters_v1 import PARAMETERS_DICT, name_to_value, PARAMETERS_DEFAULTS
 import logging
 
 
@@ -78,6 +78,10 @@ class DeviceJs110(Device):
         value = int(value)
         self.publish('s/fs', int(value))
         self.output_sampling_frequency = value
+
+    def _config_apply(self, config=None):
+        for key, value in PARAMETERS_DEFAULTS.get(config, {}).items():
+            self.parameter_set(key, value)
 
     def parameter_set(self, name, value):
         p = PARAMETERS_DICT[name]

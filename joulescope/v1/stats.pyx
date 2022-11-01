@@ -22,6 +22,7 @@ Optimized Cython native Joulescope code.
 
 from libc.stdint cimport uint8_t, uint64_t
 from libc.float cimport FLT_MAX
+from libc.math cimport isnan
 import numpy as np
 cimport numpy as np
 
@@ -65,6 +66,7 @@ cdef compute_stats_u8(d, out):
 cdef compute_stats_f32(d, out):
     cdef uint64_t sz = len(d)
     cdef uint64_t i
+    cdef uint64_t count = 0
     cdef float [:] d_f32
     cdef float v_f32
     cdef double v_accum = 0.0
@@ -76,19 +78,24 @@ cdef compute_stats_f32(d, out):
     d_f32 = d
     for i in range(sz):
         v_f32 = d_f32[i]
+        if isnan(v_f32):
+            continue
         v_accum += v_f32
         if v_f32 < v_min:
             v_min = v_f32
         if v_f32 > v_max:
             v_max = v_f32
+        count += 1
     v_mean = v_accum
-    v_mean /= sz
+    v_mean /= count
     for i in range(sz):
         v_f32 = d_f32[i]
+        if isnan(v_f32):
+            continue
         v_f64 = v_f32 - v_mean
         v_f64 *= v_f64
         v_var += v_f64
-    out['length'] = sz
+    out['length'] = count
     out['mean'] = v_mean
     out['variance'] = v_var
     out['min'] = v_min
