@@ -21,11 +21,13 @@ Most users will run the graphical user interface which is in the
 The majority of code is written in Python 3.8+, but it does contain some C and
 Cython for better performance. 
 
-This package runs under Windows 10, Linux (Ubuntu is tested) and Mac OS X.
+This package runs under Windows 11 & 10,
+Linux (Ubuntu is tested),
+and macOS 13, 12, & 10.15.
 On Windows, the USB communication is performed using 
 `WinUSB <https://docs.microsoft.com/en-us/windows-hardware/drivers/usbcon/winusb>`_,
 which is included with Windows 10.
-On Linux and Mac OS X, the USB communication uses 
+On Linux and macOS, the USB communication uses
 `libusb-1.0 <https://libusb.info/>`_.
 
 For the list of changes by release, see the :ref:`Changelog <changelog>`.

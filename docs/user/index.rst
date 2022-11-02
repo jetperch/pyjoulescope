@@ -14,4 +14,4 @@ and gives some information for further use.
     install
     quickstart
     license
-    changelog
+    changelog.md

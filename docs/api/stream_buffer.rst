@@ -4,5 +4,5 @@
 Stream Buffer API
 =================
 
-.. autoclass:: joulescope.stream_buffer.StreamBuffer
+.. autoclass:: joulescope.v1.stream_buffer.StreamBuffer
     :members:

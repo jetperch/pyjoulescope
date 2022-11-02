@@ -281,6 +281,7 @@ class Device:
         :param flags: The flags or list of flags for this subscription.
             The flags can be int32 jsdrv_subscribe_flag_e or string
             mnemonics, which are:
+
             - pub: Subscribe to normal values
             - pub_retain: Subscribe to normal values and immediately publish
               all matching retained values.  With timeout, this function does
@@ -293,6 +294,7 @@ class Device:
             - query_req: Subscribe to all query requests (not normally useful).
             - query_rsp: Subscribe to all query responses.
             - return_code: Subscribe to all return code responses.
+
         :param fn: The function to call on each publish.  Note that python
             dynamically constructs bound methods.  To unsubscribe a method,
             provide the exact same bound method instance to unsubscribe.

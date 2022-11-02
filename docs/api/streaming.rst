@@ -4,5 +4,5 @@
 Stream Process API
 ==================
 
-.. autoclass:: joulescope.driver.StreamProcessApi
+.. autoclass:: joulescope.v0.driver.StreamProcessApi
     :members:
