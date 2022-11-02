@@ -14,6 +14,7 @@ import os
 import sys
 DOC_PATH = os.path.dirname(os.path.abspath(__file__))
 PROJ_PATH = os.path.dirname(DOC_PATH)
+sys.path.insert(0, PROJ_PATH)
 import joulescope
 from m2r import MdInclude
 from recommonmark.transform import AutoStructify
