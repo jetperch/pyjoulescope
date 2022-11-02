@@ -191,17 +191,16 @@ setuptools.setup(
     # See https://packaging.python.org/en/latest/requirements.html
     # https://numpy.org/neps/nep-0029-deprecation_policy.html
     install_requires=[
-        "mistune==0.8.4; python_version <= '3.7'",
-        "numpy",
+        'numpy',
         'psutil',
         'pyjls>=0.4.2',
-        'pyjoulescope_driver>=1.0.5',
+        'pyjoulescope_driver>=1.0.6',
         'python-dateutil>=2.7.3',
         'pymonocypher>=0.1.3',
     ] + PLATFORM_INSTALL_REQUIRES,
 
     extras_require={
-        'dev': ['check-manifest', 'coverage', 'Cython', 'wheel', 'sphinx', 'm2r'],
+        'dev': ['check-manifest', 'coverage', 'Cython', 'wheel', 'sphinx', 'myst-parser'],
     },   
 
     entry_points={
