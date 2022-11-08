@@ -155,7 +155,6 @@ setuptools.setup(
         # Supported Python versions
         'Programming Language :: Python',
         'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
         'Programming Language :: Python :: 3.9',
         'Programming Language :: Python :: 3.10',
@@ -168,6 +167,7 @@ setuptools.setup(
         'Topic :: Software Development :: Testing',
         'Topic :: System :: Hardware :: Hardware Drivers',
         'Topic :: Utilities',
+        'Topic :: System :: Hardware :: Universal Serial Bus (USB)',
     ],
 
     keywords='joulescope driver',
@@ -180,7 +180,7 @@ setuptools.setup(
     include_dirs=[],
     
     # See https://packaging.python.org/guides/distributing-packages-using-setuptools/#python-requires
-    python_requires='~=3.7',
+    python_requires='~=3.8',
 
     setup_requires=[
         # https://developercommunity.visualstudio.com/content/problem/1207405/fmod-after-an-update-to-windows-2004-is-causing-a.html
