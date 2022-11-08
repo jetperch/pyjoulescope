@@ -6,7 +6,7 @@ This file contains the list of changes made to pyjoulescope.
 
 ## 1.0.10
 
-2022 Nov 8 [in progress]
+2022 Nov 8
 
 * Added missing c & h files to tar.gz source distribution. 
 * Improved JS220 parameter support.
