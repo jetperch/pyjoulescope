@@ -67,6 +67,7 @@ class DeviceJs220(Device):
         }
         self._input_sampling_frequency = 1000000
         self._output_sampling_frequency = 1000000
+        self._parameters['sampling_frequency'] = self._output_sampling_frequency
         self._stream_topics = ['s/i/', 's/v/', 's/p/', 's/i/range/', 's/gpi/0/', 's/gpi/1/']
 
     def parameter_set(self, name, value):
@@ -75,7 +76,10 @@ class DeviceJs220(Device):
             self._log.warning('Attempting to set read_only parameter %s', name)
             return
         try:
-            value = name_to_value(name, value)
+            if name == 'v_range' and value in ['2V', '2 V', '2', 2]:
+                value = '2 V'
+            else:
+                value = name_to_value(name, value)
         except KeyError:
             if p.validator is None:
                 raise KeyError(f'value {value} not allowed for parameter {name}')
@@ -104,7 +108,11 @@ class DeviceJs220(Device):
             self.publish('s/v/range/mode', 'auto')
         else:
             # JS110 current ranges are 5 and 15 V, cannot map to 2 V
-            self.publish('s/v/range/select', '15 V')
+            if value in ['2V', '2 V']:
+                value = '2 V'
+            elif value in ['15V', '15 V', 0]:
+                value = '15 V'
+            self.publish('s/v/range/select', value)
             self.publish('s/v/range/mode', 'manual')
 
     def _on_buffer_duration(self, value):

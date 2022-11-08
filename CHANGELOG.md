@@ -9,6 +9,9 @@ This file contains the list of changes made to pyjoulescope.
 2022 Nov 8 [in progress]
 
 * Added missing c & h files to tar.gz source distribution. 
+* Improved JS220 parameter support.
+  * Added v_range "2 V" support.
+  * Fixed default output frequency (was 2 MHz, now 1 MHz).
 
 
 ## 1.0.9
