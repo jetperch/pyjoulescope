@@ -427,9 +427,11 @@ class Device:
         b = self.stream_buffer
         _, e1 = b.sample_id_range
         b.insert(topic, value)
-        _, e2 = b.sample_id_range
+        e0, e2 = b.sample_id_range
 
         if e1 == e2:
+            return False
+        if e0 == e2:
             return False
         rv = self._stream_process_call('stream_notify', self.stream_buffer)
         if rv:
