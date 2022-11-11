@@ -351,6 +351,7 @@ class Device:
         """
         rc = self._driver.open(self._path, mode, timeout)
         self.is_open = True
+        self.publish('h/fs', 2000000)
         while len(self._parameter_set_queue):
             name, value = self._parameter_set_queue.pop(0)
             self.parameter_set(name, value)
@@ -361,7 +362,6 @@ class Device:
                                           frequency=self._input_sampling_frequency,
                                           device=device,
                                           output_frequency=self._output_sampling_frequency)
-        self.publish('h/fs', 2000000)
         self._config_apply(self.config)
         return rc
 
@@ -480,8 +480,8 @@ class Device:
             self._is_streaming = False
             for topic in self._stream_topics:
                 if topic is not None:
-                    self.unsubscribe(topic + '!data', self._on_stream_cbk)
-                    self.publish(topic + 'ctrl', 0)
+                    self.unsubscribe(topic + '!data', self._on_stream_cbk, timeout=0)
+                    self.publish(topic + 'ctrl', 0, timeout=0)
             fn, self._stop_fn = self._stop_fn, None
             if callable(fn):
                 fn(0, '')  # status, message

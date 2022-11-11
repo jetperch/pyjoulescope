@@ -195,6 +195,8 @@ class DataRecorder:
             finalize = True
             stream_buffer = self._stream_buffer
         sb_start, sb_stop = stream_buffer.sample_id_range
+        if sb_start is None or sb_start == sb_stop:
+            return  # stream buffer empty
         if self._stream_buffer is None:
             self._stream_buffer = stream_buffer
             data_format = 'raw' if stream_buffer.has_raw else 'float32_v2'

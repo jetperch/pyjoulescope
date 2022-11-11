@@ -101,7 +101,7 @@ class StreamBuffer:
         """
         r = [b.range for b in self.buffers.values() if b.active]
         if len(r) == 0:
-            return 0, 0
+            return None, None
         start = max([b[0] for b in r])
         end = min([b[1] for b in r])
         if end < start:
@@ -123,8 +123,8 @@ class StreamBuffer:
         e1, e2 = self.sample_id_range
         if e1 is None or self._sample_id_start is None:
             return False
-        duration = (e2 - self._sample_id_start) / self._input_sampling_frequency
-        if self._duration_max < duration:
+        duration = (e2 - self._sample_id_start) / self._sampling_frequency
+        if duration < self._duration_max:
             return False
         return True
 
@@ -144,8 +144,8 @@ class StreamBuffer:
         e1, e2 = self.sample_id_range
         if e1 is None or self._sample_id_start is None:
             return False
-        duration = (e2 - self._sample_id_start) / self._input_sampling_frequency
-        if self._contiguous_duration_max < duration:
+        duration = (e2 - self._sample_id_start) / self._sampling_frequency
+        if duration < self._contiguous_duration_max:
             return False
         return True
 
