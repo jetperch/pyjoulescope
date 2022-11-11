@@ -65,7 +65,7 @@ class DeviceJs220(Device):
             'gpo0': self._on_gpo0,
             'gpo1': self._on_gpo1,
         }
-        self._input_sampling_frequency = 1000000
+        self._input_sampling_frequency = 2000000
         self._output_sampling_frequency = 1000000
         self._parameters['sampling_frequency'] = self._output_sampling_frequency
         self._stream_topics = ['s/i/', 's/v/', 's/p/', 's/i/range/', 's/gpi/0/', 's/gpi/1/']
@@ -123,10 +123,12 @@ class DeviceJs220(Device):
         self.publish('s/stats/scnt', scnt)
 
     def _on_sampling_frequency(self, value):
-        value = min(value, 1000000)
+        value = min(int(value), 1000000)
         if value not in _SAMPLING_FREQUENCIES:
             raise ValueError(f'invalid sampling frequency {value}')
-        self._output_sampling_frequency = value
+        self._log.info('_on_sampling_frequency %s', value)
+        self.publish('h/fs', value)
+        self.output_sampling_frequency = value
 
     def _on_gpo(self, index, value):
         index = int(index)

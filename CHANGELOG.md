@@ -4,6 +4,15 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 1.0.11
+
+2022 Nov 10
+
+* Modified v1 to output decimate sample id as needed.
+* Fixed v1 sample buffering on resets.
+* Added local sample buffer decimation for JS220 integer quantities.
+
+
 ## 1.0.10
 
 2022 Nov 8

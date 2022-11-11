@@ -52,40 +52,36 @@ class StreamBuffer:
             self._sampling_frequency = output_frequency
         else:
             self._sampling_frequency = frequency
-        self._duration = duration
+        self._buffer_duration = duration  #: total buffer duration in seconds
+        self._device = device
         self._log = logging.getLogger(__name__)
-        self.length = 0
-        if device == 'js110':
-            decimate = 1
-        else:
-            decimate = 2
-        self._decimate = decimate
+        self._length = 0
         self.buffers = {}
-        self._sample_id_max = 0
-        self._contiguous_max = 0
+        self._duration_max = 0
+        self._contiguous_duration_max = 0
+        self._sample_id_start = None
         self._callback = None
         self._update()
 
     def _update(self):
-        self.length = int(self._duration * self._sampling_frequency)
-        decimate = self._decimate
-        decimate *= self._input_sampling_frequency // self._sampling_frequency
+        self._length = int(self._buffer_duration * self._sampling_frequency)
         self.buffers.clear()
+        self._sample_id_start = None
         self.buffers = {
             # (field_id, index): SampleBuffer
-            (1, 0): SampleBuffer(self.length, dtype=np.float32, decimate=decimate),  # current
-            (2, 0): SampleBuffer(self.length, dtype=np.float32, decimate=decimate),  # voltage
-            (3, 0): SampleBuffer(self.length, dtype=np.float32, decimate=decimate),  # power
-            (4, 0): SampleBuffer(self.length, dtype=np.uint8, decimate=decimate),    # current_range  (converted u4->u8 by pyjoulescope_driver binding)
-            (5, 0): SampleBuffer(self.length, dtype='u1', decimate=decimate),        # gpi0
-            (5, 1): SampleBuffer(self.length, dtype='u1', decimate=decimate),        # gpi1
+            (1, 0): SampleBuffer(self._length, dtype=np.float32, name='current'),
+            (2, 0): SampleBuffer(self._length, dtype=np.float32, name='voltage'),
+            (3, 0): SampleBuffer(self._length, dtype=np.float32, name='power'),
+            (4, 0): SampleBuffer(self._length, dtype=np.uint8, name='current_range'),  # (converted u4->u8 by pyjoulescope_driver binding)
+            (5, 0): SampleBuffer(self._length, dtype='u1', name='gpi0'),
+            (5, 1): SampleBuffer(self._length, dtype='u1', name='gpi1'),
         }
 
     def __len__(self):
-        return self.length
+        return self._length
 
     def __str__(self):
-        return f'StreamBuffer(length={self.length}, reductions=[])'
+        return f'StreamBuffer(length={self._length}, reductions=[])'
 
     @property
     def voltage_range(self):
@@ -105,26 +101,53 @@ class StreamBuffer:
         """
         r = [b.range for b in self.buffers.values() if b.active]
         if len(r) == 0:
-            return None, None
+            return 0, 0
         start = max([b[0] for b in r])
         end = min([b[1] for b in r])
+        if end < start:
+            end = start
         return start, end
 
     @property
-    def sample_id_max(self):
-        return self._sample_id_max
+    def duration_max(self):
+        return self._duration_max
 
-    @sample_id_max.setter
-    def sample_id_max(self, value):
-        self._sample_id_max = value  # stop streaming when reach this sample
+    @duration_max.setter
+    def duration_max(self, value):
+        self._duration_max = value  # stop streaming when reach this sample
 
     @property
-    def contiguous_max(self):
-        return self._contiguous_max
+    def is_duration_max(self):
+        if self._duration_max is None:
+            return False
+        e1, e2 = self.sample_id_range
+        if e1 is None or self._sample_id_start is None:
+            return False
+        duration = (e2 - self._sample_id_start) / self._input_sampling_frequency
+        if self._duration_max < duration:
+            return False
+        return True
 
-    @contiguous_max.setter
-    def contiguous_max(self, value):
-        self._contiguous_max = value
+    @property
+    def contiguous_duration_max(self):
+        return self._contiguous_duration_max
+
+    @contiguous_duration_max.setter
+    def contiguous_duration_max(self, value):
+        self._contiguous_duration_max = value
+
+    @property
+    def is_contiguous_duration_max(self):
+        if self._contiguous_duration_max is None:
+            return False
+        # todo: reset on sample drops
+        e1, e2 = self.sample_id_range
+        if e1 is None or self._sample_id_start is None:
+            return False
+        duration = (e2 - self._sample_id_start) / self._input_sampling_frequency
+        if self._contiguous_duration_max < duration:
+            return False
+        return True
 
     @property
     def callback(self):
@@ -148,12 +171,12 @@ class StreamBuffer:
         self._update()
 
     @property
-    def duration(self):
-        return self._duration
+    def buffer_duration(self):
+        return self._buffer_duration
 
-    @duration.setter
-    def duration(self, value):
-        self._duration = value
+    @buffer_duration.setter
+    def buffer_duration(self, value):
+        self._buffer_duration = value
         self._update()
 
     @property
@@ -178,7 +201,7 @@ class StreamBuffer:
     def status(self):
         return {
             'device_sample_id': {'value': 0, 'units': 'samples'},
-            'sample_id': {'value': self._sample_id_max, 'units': 'samples'},
+            # 'sample_id': {'value': self._sample_id_max, 'units': 'samples'},
             'sample_missing_count': {'value': 0, 'units': 'samples'},
             'skip_count': {'value': 0, 'units': ''},
             'sample_sync_count': {'value': 0, 'units': 'samples'},
@@ -191,15 +214,29 @@ class StreamBuffer:
     def reset(self):
         for b in self.buffers.values():
             b.clear()
+        self._sample_id_start = None
 
     def insert(self, topic, value):
         try:
             idx = (value['field_id'], value['index'])
             b = self.buffers[idx]
-            b.add(value['sample_id'], value['data'])
-            # print(f'{topic} {value["field_id"]}.{value["index"]} {value["sample_id"]} {len(value["data"])}')
+            sample_rate = value.get('sample_rate')
+            decimate_factor = value.get('decimate_factor')
+            local_decimate = 1
+            if decimate_factor == 1 and self._sampling_frequency != sample_rate:
+                local_decimate = sample_rate // self._sampling_frequency
+            b.add(value['sample_id'], value['data'],
+                  sample_rate=sample_rate,
+                  decimate_factor=decimate_factor,
+                  local_decimate_factor=local_decimate)
+            if self._sample_id_start is None:
+                e1, e2 = self.sample_id_range
+                if e1 is not None and e1 != e2:
+                    self._sample_id_start = e1
+            # print(f'{topic} {value["field_id"]}.{value["index"]} {value["sample_id"]} {len(value["data"])} {sample_rate} {decimate_factor} {local_decimate}')
         except KeyError:
-            print('skip')  # buffer does not exist, skip
+            pass  # buffer does not exist, skip
+        return 0
 
     def statistics_get(self, start, stop, out=None):
         """Get exact statistics over the specified range.
@@ -253,7 +290,7 @@ class StreamBuffer:
         :meth:`samples_get` which provides metadata along with the samples.
         """
         self_start, self_stop = self.sample_id_range
-        #self._log.debug(f'data_get({start}, {stop}, {increment}) in ({self_start}, {self_stop})')
+        # self._log.debug(f'data_get({start}, {stop}, {increment}) in ({self_start}, {self_stop})')
         expected_length = (stop - start) // increment
         n_total = (stop - start) // increment
         if out is not None:

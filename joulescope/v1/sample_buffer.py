@@ -15,17 +15,19 @@
 """A circular sample buffer for storing samples."""
 
 import numpy as np
+import logging
 
 
 class SampleBuffer:
 
-    def __init__(self, size, dtype, decimate=None):
+    def __init__(self, size, dtype, name=None):
         """Construct a new sample buffer.
 
-        :param size: The size in samples.
+        :param size: The size in decimated samples.
         :param dtype: The numpy data type, 'u4' or 'u1' for the incoming sample data type.
-        :param decimate: The sample_id decimation factor.  None is 1.
+        :param name: The optional name for this buffer.
         """
+        self._name = '__none__' if name is None else str(name)
         self._dtype = dtype
         if dtype == 'u1':
             dtype = np.uint8
@@ -34,7 +36,11 @@ class SampleBuffer:
             dtype = np.uint8
             if size & 1:
                 size += 1
-        self._decimate = 1 if decimate is None else max(1, int(decimate))
+        self._log = logging.getLogger(f'{__name__}.{self._name}')
+        self._sample_rate = None
+        self._incoming_decimate = 1
+        self._local_decimate = 1
+        self._local_decimate_offset = 0
         #print(f'SampleBuffer({size}, {dtype}, {self._decimate})')
         self._size = size
         self._first = None   # first sample_id
@@ -43,12 +49,23 @@ class SampleBuffer:
         self.clear()
         self.active = True
 
+    def __str__(self):
+        return f'SampleBuffer(size={self._size}, dtype={self._dtype}, name={self._name})'
+
     def _wrap(self, ptr):
         return ptr % self._size
 
     @property
     def len_max(self):
         return self._size - 1
+
+    @property
+    def sample_rate(self):
+        return self._sample_rate
+
+    @property
+    def decimate(self):
+        return self._incoming_decimate * self._local_decimate
 
     def __len__(self):
         if self._first is None:
@@ -58,6 +75,7 @@ class SampleBuffer:
     def clear(self):
         self._first = None
         self._head = None
+        self._local_decimate_offset = 0
         if self._buffer.dtype in [np.float32, np.float64]:
             self._buffer[:] = np.nan
         else:
@@ -71,32 +89,50 @@ class SampleBuffer:
         start = max(h - self._size + 1, self._first)
         return start, self._head
 
-    def add(self, sample_id, data):
-        sample_id //= self._decimate
+    def add(self, sample_id, data, sample_rate=None, decimate_factor=None, local_decimate_factor=None):
+        if sample_id is None or data is None:
+            self._log.warning('Invalid add')
+            return
+        clr = False
+        if sample_rate is not None and self._sample_rate != sample_rate:
+            self.clear()
+            self._sample_rate = sample_rate
+            clr = True
+        if decimate_factor is not None and self._incoming_decimate != decimate_factor:
+            self.clear()
+            self._incoming_decimate = decimate_factor
+            clr = True
+        if local_decimate_factor is not None and self._local_decimate != local_decimate_factor:
+            self.clear()
+            self._local_decimate = local_decimate_factor
+            clr = True
+        if clr:
+            self._log.info('add -> auto clear')
+
+        sample_id_orig = sample_id
+        sample_id //= (self._incoming_decimate * self._local_decimate)
         if self._dtype == 'u1':
             data = np.unpackbits(data)
-            if self._decimate > 1:
-                data = data[::self._decimate]
         elif self._dtype == 'u4':
-            if self._decimate == 2:
-                data = np.logical_and(data, 0x0f)
-            else:
-                d = np.empty(len(data) * 2, dtype=np.uint8)
-                d[0::2] = np.logical_and(data, 0x0f)
-                d[1::2] = np.logical_and(np.right_shift(data, 4), 0x0f)
-                data = d[::self._decimate]
-        elif self._dtype in ['u8', np.uint8]:
-            l1 = len(data)
-            data = data[::self._decimate]
-        sz = len(data)
+            d = np.empty(len(data) * 2, dtype=np.uint8)
+            d[0::2] = np.logical_and(data, 0x0f)
+            d[1::2] = np.logical_and(np.right_shift(data, 4), 0x0f)
+            data = d
+
         sz_max = self._size - 1
         if self._head != sample_id:
+            self._log.info('skip head=%s, sample_id=%s, sample_id_orig=%s, sz=%s',
+                           self._head, sample_id, sample_id_orig, len(data))
             if self._dtype in [np.float32, np.float64]:
                 skip_fill = np.nan
             else:
                 skip_fill = 0
             if self._head is None:
                 # first sample, set empty
+                offset = sample_id_orig - sample_id * self._incoming_decimate * self._local_decimate
+                if self._local_decimate > 1 and offset != 0:
+                    sample_id += 1
+                    self._local_decimate_offset = self._local_decimate - offset // self._incoming_decimate
                 self._first = sample_id
             else:
                 skip_sz = sample_id - self._head
@@ -112,6 +148,11 @@ class SampleBuffer:
                         self._buffer[:ptr2] = skip_fill
             self._head = sample_id
 
+        if self._local_decimate > 1:
+            offset = (self._local_decimate_offset + len(data)) % self._local_decimate
+            data = data[self._local_decimate_offset::self._local_decimate]
+            self._local_decimate_offset = offset
+        sz = len(data)
         ptr1 = self._wrap(self._head)
         ptr2 = self._wrap(self._head + sz)
         if ptr2 > ptr1:

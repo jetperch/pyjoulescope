@@ -91,7 +91,7 @@ class Device:
     def buffer_duration(self, value):
         self._buffer_duration = value
         if self.stream_buffer is not None:
-            self.stream_buffer.duration = self._buffer_duration
+            self.stream_buffer.buffer_duration = self._buffer_duration
 
     @property
     def statistics_callback(self):
@@ -358,8 +358,10 @@ class Device:
             self._statistics_start()
         device = 'js110' if 'js110' in self._path.lower() else 'js220'
         self.stream_buffer = StreamBuffer(self._buffer_duration,
-                                          frequency=self._output_sampling_frequency,
-                                          device=device)
+                                          frequency=self._input_sampling_frequency,
+                                          device=device,
+                                          output_frequency=self._output_sampling_frequency)
+        self.publish('h/fs', 2000000)
         self._config_apply(self.config)
         return rc
 
@@ -432,6 +434,8 @@ class Device:
         rv = self._stream_process_call('stream_notify', self.stream_buffer)
         if rv:
             self.stop()
+        if self.stream_buffer.is_duration_max or self.stream_buffer.is_contiguous_duration_max:
+            self.stop()
 
     def start(self, stop_fn=None, duration=None, contiguous_duration=None):
         """Start data streaming.
@@ -451,6 +455,8 @@ class Device:
         """
         self.stop()
         self.stream_buffer.reset()
+        self.stream_buffer.duration_max = duration
+        self.stream_buffer.contiguous_duration_max = contiguous_duration
         self._stop_fn = stop_fn
         for topic, b in zip(self._stream_topics, self.stream_buffer.buffers.values()):
             if topic is None:

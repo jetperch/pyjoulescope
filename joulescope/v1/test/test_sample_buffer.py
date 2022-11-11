@@ -82,10 +82,3 @@ class TestSampleBuffer(unittest.TestCase):
         self.assertEqual(1.0, s[0])
         self.assertTrue(np.isnan(s[1]))
         self.assertEqual(3.0, s[2])
-
-    def test_decimate(self):
-        c = SampleBuffer(10, decimate=2, dtype=np.float32)
-        a = np.arange(9, 16, 2, dtype=np.float32)
-        c.add(9, a)
-        self.assertEqual(4, len(c))
-        self.assertEqual((4, 8), c.range)

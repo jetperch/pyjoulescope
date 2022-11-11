@@ -76,7 +76,7 @@ class DeviceJs110(Device):
 
     def _on_sampling_frequency(self, value):
         value = int(value)
-        self.publish('s/fs', int(value))
+        self.publish('h/fs', int(value))
         self.output_sampling_frequency = value
 
     def _config_apply(self, config=None):

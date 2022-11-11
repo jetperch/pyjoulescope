@@ -88,12 +88,14 @@ class View:
     def _stream_buffer_assign(self, stream_buffer):
         if self._stream_buffer == stream_buffer:
             return
+        self._log.info('stream_buffer_assign')
         self._stream_buffer = stream_buffer
         self._x_range = list(self._stream_buffer.limits_time)  # the initial default range
         length = len(self)
         if length <= 0:
             length = 100
         # todo : investigate - may want inclusive max time (not exclusive) -- off by 1 error?
+        self._clear()
         self._span = span.Span(limits=self._stream_buffer.limits_time,
                                quant=1.0 / self.sampling_frequency,
                                length=length)
@@ -225,7 +227,10 @@ class View:
         length = len(self)
         data_idx_view_end, sample_id_end, delta = self._view()
 
-        if self._data is None:
+        if sample_id_end is None:
+            self._clear()
+            return
+        elif self._data is None:
             return
         elif not self._changed and 0 == delta:
             return
@@ -335,7 +340,10 @@ class View:
 
     def _view(self):
         buffer = self._stream_buffer
-        _, sample_id_end = buffer.sample_id_range
+        sample_id_start, sample_id_end = buffer.sample_id_range
+        if sample_id_start == sample_id_end:
+            # still empty
+            return None, None, None
         lag_time = self._span.limits[1] - self._x_range[1]
         lag_samples = int(lag_time * self.sampling_frequency) // self._samples_per
         data_idx_stream_end = sample_id_end // self._samples_per
@@ -351,7 +359,8 @@ class View:
         return self._stream_buffer.sample_id_to_time(s)
 
     def _stream_notify(self, stream_buffer):
-        self._stream_buffer = stream_buffer
+        if stream_buffer != self._stream_buffer:
+            self._stream_buffer_assign(stream_buffer)
         self._stream_notify_available = True
 
     def _convert_time_to_samples(self, x, units):

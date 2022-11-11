@@ -194,7 +194,7 @@ setuptools.setup(
         'numpy',
         'psutil',
         'pyjls>=0.4.2',
-        'pyjoulescope_driver>=1.0.7',
+        'pyjoulescope_driver>=1.1.0',
         'python-dateutil>=2.7.3',
         'pymonocypher>=0.1.3',
     ] + PLATFORM_INSTALL_REQUIRES,
