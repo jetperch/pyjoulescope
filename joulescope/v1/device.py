@@ -18,6 +18,8 @@ from .stream_buffer import StreamBuffer
 from joulescope.view import View
 import copy
 import logging
+import numpy as np
+import queue
 
 
 class Device:
@@ -502,7 +504,6 @@ class Device:
         :param out_format: The output format which is one of:
 
             * calibrated: The Nx2 np.ndarray(float32) with columns current and voltage.
-            * raw: The raw Nx2 np.ndarray(uint16) Joulescope data.
             * samples_get: The StreamBuffer samples get format.  Use the fields
               parameter to optionally specify the signals to include.
             * None: equivalent to 'calibrated'.
@@ -514,7 +515,43 @@ class Device:
         will only be stopped by callbacks registered through
         :meth:`stream_process_register`.
         """
-        raise NotImplementedError()  # todo
+        self._log.info('read(duration=%s, contiguous_duration=%s, out_format=%s)',
+                 duration, contiguous_duration, out_format)
+        if out_format not in ['calibrated', 'samples_get', None]:
+            raise ValueError(f'Invalid out_format {out_format}')
+        if duration is None and contiguous_duration is None:
+            raise ValueError('Must specify duration or contiguous_duration')
+        duration_max = len(self.stream_buffer) / self._output_sampling_frequency
+        if contiguous_duration is not None and contiguous_duration > duration_max:
+            raise ValueError(f'contiguous_duration {contiguous_duration} > {duration_max} max seconds')
+        if duration is not None and duration > duration_max:
+            raise ValueError(f'duration {duration} > {duration_max} max seconds')
+        q = queue.Queue()
+
+        def on_stop(*args, **kwargs):
+            self._log.info('received stop callback: pending stop')
+            q.put(None)
+
+        self.start(on_stop, duration=duration, contiguous_duration=contiguous_duration)
+        q.get()
+        self.stop()
+        start_id, end_id = self.stream_buffer.sample_id_range
+        self._log.info('read available range %s, %s', start_id, end_id)
+        if contiguous_duration is not None:
+            start_id = end_id - int(contiguous_duration * self._output_sampling_frequency)
+        elif duration is not None:
+            start_id = end_id - int(duration * self._output_sampling_frequency)
+        if start_id < 0:
+            start_id = 0
+        self._log.info('read actual %s, %s', start_id, end_id)
+
+        if out_format in ['calibrated', None]:
+            data = self.stream_buffer.samples_get(start_id, end_id, fields=['current', 'voltage'])
+            i = data['signals']['current']['value']
+            v = data['signals']['voltage']['value']
+            return np.hstack([np.reshape(i, (-1, 1)), np.reshape(v, (-1, 1))])
+        else:
+            return self.stream_buffer.samples_get(start_id, end_id, fields=fields)
 
     @property
     def is_streaming(self):

@@ -4,6 +4,13 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 1.0.12
+
+2022 Nov 14
+
+* Added read method to v1 backend.
+
+
 ## 1.0.11
 
 2022 Nov 10
