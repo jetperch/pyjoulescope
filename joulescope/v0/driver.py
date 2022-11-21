@@ -597,7 +597,11 @@ class Device:
         else:  # just JSON string
             json_bytes = rv.data
         try:
-            return json.loads(json_bytes.decode('utf-8'))
+            rv = json.loads(json_bytes.decode('utf-8'))
+            rv['model'] = 'JS110'
+            rv['hardware_version'] = 'H'
+            rv['serial_number'] = self.device_serial_number
+            return rv
         except UnicodeDecodeError:
             log.exception('INFO has invalid unicode: %s', binascii.hexlify(rv.data[8:]))
         except json.decoder.JSONDecodeError:

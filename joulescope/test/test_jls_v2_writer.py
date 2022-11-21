@@ -53,6 +53,9 @@ class FakeJS110:
         return {
             'type': 'info',
             'ver': 1,
+            'model': 'JS110',
+            'hardware_version': 'H',
+            'serial_number': '000001',
             'ctl': {
                 'mfg': {
                     'country': 'USA',
