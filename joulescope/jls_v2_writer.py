@@ -99,9 +99,9 @@ class JlsWriter:
             source_id=1,
             name=str(self._device),
             vendor='Jetperch',
-            model=info['ctl']['hw'].get('model', 'JS110'),
-            version=info['ctl']['hw'].get('rev', '-'),
-            serial_number=info['ctl']['hw']['sn_mfg'],
+            model=info['model'],
+            version=info['hardware_version'],
+            serial_number=info['serial_number'],
         )
 
         wr = Writer(self._filename)

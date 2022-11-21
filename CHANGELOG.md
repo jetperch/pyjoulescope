@@ -4,6 +4,15 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 1.0.13
+
+2022 Nov 21
+
+* Improved info method.
+* Fixed JLS v2 writer for JS110.
+* Added "pyproject.toml" and removed ignored setup_requires in setup.py.
+
+
 ## 1.0.12
 
 2022 Nov 14

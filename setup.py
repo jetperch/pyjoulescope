@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2018-2021 Jetperch LLC
+# Copyright 2018-2022 Jetperch LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -84,12 +84,6 @@ if USE_CYTHON:
 # Get the long description from the README file
 with open(os.path.join(MYPATH, 'README.md'), 'r', encoding='utf-8') as f:
     long_description = f.read()
-
-
-if sys.platform.startswith('win'):
-    PLATFORM_INSTALL_REQUIRES = ['pywin32']
-else:
-    PLATFORM_INSTALL_REQUIRES = []
 
 
 class CustomBuildDocs(distutils.cmd.Command):
@@ -182,12 +176,6 @@ setuptools.setup(
     # See https://packaging.python.org/guides/distributing-packages-using-setuptools/#python-requires
     python_requires='~=3.8',
 
-    setup_requires=[
-        # https://developercommunity.visualstudio.com/content/problem/1207405/fmod-after-an-update-to-windows-2004-is-causing-a.html
-        'numpy',
-        'Cython>=0.29.3',
-    ],
-
     # See https://packaging.python.org/en/latest/requirements.html
     # https://numpy.org/neps/nep-0029-deprecation_policy.html
     install_requires=[
@@ -197,7 +185,8 @@ setuptools.setup(
         'pyjoulescope_driver>=1.1.0',
         'python-dateutil>=2.7.3',
         'pymonocypher>=0.1.3',
-    ] + PLATFORM_INSTALL_REQUIRES,
+        "pywin32; platform_system=='Windows'",
+    ],
 
     extras_require={
         'dev': ['check-manifest', 'coverage', 'Cython', 'wheel', 'sphinx', 'myst-parser'],

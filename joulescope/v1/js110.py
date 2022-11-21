@@ -115,6 +115,8 @@ class DeviceJs110(Device):
             'type': 'info',
             'ver': 2,
             'model': self.model,
+            'hardware_version': 'H',
+            'serial_number': self.serial_number,
         }
 
     def status(self):

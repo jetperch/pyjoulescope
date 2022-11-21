@@ -159,17 +159,19 @@ class DeviceJs220(Device):
             self._log.warning('Unsupported config %s', config)
 
     def info(self):
+        hardware_version = _version_u32_to_str(self.query('c/hw/version'))
         info = {
             'type': 'info',
             'ver': 2,
             'model': self.model,
+            'hardware_version': hardware_version,
             'serial_number': self.serial_number,
             'ctl': {
                 'hw': {
                     'rev': _version_u32_to_str(self.query('c/hw/version')),
                     'sn_mcu': self.serial_number,
                     'sn_mfg': self.serial_number,
-                    'ver': _version_u32_to_str(self.query('c/hw/version')),
+                    'ver': hardware_version,
                 },
                 'fw': {
                     'ver': _version_u32_to_str(self.query('c/fw/version')),
