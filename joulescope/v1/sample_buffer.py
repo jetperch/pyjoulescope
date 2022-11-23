@@ -155,7 +155,9 @@ class SampleBuffer:
         sz = len(data)
         ptr1 = self._wrap(self._head)
         ptr2 = self._wrap(self._head + sz)
-        if ptr2 > ptr1:
+        if sz == 0:
+            pass
+        elif ptr2 > ptr1:
             self._buffer[ptr1:ptr2] = data
         else:
             k = self._size - ptr1
