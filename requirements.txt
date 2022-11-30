@@ -4,9 +4,9 @@ Cython>=0.29.3
 # https://developercommunity.visualstudio.com/content/problem/1207405/fmod-after-an-update-to-windows-2004-is-causing-a.html
 numpy
 psutil
-pyjls>=0.4.2
-pyjoulescope_driver>=1.1.0
-pymonocypher>=0.1.3
+pyjls>=0.4.3
+pyjoulescope_driver>=1.1.1
+pymonocypher>=3.1.3
 pywin32; sys_platform == 'win32'
 # python {path_to_python}\scripts\pywin32_postinstall.py -install
 python-dateutil>=2.7.3

@@ -13,7 +13,14 @@
 # limitations under the License.
 
 # See https://peps.python.org/pep-0518/
+# See https://toml.io/
 
 [build-system]
 # Minimum requirements for the build system to execute.
-requires = ["numpy", "Cython", "setuptools", "wheel"]
+requires = [
+    "Cython",
+    "numpy",
+    "pywin32; sys_platform == 'win32'",
+    "setuptools",
+    "wheel",
+]

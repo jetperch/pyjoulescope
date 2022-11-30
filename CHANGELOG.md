@@ -6,9 +6,10 @@ This file contains the list of changes made to pyjoulescope.
 
 ## 0.10.14
 
-2022 Nov 23 [in progress]
+2022 Nov 30
 
 * Skip v1 sample_buffer insert when no new data.
+* Fixed build dependencies.
 
 
 ## 1.0.13
