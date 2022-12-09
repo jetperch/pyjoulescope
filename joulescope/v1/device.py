@@ -114,8 +114,8 @@ class Device:
             This function will be called from the USB processing thread.
             Any calls back into self MUST BE resynchronized.
         """
-        for cbk in list(self._statistics_callbacks):
-            self.statistics_callback_unregister(cbk)
+        for unregister_cbk in list(self._statistics_callbacks):
+            self.statistics_callback_unregister(unregister_cbk)
         self.statistics_callback_register(cbk)
 
     def statistics_callback_register(self, cbk, source=None):
@@ -132,6 +132,11 @@ class Device:
         WARNING: calling :meth:`statistics_callback` after calling this method
         may result in unusual behavior.  Do not mix these API calls.
         """
+        if cbk is None:
+            return
+        if not callable(cbk):
+            self._log.warning('Requested callback is not callable')
+            return
         if not len(self._statistics_callbacks):
             self._statistics_start()
         self._statistics_callbacks.append(cbk)
@@ -143,7 +148,10 @@ class Device:
             :meth:`statistics_callback_register`.
         :param source: The callback source.
         """
-        self._statistics_callbacks.remove(cbk)
+        try:
+            self._statistics_callbacks.remove(cbk)
+        except ValueError:
+            self._log.warning('statistics_callback_unregister but callback not registered.')
         if not len(self._statistics_callbacks):
             self._statistics_stop()
 

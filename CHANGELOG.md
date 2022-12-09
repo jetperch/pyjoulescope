@@ -4,6 +4,16 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 1.0.15
+
+2022 Dec 9 [in progress]
+
+* Fixed joulescope.v1.device.Device.statistics_callback.
+  If other callbacks were registered, it was re-registering
+  the last processed callback, not the one requested.
+* Improved error handling for statistics callback registration.
+
+
 ## 1.0.14
 
 2022 Nov 30
