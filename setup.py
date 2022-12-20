@@ -182,7 +182,7 @@ setuptools.setup(
         'numpy',
         'psutil',
         'pyjls>=0.4.3',
-        'pyjoulescope_driver>=1.1.1',
+        'pyjoulescope_driver>=1.1.2',
         'python-dateutil>=2.7.3',
         'pymonocypher>=3.1.3',
         "pywin32; platform_system=='Windows'",
