@@ -228,7 +228,7 @@ class Span:
             a = np.array([s[0]])
         else:
             s, steps_per = self.conform_quant_per(s, incr, gain, pivot)
-            a = np.arange(self.length, dtype=np.float)
+            a = np.arange(self.length, dtype=float)
             a *= self.quant * steps_per
             a += s[0]
             log.debug('conform_discrete: span=%s, steps_per=%s', s, steps_per)
