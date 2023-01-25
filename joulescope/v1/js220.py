@@ -1,4 +1,4 @@
-# Copyright 2022 Jetperch LLC
+# Copyright 2022-2023 Jetperch LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -219,17 +219,4 @@ class DeviceJs220(Device):
                 },
             }
         }
-
-    def extio_status(self):
-        """Read the EXTIO GPI value.
-
-        :return: A dict containing the extio status.  Each key is the status
-            item name.  The value is itself a dict with the following keys:
-
-            * name: The status name, which is the same as the top-level key.
-            * value: The actual value
-            * units: The units, if applicable.
-            * format: The recommended formatting string (optional).
-        """
-        return {}  # todo
 

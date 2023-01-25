@@ -1,4 +1,4 @@
-# Copyright 2022 Jetperch LLC
+# Copyright 2022-2023 Jetperch LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ import copy
 import logging
 import numpy as np
 import queue
+import time
 
 
 class Device:
@@ -625,3 +626,68 @@ class Device:
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Device context manager, automatically close."""
         self.close()
+
+    def _query_gpi_value(self):
+        gpi_value = None
+
+        def on_gpi_value(topic, value):
+            nonlocal gpi_value
+            gpi_value = value
+
+        self.subscribe('s/gpi/+/!value', 'pub', on_gpi_value)
+        self.publish('s/gpi/+/!req', 0)
+        t_start = time.time()
+        while gpi_value is None:
+            if time.time() - t_start > 1.0:
+                raise RuntimeError('_query_gpi_value timed out')
+            time.sleep(0.001)
+        self.unsubscribe('s/gpi/+/!value', on_gpi_value)
+        return gpi_value
+
+    def extio_status(self):
+        """Read the EXTIO GPI value.
+
+        :return: A dict containing the extio status.  Each key is the status
+            item name.  The value is itself a dict with the following keys:
+
+            * name: The status name, which is the same as the top-level key.
+            * value: The actual value
+            * units: The units, if applicable.
+            * format: The recommended formatting string (optional).
+            
+        The most interesting key is "gpi_value" which returns the present
+        general purpose input signal values.  The remaining keys simply
+        copy parameter settings for convenience.
+        """
+        gpi_value = self._query_gpi_value()
+        status = {
+            'flags': {
+                'value': 0,
+                'units': ''},
+            'trigger_source': {
+                'value': self.parameter_get('trigger_source'),
+                'units': ''},
+            'current_lsb': {
+                'value': self.parameter_get('current_lsb'),
+                'units': ''},
+            'voltage_lsb': {
+                'value': self.parameter_get('voltage_lsb'),
+                'units': ''},
+            'gpo0': {
+                'value': self.parameter_get('gpo0'),
+                'units': ''},
+            'gpo1': {
+                'value': self.parameter_get('gpo1'),
+                'units': ''},
+            'gpi_value': {
+                'value': gpi_value,
+                'units': '',
+            },
+            'io_voltage': {
+                'value': self.parameter_get('io_voltage'),
+                'units': 'mV',
+            },
+        }
+        for key, value in status.items():
+            value['name'] = key
+        return status

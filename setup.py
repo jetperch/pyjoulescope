@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2018-2022 Jetperch LLC
+# Copyright 2018-2023 Jetperch LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -182,7 +182,7 @@ setuptools.setup(
         'numpy',
         'psutil',
         'pyjls>=0.4.3',
-        'pyjoulescope_driver>=1.1.2',
+        'pyjoulescope_driver>=1.1.4',
         'python-dateutil>=2.7.3',
         'pymonocypher>=3.1.3',
         "pywin32; platform_system=='Windows'",

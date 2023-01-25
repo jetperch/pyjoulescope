@@ -4,6 +4,13 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 1.0.16
+
+2023 Jan 25
+
+* Implemented v1 extio_status for both JS110 and JS220.
+
+
 ## 1.0.15
 
 2022 Dec 20
