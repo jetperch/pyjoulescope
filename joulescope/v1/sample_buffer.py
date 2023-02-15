@@ -112,7 +112,7 @@ class SampleBuffer:
         sample_id_orig = sample_id
         sample_id //= (self._incoming_decimate * self._local_decimate)
         if self._dtype == 'u1':
-            data = np.unpackbits(data)
+            data = np.unpackbits(data, bitorder='little')
         elif self._dtype == 'u4':
             d = np.empty(len(data) * 2, dtype=np.uint8)
             d[0::2] = np.logical_and(data, 0x0f)

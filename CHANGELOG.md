@@ -4,6 +4,14 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 1.0.17
+
+2023 Feb 2
+
+* Fixed bit order unpacking for general-purpose input signals,
+  which fixes "glitches" on signal transitions.
+
+
 ## 1.0.16
 
 2023 Jan 25
