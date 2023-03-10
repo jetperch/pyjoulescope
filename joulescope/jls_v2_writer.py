@@ -49,12 +49,18 @@ def _sampling_rate_validator(s):
     if isinstance(s, str):
         if s.endswith('Hz'):
             s = s[:-2]
-        n, u = s.split()
-        s = int(n)
-        if u[0] == 'M':
-            s *= 1000000
-        elif u[0] == 'k':
-            s *= 1000
+        parts = s.split()
+        if len(parts) == 1:
+            s = int(parts[0])
+        elif len(parts) == 2:
+            n, u = s.split()
+            s = int(n)
+            if u[0] == 'M':
+                s *= 1000000
+            elif u[0] == 'k':
+                s *= 1000
+        else:
+            raise ValueError(f'could not validate {s}')
     return int(s)
 
 
