@@ -10,6 +10,7 @@ This file contains the list of changes made to pyjoulescope.
 
 * Bumped to latest 1.2.0 pyjoulescope_driver.
 * Removed broken v0 backend regression test.
+* Fixed JLS v2 writer sample rate validation.
 
 
 ## 1.0.17

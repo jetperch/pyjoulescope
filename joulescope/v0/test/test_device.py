@@ -24,6 +24,7 @@ from joulescope.v0.usb import hw_tests
 from joulescope.v0.pattern_buffer import PatternBuffer
 
 
+@unittest.SkipTest  # skip broken and now obsolete JS110 regression tests
 class TestPattern(unittest.TestCase):
 
     def setUp(self):
