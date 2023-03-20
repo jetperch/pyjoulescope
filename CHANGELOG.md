@@ -4,6 +4,13 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 1.1.2
+
+2023 Mar 20
+
+* Modified JOULESCOPE_BACKEND to skip backend autoimport if 'None' specified. 
+
+
 ## 1.1.1
 
 2023 Mar 16

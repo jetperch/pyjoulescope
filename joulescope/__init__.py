@@ -19,14 +19,19 @@ from .version import __version__, __title__, __description__, __url__, \
     __author__, __author_email__, __license__, __copyright__
 
 
-if os.environ.get('JOULESCOPE_BACKEND', '1').lower() in ['1', 'v1', 'true']:
+_joulescope_backend = os.environ.get('JOULESCOPE_BACKEND', '1').lower()
+if _joulescope_backend in ['1', 'v1']:
     from joulescope.v1 import scan, scan_require_one, scan_for_changes, DeviceNotify
     from joulescope.jls_v2_writer import JlsWriter
-else:
+elif _joulescope_backend in ['0', 'v0']:
     from joulescope.v0.driver import scan, scan_require_one, scan_for_changes, \
         bootloaders_run_application, bootloader_go
     from joulescope.v0.usb import DeviceNotify
     from joulescope.jls_v2_writer import JlsWriter
+elif _joulescope_backend in ['none', 'skip', '__none__', '__skip__']:
+    pass  # do not automatically import the backend
+else:
+    raise RuntimeError(f'Unsupported backend specification: {_joulescope_backend}')
 
 
 VERSION = __version__  # for backwards compatibility
