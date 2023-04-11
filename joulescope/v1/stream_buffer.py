@@ -356,6 +356,10 @@ class StreamBuffer:
         """
         if fields is None:
             fields = ['current', 'voltage', 'power', 'current_range', 'current_lsb', 'voltage_lsb']
+        elif isinstance(fields, str):
+            fields = [fields]
+            is_single_result = True
+
         self_start, self_stop = self.sample_id_range
         #self._log.debug(f'samples_get({start}, {stop}) in ({self_start}, {self_stop})')
         start = max(start, self_start)
@@ -387,4 +391,6 @@ class StreamBuffer:
                     result['signals'][field] = {'value': out, 'units': units}
             except KeyError:
                 pass  # cannot include this signal
+        if is_single_result:
+            return result['signals'][fields[0]]['value']
         return result
