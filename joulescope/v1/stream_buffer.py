@@ -354,6 +354,7 @@ class StreamBuffer:
             However, if single field string is provided to fields, then just
             return that field's value.
         """
+        is_single_result = False
         if fields is None:
             fields = ['current', 'voltage', 'power', 'current_range', 'current_lsb', 'voltage_lsb']
         elif isinstance(fields, str):
