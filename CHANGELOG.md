@@ -6,7 +6,7 @@ This file contains the list of changes made to pyjoulescope.
 
 ## 1.1.3
 
-2023 Apr 11 [in progress]
+2023 Apr 13
 
 * Fixed single field output for stream_buffer v1.
 
