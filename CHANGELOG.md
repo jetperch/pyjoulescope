@@ -4,6 +4,14 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 1.1.4
+
+2023 Apr 28
+
+* Bumped revisions for pyjls and pyjoulescope_driver to latest.
+  Many improvements and fixes.  See projects for details.
+
+
 ## 1.1.3
 
 2023 Apr 13
