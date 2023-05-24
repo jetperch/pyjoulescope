@@ -184,13 +184,19 @@ class Device:
 
     def _statistics_start(self):
         if self.is_open:
-            self.publish('s/stats/ctrl', 1)
-            self.subscribe('s/stats/value', 'pub', self._on_stats_cbk)
+            if 'js110' in self.device_path and self.config == 'off':
+                self.subscribe('s/sstats/value', 'pub', self._on_stats_cbk)
+            else:
+                self.publish('s/stats/ctrl', 1)
+                self.subscribe('s/stats/value', 'pub', self._on_stats_cbk)
 
     def _statistics_stop(self):
         if self.is_open:
-            self.unsubscribe('s/stats/value', self._on_stats_cbk)
-            self.publish('s/stats/ctrl', 0)
+            if 'js110' in self.device_path and self.config == 'off':
+                self.unsubscribe('s/sstats/value', self._on_stats_cbk)
+            else:
+                self.unsubscribe('s/stats/value', self._on_stats_cbk)
+                self.publish('s/stats/ctrl', 0)
 
     def statistics_accumulators_clear(self):
         """Clear the charge and energy accumulators."""

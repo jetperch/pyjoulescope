@@ -4,6 +4,13 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 1.1.5
+
+2023 May 24
+
+* Added JS110 on-instrument (sensor) statistics option to v1 backend.
+
+
 ## 1.1.4
 
 2023 Apr 28
