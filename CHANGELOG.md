@@ -4,6 +4,13 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 1.1.6
+
+2023 May 31
+
+* Bumped dependency revisions.
+
+
 ## 1.1.5
 
 2023 May 24
