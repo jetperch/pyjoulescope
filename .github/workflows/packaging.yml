@@ -110,7 +110,7 @@ jobs:
           CIBW_SKIP: 'pp* *musllinux*'
           CIBW_BEFORE_BUILD_LINUX: yum install -y libudev-devel libusb1-devel
           CIBW_TEST_REQUIRES: pytest
-          CIBW_TEST_COMMAND: pytest {package}/test
+          CIBW_TEST_COMMAND: pytest {package}/joulescope/test
         with:
           package-dir: ${{ steps.find_sdist_filename.outputs.filename }}
 
