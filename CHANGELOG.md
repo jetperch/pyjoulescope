@@ -4,6 +4,14 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 1.1.7
+
+2023 Jun 8
+
+* Added GitHub Actions build.
+* Bumped minimum python version from 3.8 to 3.9.
+
+
 ## 1.1.6
 
 2023 May 31

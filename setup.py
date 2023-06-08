@@ -149,7 +149,6 @@ setuptools.setup(
         # Supported Python versions
         'Programming Language :: Python',
         'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.8',
         'Programming Language :: Python :: 3.9',
         'Programming Language :: Python :: 3.10',
         'Programming Language :: Python :: 3.11',
@@ -174,17 +173,17 @@ setuptools.setup(
     include_dirs=[],
     
     # See https://packaging.python.org/guides/distributing-packages-using-setuptools/#python-requires
-    python_requires='~=3.8',
+    python_requires='~=3.9',
 
     # See https://packaging.python.org/en/latest/requirements.html
     # https://numpy.org/neps/nep-0029-deprecation_policy.html
     install_requires=[
         'numpy',
         'psutil',
-        'pyjls>=0.7.0',
-        'pyjoulescope_driver>=1.3.12',
+        'pyjls>=0.7.1',
+        'pyjoulescope_driver>=1.3.14',
         'python-dateutil>=2.7.3',
-        'pymonocypher>=3.1.3',
+        'pymonocypher>=3.1.3.2',
         "pywin32; platform_system=='Windows'",
     ],
 

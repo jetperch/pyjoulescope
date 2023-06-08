@@ -3,3 +3,4 @@ include CREDITS.html
 include README.md
 include LICENSE.txt
 recursive-include joulescope/v0/native *.h *.c
+recursive-include joulescope *.py
