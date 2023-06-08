@@ -4,4 +4,4 @@ include README.md
 include LICENSE.txt
 recursive-include joulescope/v0/native *.h *.c
 recursive-include joulescope *.py
-include joulescope/v0/test/*.dat
+include joulescope/v0/test/calibration_01.dat

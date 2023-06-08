@@ -171,6 +171,7 @@ setuptools.setup(
         'docs': CustomBuildDocs,
     },
     include_dirs=[],
+    include_package_data=True,
     
     # See https://packaging.python.org/guides/distributing-packages-using-setuptools/#python-requires
     python_requires='~=3.9',
