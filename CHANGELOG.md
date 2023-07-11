@@ -4,6 +4,14 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 1.1.8
+
+2023 Jul 11
+
+* Fixed JlsWriter for JS220.
+* Bumped pyjoulescope_driver version from 1.3.14 to 1.3.17.
+
+
 ## 1.1.7
 
 2023 Jun 8

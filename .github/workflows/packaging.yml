@@ -63,7 +63,7 @@ jobs:
       - name: Build sdist
         run: python -m build --sdist
 
-      - name: Install the wheel
+      - name: Install the joulescope package
         run: python -m pip install -f dist joulescope
 
       - name: Run python unit tests
