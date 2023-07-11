@@ -149,12 +149,13 @@ class JlsWriter:
         # called from USB thead, keep fast!
         # long-running operations will cause sample drops
         start_id, end_id = stream_buffer.sample_id_range
-        if self._idx < end_id:
-            data = stream_buffer.samples_get(self._idx, end_id, fields=self._signals)
+        start_id = max(self._idx, start_id)
+        if start_id < end_id:
+            data = stream_buffer.samples_get(start_id, end_id, fields=self._signals)
             for s in self._signals:
                 x = np.ascontiguousarray(data['signals'][s]['value'])
                 idx = SIGNALS[s][0]
-                self._wr.fsr_f32(idx, self._idx, x)
+                self._wr.fsr_f32(idx, start_id, x)
             self._idx = end_id
         return False
 
