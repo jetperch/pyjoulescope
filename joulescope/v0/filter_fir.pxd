@@ -31,4 +31,4 @@ cdef class FilterFir:
     cdef void c_process(self, const double * x, uint32_t x_length)
 
     @staticmethod
-    cdef void _callback(void * user_data, const double * y, uint32_t y_length)
+    cdef void _callback(void * user_data, const double * y, uint32_t y_length) noexcept

@@ -4,6 +4,17 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 1.1.9
+
+2023 Jul 24
+
+* Added "noexcept" to python callbacks. 
+  Cython 3.0 deprecates implicit noexcept.
+* Bumped dependency versions
+  * pyjls from 0.7.2 to 0.7.3.
+  * pyjoulescope_driver version from 1.3.17 to 1.3.18.
+
+
 ## 1.1.8
 
 2023 Jul 11

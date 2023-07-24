@@ -70,7 +70,7 @@ cdef class FilterFir:
         self.c_callback_set(self._callback, <void *> self)
 
     @staticmethod
-    cdef void _callback(void * user_data, const double * y, uint32_t y_length):
+    cdef void _callback(void * user_data, const double * y, uint32_t y_length) noexcept:
         cdef FilterFir self = <object> user_data
         cdef np.float64_t [::1] data_c
         if y_length == 1:
