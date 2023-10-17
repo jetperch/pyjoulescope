@@ -129,6 +129,7 @@ class DeviceJs220(Device):
         self._log.info('_on_sampling_frequency %s', value)
         self.publish('h/fs', value)
         self.output_sampling_frequency = value
+        self._parameters['sampling_frequency'] = value
 
     def _on_gpo(self, index, value):
         index = int(index)

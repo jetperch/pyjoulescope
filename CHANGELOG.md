@@ -4,6 +4,13 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 1.1.10
+
+2023 Oct 17
+
+* Fixed JS220 handling of `sample_frequency` parameter set to 2000000.
+
+
 ## 1.1.9
 
 2023 Jul 24

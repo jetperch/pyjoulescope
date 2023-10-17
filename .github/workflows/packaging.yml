@@ -42,7 +42,9 @@ jobs:
           echo "runner.arch=$RUNNER_ARCH"
 
       - name: Install Ubuntu dependencies
-        run: sudo apt install -y libudev-dev libusb-1.0-0-dev
+        run: |
+          sudo apt update
+          sudo apt install -y libudev-dev libusb-1.0-0-dev
 
       - name: Checkout repo
         uses: actions/checkout@v3
