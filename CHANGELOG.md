@@ -4,6 +4,14 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 1.1.11
+
+2023 Dec 15
+
+* Deferred v1 singleton driver initialization.
+* Bumped pyjls and pyjoulescope_driver dependencies.
+
+
 ## 1.1.10
 
 2023 Oct 17

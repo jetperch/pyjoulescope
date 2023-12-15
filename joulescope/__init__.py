@@ -41,8 +41,8 @@ __all__ = ['scan', 'scan_require_one', 'scan_for_changes', 'bootloaders_run_appl
            '__author__', '__author_email__', '__license__', '__copyright__']
 
 
-if sys.hexversion < 0x030700:
-    raise RuntimeError('joulescope requires Python 3.7+')
+if sys.hexversion < 0x030900:
+    raise RuntimeError('joulescope requires Python 3.9+')
 
 
 # Although only 64-bit OS/Python is supported, may be able to run on 32bit Python / 32bit Windows.

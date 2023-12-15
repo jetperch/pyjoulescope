@@ -1,4 +1,4 @@
-# Copyright 2022 Jetperch LLC
+# Copyright 2022-2023 Jetperch LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -30,6 +30,7 @@ _log = logging.getLogger(__name__)
 
 class DriverWrapper:
     """Singleton to wrap pyjoulescope_driver.Driver"""
+    __singleton__ = None
 
     def __new__(cls, *args, **kwds):
         s = cls.__dict__.get("__singleton__")
@@ -88,9 +89,6 @@ class DriverWrapper:
             for d in devices:
                 d.config = config
         return devices
-
-
-_driver_wrapper = DriverWrapper()
 
 
 def scan(name: str = None, config=None) -> List[Device]:
