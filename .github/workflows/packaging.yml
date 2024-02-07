@@ -102,7 +102,7 @@ jobs:
         run: echo "filename=$(ls dist/*.tar.gz)" >> $GITHUB_OUTPUT
 
       - name: Build wheels
-        uses: pypa/cibuildwheel@v2.13.0
+        uses: pypa/cibuildwheel@v2.16.5
         env:
           CIBW_ARCHS_MACOS: universal2
           CIBW_ARCHS_WINDOWS: native
