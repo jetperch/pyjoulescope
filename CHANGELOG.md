@@ -4,6 +4,14 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 1.1.12
+
+2023 Feb 7  [in progress]
+
+* Fixed regex string in units  #35
+
+
+
 ## 1.1.11
 
 2023 Dec 15
