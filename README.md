@@ -1,7 +1,7 @@
 
 # ![Joulescope](https://download.joulescope.com/press/joulescope_logo-PNG-Transparent-Exact-Small.png "Joulescope Logo")
 
-[![Build Status](https://travis-ci.org/jetperch/pyjoulescope.svg?branch=master)](https://travis-ci.org/jetperch/pyjoulescope)
+[![Packaging](https://github.com/jetperch/pyjoulescope/actions/workflows/packaging.yml/badge.svg)](https://github.com/jetperch/pyjoulescope/actions/workflows/packaging.yml)
 [![Docs Status](https://readthedocs.org/projects/joulescope/badge/?version=latest)](https://joulescope.readthedocs.io/)
 
 Welcome to the Joulescope™ python driver!  
