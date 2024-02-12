@@ -113,6 +113,7 @@ jobs:
           CIBW_BEFORE_BUILD_LINUX: yum install -y libudev-devel libusb1-devel
           CIBW_TEST_REQUIRES: pytest
           CIBW_TEST_COMMAND: pytest --pyargs joulescope
+          CIBW_TEST_SKIP: "*-macosx_universal2:arm64"  # cannot test arm64 on x86_64
         with:
           package-dir: ${{ steps.find_sdist_filename.outputs.filename }}
 
