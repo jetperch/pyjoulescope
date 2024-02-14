@@ -6,10 +6,12 @@ This file contains the list of changes made to pyjoulescope.
 
 ## 1.1.12
 
-2023 Feb 7  [in progress]
+2023 Feb 14
 
 * Fixed regex string in units  #35
-
+* Bumped dependency versions
+  * pyjls from 0.9.1 to 0.9.2.
+  * pyjoulescope_driver version from 1.4.6 to 1.4.7
 
 
 ## 1.1.11
