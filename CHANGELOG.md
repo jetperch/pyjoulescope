@@ -4,6 +4,13 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 1.1.13
+
+2023 Mar 15
+
+* Fixed parameter_set not working when called before device open.
+
+
 ## 1.1.12
 
 2023 Feb 14

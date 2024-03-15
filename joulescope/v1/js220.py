@@ -71,6 +71,7 @@ class DeviceJs220(Device):
         self._stream_topics = ['s/i/', 's/v/', 's/p/', 's/i/range/', 's/gpi/0/', 's/gpi/1/']
 
     def parameter_set(self, name, value):
+        value_orig = value
         p = PARAMETERS_DICT[name]
         if 'read_only' in p.flags:
             self._log.warning('Attempting to set read_only parameter %s', name)
@@ -87,7 +88,7 @@ class DeviceJs220(Device):
                 value = p.validator(value)
         self._parameters[name] = value
         if not self.is_open:
-            self._parameter_set_queue.append((name, value))
+            self._parameter_set_queue.append((name, value_orig))
             return
         k = self._param_map.get(name)
         if k is not None:

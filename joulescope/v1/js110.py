@@ -84,6 +84,7 @@ class DeviceJs110(Device):
             self.parameter_set(key, value)
 
     def parameter_set(self, name, value):
+        value_orig = value
         p = PARAMETERS_DICT[name]
         if name == 'current_ranging':
             self._current_ranging_split(value)
@@ -100,7 +101,7 @@ class DeviceJs110(Device):
                 value = p.validator(value)
         self._parameters[name] = value
         if not self.is_open:
-            self._parameter_set_queue.append((name, value))
+            self._parameter_set_queue.append((name, value_orig))
             return
         k = self._param_map.get(name)
         if isinstance(k, str):
