@@ -179,12 +179,12 @@ setuptools.setup(
     # See https://packaging.python.org/en/latest/requirements.html
     # https://numpy.org/neps/nep-0029-deprecation_policy.html
     install_requires=[
-        'numpy',
-        'psutil',
-        'pyjls>=0.9.2',
-        'pyjoulescope_driver>=1.4.7',
-        'python-dateutil>=2.7.3',
-        'pymonocypher>=3.1.3.2',
+        'numpy>=1.23,<2',
+        'psutil>=5,<6',
+        'pyjls>=0.9.2,<1',
+        'pyjoulescope_driver>=1.5.3,<2',
+        'python-dateutil>=2.7.3,<3',
+        'pymonocypher>=3.1.3.2,<4',
         "pywin32; platform_system=='Windows'",
     ],
 

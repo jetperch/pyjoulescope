@@ -4,6 +4,14 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 1.1.14
+
+2023 May 29
+
+* Fixed typo in scan_for_changes causing v0 backend crash.
+* Improved dependency specs to pin major versions.
+
+
 ## 1.1.13
 
 2023 Mar 15

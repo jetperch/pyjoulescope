@@ -1,4 +1,4 @@
-# Copyright 2018-2019 Jetperch LLC
+# Copyright 2018-2024 Jetperch LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -1392,8 +1392,8 @@ def scan_for_changes(name: str = None, devices=None, config=None):
         if not len(matches):
             devices_removed.append(d)
 
-    _log.info('scan_for_changes %d devices: %d added, %d removed',
-              len(devices_now), len(devices_added), len(devices_removed))
+    log.info('scan_for_changes %d devices: %d added, %d removed',
+             len(devices_now), len(devices_added), len(devices_removed))
     return devices_now, devices_added, devices_removed
 
 
