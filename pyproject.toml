@@ -19,7 +19,7 @@
 # Minimum requirements for the build system to execute.
 requires = [
     "Cython",
-    "numpy",
+    "numpy>=1.23,<2",
     "pywin32; sys_platform == 'win32'",
     "setuptools",
     "wheel",

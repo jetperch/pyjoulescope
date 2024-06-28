@@ -4,6 +4,13 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 1.1.15
+
+2023 Jun 28
+
+* Pinned numpy version dependency to < 2.
+
+
 ## 1.1.14
 
 2023 May 29
