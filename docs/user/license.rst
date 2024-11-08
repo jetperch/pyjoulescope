@@ -8,7 +8,7 @@ The joulescope package is open-source and available under the permissive
 Apache 2.0 license.
 
 
-Copyright 2018-2020 Jetperch LLC
+Copyright 2018-2024 Jetperch LLC
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.

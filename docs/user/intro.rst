@@ -23,7 +23,7 @@ Cython for better performance.
 
 This package runs under Windows 11 & 10,
 Linux (Ubuntu is tested),
-and macOS 13, 12, & 10.15.
+and macOS 15, 14, 13, 12, & 10.15.
 On Windows, the USB communication is performed using 
 `WinUSB <https://docs.microsoft.com/en-us/windows-hardware/drivers/usbcon/winusb>`_,
 which is included with Windows 10.

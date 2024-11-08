@@ -20,7 +20,7 @@ To get help for all available commands::
 You can also run the package directly, which comes in handy when running
 directly from the source code::
 
-    python3 -m joulescope
+    python3 -m joulescope --help
 
 
 

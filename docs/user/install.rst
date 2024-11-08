@@ -5,7 +5,7 @@ Installation
 ************
 
 If you want to use released versions of pyjoulescope, **Install from PyPI**.
-It's quick and easy!  If you want unrelease pyjoulescope software or you
+It's quick and easy!  If you want unreleased pyjoulescope software or you
 want to develop pyjoulescope, see **Install from Source**.
 
 .. contents::  :local:
@@ -14,7 +14,7 @@ want to develop pyjoulescope, see **Install from Source**.
 Install Python
 ==============
 
-You will need to install Python 3.9+ x64 for your platform, if it is not already
+You will need to install 64-bit Python 3.10+ for your platform, if it is not already
 on your system.
 
 
@@ -27,7 +27,7 @@ If in doubt, select the "Windows x86-64 executable installer".  Install Python
 and allow it to update your path.  Open a Command Prompt and type::
 
     > python -VV
-    Python 3.12.4 (tags/v3.12.4:8e8a4ba, Jun  6 2024, 19:30:16) [MSC v.1940 64 bit (AMD64)]
+    Python 3.13.0 (tags/v3.13.0:60403a5, Oct  7 2024, 09:38:07) [MSC v.1941 64 bit (AMD64)]
 
 Note that Windows usually installs python 3 as python.exe.  This documentation
 often uses the executable "python3".
@@ -73,10 +73,6 @@ To install this python package from PyPI using `pip` (or `pipenv`)::
     pip3 install -U joulescope
 
 That's it!  The extra "-U" will upgrade to the latest version, just in case.
-
-The joulescope package requires Python 3.6+ and 64-bit Python.
-If your system does not meet these requirements, then the installation will
-fail with an error message.
 
 
 Troubleshooting
