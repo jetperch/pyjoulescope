@@ -1,4 +1,4 @@
-# Copyright 2022 Jetperch LLC
+# Copyright 2022-2024 Jetperch LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@
 # Minimum requirements for the build system to execute.
 requires = [
     "Cython",
-    "numpy>=1.23,<2",
+    "numpy>=2.1.0,<3",
     "pywin32; sys_platform == 'win32'",
     "setuptools",
     "wheel",

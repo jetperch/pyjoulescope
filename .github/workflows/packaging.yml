@@ -1,4 +1,4 @@
-# Copyright 2021-2023 Jetperch LLC
+# Copyright 2021-2024 Jetperch LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@ on: ['push', 'pull_request']
 
 
 env:
-  PYTHON_VERSION: '3.11'
+  PYTHON_VERSION: '3.13'
 
 
 jobs:
@@ -102,7 +102,7 @@ jobs:
         run: echo "filename=$(ls dist/*.tar.gz)" >> $GITHUB_OUTPUT
 
       - name: Build wheels
-        uses: pypa/cibuildwheel@v2.18.1
+        uses: pypa/cibuildwheel@v2.21.3
         env:
           CIBW_ARCHS_MACOS: universal2
           CIBW_ARCHS_WINDOWS: native

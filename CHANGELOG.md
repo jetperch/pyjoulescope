@@ -4,16 +4,29 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 1.2.0
+
+2024 Nov 7
+
+* Added Python 3.13 support
+* Dropped Python 3.9 support
+* Bumped dependency version
+  * numpy from 1.23 to 2.1.0
+  * pyjls from 0.9.2 to 0.11.0
+  * pyjoulescope_driver from 1.5.3 to 1.7.0
+* Updated documentation 
+
+
 ## 1.1.15
 
-2023 Jun 28
+2024 Jun 28
 
 * Pinned numpy version dependency to < 2.
 
 
 ## 1.1.14
 
-2023 May 29
+2024 May 29
 
 * Fixed typo in scan_for_changes causing v0 backend crash.
 * Improved dependency specs to pin major versions.
@@ -21,14 +34,14 @@ This file contains the list of changes made to pyjoulescope.
 
 ## 1.1.13
 
-2023 Mar 15
+2024 Mar 15
 
 * Fixed parameter_set not working when called before device open.
 
 
 ## 1.1.12
 
-2023 Feb 14
+2024 Feb 14
 
 * Fixed regex string in units  #35
 * Bumped dependency versions
