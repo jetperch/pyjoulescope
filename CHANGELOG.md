@@ -6,7 +6,7 @@ This file contains the list of changes made to pyjoulescope.
 
 ## 1.2.0
 
-2024 Nov 7
+2024 Nov 8
 
 * Added Python 3.13 support
 * Dropped Python 3.9 support
