@@ -4,6 +4,13 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 1.2.1
+
+2025 Jan 22
+
+* Improved StreamBuffer start/stop index handling  #45
+
+
 ## 1.2.0
 
 2024 Nov 8

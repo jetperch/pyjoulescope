@@ -1,4 +1,4 @@
-# Copyright 2022 Jetperch LLC
+# Copyright 2022-2025 Jetperch LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -37,6 +37,8 @@ class TestSampleBuffer(unittest.TestCase):
         self.assertEqual(1, len(c))
         self.assertEqual((0, 1), c.range)
         np.testing.assert_equal(a, c.get_range(*c.range))
+        np.testing.assert_equal([], c.get_range(0, 0))
+        np.testing.assert_equal([], c.get_range(1, 0))
         with self.assertRaises(ValueError):
             c.get_range(-1, 0)
         with self.assertRaises(ValueError):

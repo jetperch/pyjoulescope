@@ -1,4 +1,4 @@
-# Copyright 2022 Jetperch LLC
+# Copyright 2022-2025 Jetperch LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -168,7 +168,9 @@ class SampleBuffer:
     def get_range(self, start, end):
         s_start, s_end = self.range
         if start < s_start or end > s_end:
-            raise ValueError(f'get {start}:{end} out of available range {s_start}:{s_end}')
+            raise ValueError(f'get_range {start}:{end} out of available range {s_start}:{s_end}')
+        elif start >= end:
+            return []
         ptr1 = self._wrap(start)
         ptr2 = self._wrap(end)
         if ptr2 > ptr1:

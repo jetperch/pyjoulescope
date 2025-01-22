@@ -1,4 +1,4 @@
-# Copyright 2018-2022 Jetperch LLC
+# Copyright 2018-2025 Jetperch LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -365,6 +365,17 @@ class StreamBuffer:
         #self._log.debug(f'samples_get({start}, {stop}) in ({self_start}, {self_stop})')
         start = max(start, self_start)
         stop = min(stop, self_stop)
+        if start >= self_stop:
+            # force to zero length at the end of the buffer
+            start = max(self_start, self_stop - 1)
+            stop = start
+        elif stop < self_start:
+            # force to zero length at the start of the buffer
+            start = self_start
+            stop = start
+        elif start > stop:
+            # force to zero length at start
+            stop = start
         t1 = self.sample_id_to_time(start)
         t2 = self.sample_id_to_time(stop)
         result = {
