@@ -9,6 +9,9 @@ This file contains the list of changes made to pyjoulescope.
 2025 Jan 22
 
 * Improved StreamBuffer start/stop index handling  #45
+* Bumped dependency version
+  * numpy from 2.1.0 to 2.2.0
+  * psutil from 5 to 6
 
 
 ## 1.2.0

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2018-2024 Jetperch LLC
+# Copyright 2018-2025 Jetperch LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -180,8 +180,8 @@ setuptools.setup(
     # See https://packaging.python.org/en/latest/requirements.html
     # https://numpy.org/neps/nep-0029-deprecation_policy.html
     install_requires=[
-        'numpy>=2.1.0,<3',
-        'psutil>=5,<6',
+        'numpy>=2.2.0,<3',
+        'psutil>=6,<7',
         'pyjls>=0.11.0,<1',
         'pyjoulescope_driver>=1.7.0,<2',
         'python-dateutil>=2.7.3,<3',
