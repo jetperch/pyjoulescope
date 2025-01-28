@@ -1,4 +1,4 @@
-# Copyright 2022-2023 Jetperch LLC
+# Copyright 2022-2025 Jetperch LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -74,8 +74,11 @@ class Device:
         """The output sampling frequency."""
         return self._output_sampling_frequency
 
-    @output_sampling_frequency.setter
-    def output_sampling_frequency(self, value):
+    def _output_sampling_frequency_set(self, value):
+        """Protected setter for output_sampling_frequency.
+
+        Applications should use: `parameter_set('sampling_frequency', value)`.
+        """
         self._output_sampling_frequency = value
         if self.stream_buffer is not None:
             self.stream_buffer.output_sampling_frequency = self._output_sampling_frequency

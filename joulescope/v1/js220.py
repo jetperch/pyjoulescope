@@ -1,4 +1,4 @@
-# Copyright 2022-2023 Jetperch LLC
+# Copyright 2022-2025 Jetperch LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -129,7 +129,7 @@ class DeviceJs220(Device):
             raise ValueError(f'invalid sampling frequency {value}')
         self._log.info('_on_sampling_frequency %s', value)
         self.publish('h/fs', value)
-        self.output_sampling_frequency = value
+        self._output_sampling_frequency_set(value)
         self._parameters['sampling_frequency'] = value
 
     def _on_gpo(self, index, value):

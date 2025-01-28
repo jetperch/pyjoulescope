@@ -1,4 +1,4 @@
-# Copyright 2022-2023 Jetperch LLC
+# Copyright 2022-2025 Jetperch LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -77,7 +77,7 @@ class DeviceJs110(Device):
     def _on_sampling_frequency(self, value):
         value = int(value)
         self.publish('h/fs', int(value))
-        self.output_sampling_frequency = value
+        self._output_sampling_frequency_set(value)
 
     def _config_apply(self, config=None):
         for key, value in PARAMETERS_DEFAULTS.get(config, {}).items():

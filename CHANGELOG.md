@@ -4,6 +4,16 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 1.2.2
+
+2025 Jan 28 [in progress]
+
+* Removed Device.output_sampling_frequency setter which never worked as an API
+  setter and was never intended to be API-accessible.
+  The JS110 and JS220 implementations used this as a protected setter.
+  Changed to `_output_sampling_frequency_set` function.
+
+
 ## 1.2.1
 
 2025 Jan 22
