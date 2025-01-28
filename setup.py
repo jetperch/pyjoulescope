@@ -181,7 +181,7 @@ setuptools.setup(
     # https://numpy.org/neps/nep-0029-deprecation_policy.html
     install_requires=[
         'numpy>=2.2.0,<3',
-        'psutil>=6,<7',
+        'psutil>=5,<7',
         'pyjls>=0.11.0,<1',
         'pyjoulescope_driver>=1.7.0,<2',
         'python-dateutil>=2.7.3,<3',
