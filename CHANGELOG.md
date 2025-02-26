@@ -4,6 +4,13 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 1.2.3
+
+2025 Feb 26
+
+* Fixed stream_buffer access when None due to race condition.
+
+
 ## 1.2.2
 
 2025 Jan 28

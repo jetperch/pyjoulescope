@@ -445,6 +445,8 @@ class Device:
 
     def _on_stream(self, topic, value):
         b = self.stream_buffer
+        if b is None:
+            return False
         _, e1 = b.sample_id_range
         b.insert(topic, value)
         e0, e2 = b.sample_id_range
