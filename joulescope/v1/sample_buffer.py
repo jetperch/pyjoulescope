@@ -53,7 +53,7 @@ class SampleBuffer:
         self._sample_rate = None
         self._incoming_decimate = 1
         self._local_decimate = 1
-        self._local_decimate_data = 0
+        self._local_decimate_data = None
         #print(f'SampleBuffer({size}, {dtype}, {self._decimate})')
         self._size = size
         self._sample_id = None  # next expected sample_id, in full-rate samples
@@ -92,7 +92,7 @@ class SampleBuffer:
         self._sample_id = None
         self._first = None
         self._head = None
-        self._local_decimate_data = None
+        self._local_decimate_data = np.array([], dtype=self._buffer.dtype)
         self._buffer[:] = self._skip_fill
 
     @property
@@ -162,32 +162,40 @@ class SampleBuffer:
             d_idx1 = sample_id // self._incoming_decimate
             d_idx2 = ((d_idx1 + self._local_decimate - 1) // self._local_decimate) * self._local_decimate
             d_len = d_idx2 - d_idx1
+            src_data = data
+            dst_data_len = len(src_data) // self._local_decimate + 1
+            dst_data = np.empty(dst_data_len, dtype=np.float64)
+            dst_data_idx = 0
+
             if d_len:
-                data_first = data[:d_len]
-                data = data[d_len:]
-                if self._local_decimate_data is not None:
-                    data_first = np.concatenate((data_first, self._local_decimate_data))
-                self._buffer[ptr1] = self._decimate_fn(data_first)
-                self._head += 1
-            while len(data) >= self._local_decimate:
-                ptr1 = self._wrap(self._head)
-                self._buffer[ptr1] = self._decimate_fn(data[:self._local_decimate])
-                data = data[self._local_decimate:]
-                self._head += 1
-            self._local_decimate_data = data
-        else:
-            sz = len(data)
-            ptr1 = self._wrap(self._head)
-            ptr2 = self._wrap(self._head + sz)
-            if sz == 0:
-                pass
-            elif ptr2 > ptr1:
-                self._buffer[ptr1:ptr2] = data
+                data_first = src_data[:d_len]
+                src_data = src_data[d_len:]
+                data_first = np.concatenate((data_first, self._local_decimate_data))
+                dst_data[0] = np.mean(data_first, dtype=np.float64)
+                dst_data_idx = 1
+            k = len(src_data) // self._local_decimate
+            src_data_end = k * self._local_decimate
+            self._local_decimate_data = src_data[src_data_end:]  # for next time
+            src_data_view = src_data[:src_data_end].reshape((k, self._local_decimate))
+            dst_data[dst_data_idx:(dst_data_idx + k)] = np.mean(src_data_view, axis=1, dtype=np.float64)
+            dst_data = dst_data[:(dst_data_idx + k)]
+            if self._dtype == 'u1':
+                data = (dst_data > 0.5).astype(np.uint8)
             else:
-                k = self._size - ptr1
-                self._buffer[ptr1:] = data[:k]
-                self._buffer[:ptr2] = data[k:]
-            self._head += sz
+                data = dst_data.astype(self._buffer.dtype)
+
+        sz = len(data)
+        ptr1 = self._wrap(self._head)
+        ptr2 = self._wrap(self._head + sz)
+        if sz == 0:
+            pass
+        elif ptr2 > ptr1:
+            self._buffer[ptr1:ptr2] = data
+        else:
+            k = self._size - ptr1
+            self._buffer[ptr1:] = data[:k]
+            self._buffer[:ptr2] = data[k:]
+        self._head += sz
 
     def get_range(self, start, end):
         s_start, s_end = self.range

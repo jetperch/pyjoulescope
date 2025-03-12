@@ -6,7 +6,7 @@ This file contains the list of changes made to pyjoulescope.
 
 ## 1.3.0
 
-2025 Mar 12 [in progress]
+2025 Mar 12
 
 * Improved v1 sample_buffer.
   * Use mean (average) rather than simple downsampling.
