@@ -84,3 +84,18 @@ class TestSampleBuffer(unittest.TestCase):
         self.assertEqual(1.0, s[0])
         self.assertTrue(np.isnan(s[1]))
         self.assertEqual(3.0, s[2])
+
+    def test_downsample_1n(self):
+        c = SampleBuffer(10_000_000, dtype='u1', name='gpi0')
+        sample_id = 16841077408
+        sz = 100800
+        data = np.empty(sz // 8, dtype=np.uint8)
+        data[:] = 0xff
+
+        for i in range(10):
+            c.add(sample_id, data, sample_rate=2_000_000, decimate_factor=1, local_decimate_factor=1000)
+            sample_id += sz
+
+        start_idx, end_idx = c.range
+        data = c.get_range(start_idx, end_idx)
+        np.testing.assert_equal(1, data)

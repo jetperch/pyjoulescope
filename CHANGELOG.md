@@ -4,6 +4,15 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 1.3.0
+
+2025 Mar 12 [in progress]
+
+* Improved v1 sample_buffer.
+  * Use mean (average) rather than simple downsampling.
+  * Fixed incorrect GPI (u1) downsampling for some configurations.
+
+
 ## 1.2.3
 
 2025 Feb 26

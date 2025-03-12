@@ -18,6 +18,16 @@ import numpy as np
 import logging
 
 
+def _decimate_u1(x):
+    v = np.mean(x)
+    return 0 if v < 0.5 else 1
+
+
+def _decimate_float(x):
+    return float(np.mean(x, dtype=np.float64))
+
+
+
 class SampleBuffer:
 
     def __init__(self, size, dtype, name=None):
@@ -29,9 +39,12 @@ class SampleBuffer:
         """
         self._name = '__none__' if name is None else str(name)
         self._dtype = dtype
+        self._skip_fill = np.nan if self._dtype in [np.float32, np.float64] else 0
+        self._decimate_fn = _decimate_float
         if dtype == 'u1':
             dtype = np.uint8
             size = ((size + 7) // 8) * 8
+            self._decimate_fn = _decimate_u1
         elif dtype == 'u4':
             dtype = np.uint8
             if size & 1:
@@ -40,11 +53,12 @@ class SampleBuffer:
         self._sample_rate = None
         self._incoming_decimate = 1
         self._local_decimate = 1
-        self._local_decimate_offset = 0
+        self._local_decimate_data = 0
         #print(f'SampleBuffer({size}, {dtype}, {self._decimate})')
         self._size = size
-        self._first = None   # first sample_id
-        self._head = None    # head sample_id
+        self._sample_id = None  # next expected sample_id, in full-rate samples
+        self._first = None   # first sample_id, in decimated samples
+        self._head = None    # head sample_id, in decimated samples
         self._buffer = np.empty(size, dtype)
         self.clear()
         self.active = True
@@ -73,13 +87,13 @@ class SampleBuffer:
         return min(self._head - self._first, self.len_max)
 
     def clear(self):
+        if self._head is not None:
+            self._log.info('clear')
+        self._sample_id = None
         self._first = None
         self._head = None
-        self._local_decimate_offset = 0
-        if self._buffer.dtype in [np.float32, np.float64]:
-            self._buffer[:] = np.nan
-        else:
-            self._buffer[:] = 0
+        self._local_decimate_data = None
+        self._buffer[:] = self._skip_fill
 
     @property
     def range(self):
@@ -93,24 +107,17 @@ class SampleBuffer:
         if sample_id is None or data is None:
             self._log.warning('Invalid add')
             return
-        clr = False
         if sample_rate is not None and self._sample_rate != sample_rate:
             self.clear()
             self._sample_rate = sample_rate
-            clr = True
         if decimate_factor is not None and self._incoming_decimate != decimate_factor:
             self.clear()
             self._incoming_decimate = decimate_factor
-            clr = True
         if local_decimate_factor is not None and self._local_decimate != local_decimate_factor:
             self.clear()
             self._local_decimate = local_decimate_factor
-            clr = True
-        if clr:
-            self._log.info('add -> auto clear')
+        decimate_k = self._incoming_decimate * self._local_decimate
 
-        sample_id_orig = sample_id
-        sample_id //= (self._incoming_decimate * self._local_decimate)
         if self._dtype == 'u1':
             data = np.unpackbits(data, bitorder='little')
         elif self._dtype == 'u4':
@@ -119,51 +126,68 @@ class SampleBuffer:
             d[1::2] = np.logical_and(np.right_shift(data, 4), 0x0f)
             data = d
 
-        sz_max = self._size - 1
-        if self._head != sample_id:
-            self._log.info('skip head=%s, sample_id=%s, sample_id_orig=%s, sz=%s',
-                           self._head, sample_id, sample_id_orig, len(data))
-            if self._dtype in [np.float32, np.float64]:
-                skip_fill = np.nan
-            else:
-                skip_fill = 0
-            if self._head is None:
-                # first sample, set empty
-                offset = sample_id_orig - sample_id * self._incoming_decimate * self._local_decimate
-                if self._local_decimate > 1 and offset != 0:
-                    sample_id += 1
-                    self._local_decimate_offset = self._local_decimate - offset // self._incoming_decimate
-                self._first = sample_id
-            else:
-                skip_sz = sample_id - self._head
-                if skip_sz >= sz_max:
-                    self._buffer[:] = skip_fill
+        head_this = (sample_id + decimate_k - 1) // decimate_k
+        if self._head is None:
+            self._head = head_this
+            self._first = self._head
+            self._sample_id = sample_id
+
+        if self._sample_id == sample_id:
+            pass  # normal operation
+        elif sample_id < self._sample_id:
+            k = len(data) * decimate_factor
+            if (sample_id + k) < self._sample_id:
+                return  # complete duplication
+            else:  # partial overlap
+                k = (self._sample_id - sample_id) // decimate_factor
+                data = data[k:]
+                sample_id = self._sample_id
+        else:  # sample_id > self._sample_id
+            skip_sz = sample_id // decimate_k - self._head
+            if skip_sz >= self.len_max:
+                self._buffer[:] = self._skip_fill
+                self._head = head_this
+            elif skip_sz > 0:
+                ptr1 = self._wrap(self._head)
+                ptr2 = self._wrap(self._head + skip_sz)
+                self._head += skip_sz
+                if ptr2 > ptr1:
+                    self._buffer[ptr1:ptr2] = self._skip_fill
                 else:
-                    ptr1 = self._wrap(self._head)
-                    ptr2 = self._wrap(self._head + skip_sz)
-                    if ptr2 > ptr1:
-                        self._buffer[ptr1:ptr2] = skip_fill
-                    else:
-                        self._buffer[ptr1:] = skip_fill
-                        self._buffer[:ptr2] = skip_fill
-            self._head = sample_id
+                    self._buffer[ptr1:] = self._skip_fill
+                    self._buffer[:ptr2] = self._skip_fill
 
         if self._local_decimate > 1:
-            offset = (self._local_decimate_offset + len(data)) % self._local_decimate
-            data = data[self._local_decimate_offset::self._local_decimate]
-            self._local_decimate_offset = offset
-        sz = len(data)
-        ptr1 = self._wrap(self._head)
-        ptr2 = self._wrap(self._head + sz)
-        if sz == 0:
-            pass
-        elif ptr2 > ptr1:
-            self._buffer[ptr1:ptr2] = data
+            ptr1 = self._wrap(self._head)
+            d_idx1 = sample_id // self._incoming_decimate
+            d_idx2 = ((d_idx1 + self._local_decimate - 1) // self._local_decimate) * self._local_decimate
+            d_len = d_idx2 - d_idx1
+            if d_len:
+                data_first = data[:d_len]
+                data = data[d_len:]
+                if self._local_decimate_data is not None:
+                    data_first = np.concatenate((data_first, self._local_decimate_data))
+                self._buffer[ptr1] = self._decimate_fn(data_first)
+                self._head += 1
+            while len(data) >= self._local_decimate:
+                ptr1 = self._wrap(self._head)
+                self._buffer[ptr1] = self._decimate_fn(data[:self._local_decimate])
+                data = data[self._local_decimate:]
+                self._head += 1
+            self._local_decimate_data = data
         else:
-            k = self._size - ptr1
-            self._buffer[ptr1:] = data[:k]
-            self._buffer[:ptr2] = data[k:]
-        self._head += sz
+            sz = len(data)
+            ptr1 = self._wrap(self._head)
+            ptr2 = self._wrap(self._head + sz)
+            if sz == 0:
+                pass
+            elif ptr2 > ptr1:
+                self._buffer[ptr1:ptr2] = data
+            else:
+                k = self._size - ptr1
+                self._buffer[ptr1:] = data[:k]
+                self._buffer[:ptr2] = data[k:]
+            self._head += sz
 
     def get_range(self, start, end):
         s_start, s_end = self.range
