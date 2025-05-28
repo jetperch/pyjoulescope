@@ -50,7 +50,7 @@ Linux
 Use your package manager to install python.  On Debian-based systems, including
 Ubuntu, use apt::
 
-    $ sudo apt install python3-dev python3-pip libusb-1.0
+    $ sudo apt install python3-dev python3-pip libusb-1.0-0
     $ python3 -VV
     
 The user must have sufficient permissions to access Joulescopes.
