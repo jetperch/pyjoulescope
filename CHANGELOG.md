@@ -4,6 +4,14 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 1.3.1
+
+2025 Jul 7
+
+* Bumped pyjoulescope_driver 1.7.0 to 1.9.4
+* Bumped psutil max version to 8 
+
+
 ## 1.3.0
 
 2025 Mar 12
