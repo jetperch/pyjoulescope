@@ -1,0 +1,28 @@
+# Joulescope udev rules
+# This file grants normal system users sufficient permissions to access Joulescope.
+#
+# Instructions:
+# Copy this file to the udev rules
+#    sudo cp 72-joulescope.rules /etc/udev/rules.d/
+# Reload the udev rules
+#    sudo udevadm control --reload-rules
+#
+#
+# This file grants read/write access to the logged in user.
+#
+#
+# Also see
+#     https://www.joulescope.com                 : product website
+#     https://github.com/jetperch/pyjoulescope   : source code
+
+# Joulescope JS110 application
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTRS{idVendor}=="16d0", ATTRS{idProduct}=="0e88", MODE="0666", TAG+="uaccess"
+
+# Joulescope JS110 bootloader
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTRS{idVendor}=="16d0", ATTRS{idProduct}=="0e87", MODE="0666", TAG+="uaccess"
+
+# Joulescope JS220 application
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTRS{idVendor}=="16d0", ATTRS{idProduct}=="10ba", MODE="0666", TAG+="uaccess"
+
+# Joulescope JS220 updater
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTRS{idVendor}=="16d0", ATTRS{idProduct}=="10b9", MODE="0666", TAG+="uaccess"
