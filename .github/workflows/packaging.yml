@@ -80,7 +80,7 @@ jobs:
           if-no-files-found: error
 
   build_wheels:
-    name: Build on ${{ matrix.os }}
+    name: Build ${{ matrix.os }}-${{ matrix.python_version }}
     needs:
       - build_sdist
     runs-on: ${{ matrix.os }}
@@ -123,7 +123,7 @@ jobs:
       - name: Upload python wheels
         uses: actions/upload-artifact@v5
         with:
-          name: wheels-${{ matrix.os }}
+          name: wheels-${{ matrix.os }}-${{ matrix.python_version }}
           path: wheelhouse/*.whl
           if-no-files-found: error
 
