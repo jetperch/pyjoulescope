@@ -88,6 +88,7 @@ jobs:
       fail-fast: false
       matrix:
         os: ["ubuntu-latest", "ubuntu-24.04-arm", "windows-latest", "macos-latest"]
+        python_version: ["cp311", "cp312", "cp313", "cp314"]
 
     steps:
       - name: Download sdist
@@ -110,11 +111,12 @@ jobs:
           # skip PyPy: Cython only supports CPython
           # skip musllinux: build takes too long with default os images.
           CIBW_SKIP: 'pp* *musllinux*'
+          CIBW_BUILD: '${{ matrix.python_version }}-*'
           CIBW_BEFORE_BUILD_LINUX: yum install -y libudev-devel libusb1-devel
           CIBW_TEST_REQUIRES: pytest
           CIBW_TEST_COMMAND: pytest --pyargs joulescope
           # todo: figure out how to get macOS tests running again.
-          CIBW_TEST_SKIP: '*macos*'
+          CIBW_TEST_SKIP: "*-macosx_universal2:arm64"  # cannot test arm64 on x86_64
         with:
           package-dir: ${{ steps.find_sdist_filename.outputs.filename }}
 
