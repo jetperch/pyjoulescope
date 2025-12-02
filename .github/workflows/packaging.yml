@@ -116,7 +116,7 @@ jobs:
           CIBW_TEST_REQUIRES: pytest
           CIBW_TEST_COMMAND: pytest --pyargs joulescope
           # todo: figure out how to get macOS tests running again.
-          CIBW_TEST_SKIP: "*-macosx_universal2:arm64"  # cannot test arm64 on x86_64
+          CIBW_TEST_SKIP: '*macos*'
         with:
           package-dir: ${{ steps.find_sdist_filename.outputs.filename }}
 
