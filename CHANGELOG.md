@@ -4,6 +4,19 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 1.4.0
+
+2025 Dec 2
+
+* Added Python 3.14 support and dropped Python 3.10 support.
+* Added linux arm64 wheel  #41
+* Bumped dependency versions: 
+  * pyjls from 0.11.1 to 0.16.0.
+  * pyjoulescope_driver from 1.9.4 to 1.11.0
+  * pymonocypher from 3.1.3.2 to 3.1.3.5
+* Updated build dependencies.
+
+
 ## 1.3.1
 
 2025 Jul 7

@@ -1,11 +1,11 @@
-__version__ = "1.3.1"
+__version__ = "1.4.0"
 
 __title__ = "joulescope"
 __description__ = 'Joulescope™ host driver and utilities'
 __url__ = 'https://joulescope.readthedocs.io'
 __author__ = 'Jetperch LLC'
 __author_email__ = 'joulescope-dev@jetperch.com'
-__license__ = 'Apache 2.0'
+__license__ = 'Apache-2.0'
 __copyright__ = 'Copyright 2018-2025 Jetperch LLC'
 
 
