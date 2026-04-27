@@ -4,6 +4,14 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 1.5.0
+
+2026 Apr 27
+
+* Bumped dependency versions: 
+  * pyjoulescope_driver from 1.11.0 to 2.0.7
+
+
 ## 1.4.0
 
 2025 Dec 2
