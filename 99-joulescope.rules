@@ -37,3 +37,9 @@ SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTRS{idVendor}=="16d0", ATTRS{idP
 
 # Joulescope JS220 updater
 SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTRS{idVendor}=="16d0", ATTRS{idProduct}=="10b9", MODE="0666", GROUP="plugdev"
+
+# Joulescope JS320
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTRS{idVendor}=="16d0", ATTRS{idProduct}=="135a", MODE="0666", GROUP="plugdev"
+
+# Minibitty Trace Adapters
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTRS{idVendor}=="16d0", ATTRS{idProduct}=="1359", MODE="0666", GROUP="plugdev"
