@@ -8,6 +8,7 @@ This file contains the list of changes made to pyjoulescope.
 
 2026 Apr 27
 
+* Added Windows 11 ARM support.
 * Bumped dependency versions: 
   * pyjoulescope_driver from 1.11.0 to 2.1.0
   * pyjls from 0.16.0 to 0.17.0
