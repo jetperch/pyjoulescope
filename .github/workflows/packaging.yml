@@ -1,4 +1,4 @@
-# Copyright 2021-2025 Jetperch LLC
+# Copyright 2021-2026 Jetperch LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -87,7 +87,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ["ubuntu-latest", "ubuntu-24.04-arm", "windows-latest", "macos-latest"]
+        os: ["ubuntu-latest", "ubuntu-24.04-arm", "windows-latest", "windows-11-arm", "macos-latest"]
         python_version: ["cp311", "cp312", "cp313", "cp314"]
 
     steps:
@@ -103,7 +103,7 @@ jobs:
         run: echo "filename=$(ls dist/*.tar.gz)" >> $GITHUB_OUTPUT
 
       - name: Build wheels
-        uses: pypa/cibuildwheel@v3.3
+        uses: pypa/cibuildwheel@v3.4.1
         env:
           CIBW_ARCHS_MACOS: universal2
           CIBW_ARCHS_WINDOWS: native
@@ -157,7 +157,7 @@ jobs:
         run: ls dist/*
 
       - name: Publish to PyPi
-        uses: pypa/gh-action-pypi-publish@v1.13.0
+        uses: pypa/gh-action-pypi-publish@v1.14.0
         with:
           print-hash: true
 

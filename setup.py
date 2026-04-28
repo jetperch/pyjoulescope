@@ -182,10 +182,10 @@ setuptools.setup(
     install_requires=[
         'numpy>=2.2.0,<3',
         'psutil>=5,<8',
-        'pyjls>=0.16.0,<1',
-        'pyjoulescope_driver>=2.07,<3',
+        'pyjls>=0.17.0,<1',
+        'pyjoulescope_driver>=2.1.0,<3',
         'python-dateutil>=2.7.3,<3',
-        'pymonocypher>=3.1.3.5,<4',
+        'pymonocypher>=3.1.3.6,<4',
         "pywin32; platform_system=='Windows'",
     ],
 
