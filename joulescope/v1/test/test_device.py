@@ -183,3 +183,45 @@ class TestSignalsParameter(unittest.TestCase):
         d, _ = self._device(DeviceJs320, 'u/js320/000000')
         d.parameter_set('signals', 'i,v,p,r,0,1,2,3,T')
         self.assertEqual('i,v,p,r,0,1,2,3,T', d.parameter_get('signals'))
+
+class TestParametersOverride(unittest.TestCase):
+
+    def _options(self, device, name):
+        return [o[0] for o in device.parameters(name).options]
+
+    def test_js220_sampling_frequency_options(self):
+        from joulescope.v1.js220 import DeviceJs220
+        d = DeviceJs220(FakeDriver(), 'u/js220/000000')
+        options = self._options(d, 'sampling_frequency')
+        self.assertIn('1 MHz', options)
+        self.assertIn('500 kHz', options)
+        self.assertNotIn('2 MHz', options)
+        self.assertEqual('1 MHz', d.parameters('sampling_frequency').default)
+
+    def test_js320_sampling_frequency_options(self):
+        from joulescope.v1.js320 import DeviceJs320
+        d = DeviceJs320(FakeDriver(), 'u/js320/000000')
+        options = self._options(d, 'sampling_frequency')
+        self.assertIn('1 MHz', options)
+        self.assertNotIn('500 kHz', options)
+        self.assertNotIn('2 MHz', options)
+
+    def test_js220_v_range_options(self):
+        from joulescope.v1.js220 import DeviceJs220
+        d = DeviceJs220(FakeDriver(), 'u/js220/000000')
+        self.assertEqual(['15V', '2V'], self._options(d, 'v_range'))
+
+    def test_js110_unchanged(self):
+        from joulescope.v1.js110 import DeviceJs110
+        d = DeviceJs110(FakeDriver(), 'u/js110/000000')
+        options = self._options(d, 'sampling_frequency')
+        self.assertIn('2 MHz', options)
+        self.assertEqual(['15V', '5V'], self._options(d, 'v_range'))
+
+    def test_parameters_list_includes_override(self):
+        from joulescope.v1.js320 import DeviceJs320
+        d = DeviceJs320(FakeDriver(), 'u/js320/000000')
+        params = {p.name: p for p in d.parameters()}
+        self.assertNotIn('500 kHz',
+                         [o[0] for o in params['sampling_frequency'].options])
+        self.assertIn('signals', params)

@@ -14,6 +14,7 @@
 
 
 from .device import Device, _SIGNALS_EXTENDED
+from joulescope.parameter import Parameter
 from joulescope.parameters_v1 import PARAMETERS_DICT, name_to_value
 
 
@@ -31,6 +32,48 @@ _SAMPLING_FREQUENCIES = [
     1_000, 2_000, 5_000, 10_000, 20_000, 50_000,
     100_000, 200_000, 500_000, 1_000_000,
 ]
+
+
+def _frequency_name(f):
+    if f >= 1_000_000:
+        return f'{f // 1_000_000} MHz'
+    elif f >= 1_000:
+        return f'{f // 1_000} kHz'
+    return f'{f} Hz'
+
+
+def sampling_frequency_parameter(frequencies, default):
+    """Construct the device-specific sampling_frequency parameter.
+
+    :param frequencies: The supported output frequencies in Hz, ascending.
+    :param default: The default frequency in Hz.
+    :return: The :class:`joulescope.parameter.Parameter` instance.
+    """
+    options = []
+    for f in sorted(frequencies, reverse=True):
+        aliases = [f]
+        if f == default:
+            aliases += ['auto', None, 'default']
+        options.append((_frequency_name(f), f, aliases))
+    return Parameter(
+        name='sampling_frequency',
+        brief='The rate that the device produces samples.',
+        path='setting',
+        default=_frequency_name(default),
+        options=options,
+        units='Hz',
+        flags=['skip_update'])
+
+
+_V_RANGE_PARAMETER = Parameter(
+    name='v_range',
+    brief='Select the voltage measurement range (gain)',
+    path='setting',
+    default='15V',
+    options=[
+        ('15V', '15 V', ['15 V', 'low', 0]),
+        ('2V', '2 V', ['2 V', 2]),
+    ])
 
 
 def _signal_bool(value):
@@ -69,6 +112,9 @@ class DeviceJs220(Device):
         self._output_sampling_frequency = 1000000
         self._parameters['sampling_frequency'] = self._output_sampling_frequency
         self._signals_map.update(_SIGNALS_EXTENDED)  # gpi2, gpi3, trigger_in
+        self._parameters_override['sampling_frequency'] = \
+            sampling_frequency_parameter(_SAMPLING_FREQUENCIES, 1_000_000)
+        self._parameters_override['v_range'] = _V_RANGE_PARAMETER
 
     def parameter_set(self, name, value):
         value_orig = value

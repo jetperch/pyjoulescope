@@ -12,6 +12,25 @@ This file contains the list of changes made to pyjoulescope.
 * Bumped dependency versions: 
   * pyjoulescope_driver from 2.1.0 to 2.3.5
   * Allow pymonocypher 3.x and 4.x (was previously 3 only)
+* Added extended signal streaming (v1 backend): new 'signals' parameter
+  selects streams by short name (i,v,p,r,0,1,2,3,T).  samples_get
+  accepts gpi0-gpi3, trigger_in, and the short aliases.  The legacy
+  current_lsb/voltage_lsb names remain supported.  The JS220 rejects
+  selections that starve current_range (8+ streams with r).
+* Capture entry point now records JLS v2 (pyjls) by default with new
+  --signals and --format options; --format jls1 keeps the legacy format.
+* parameters() now reflects per-device sampling_frequency and v_range
+  options on JS220/JS320.
+* Fixed v1 backend defects:
+  * samples_get inactive-buffer branch returned an undefined variable.
+  * SampleBuffer duplicate/overlap handling could corrupt the buffer on
+    retransmitted stream messages.
+  * `from joulescope import *` failed under the default v1 backend.
+  * Device.extio_status was defined twice.
+  * Device.close now notifies and unregisters stream process objects
+    (v0 compatible).
+* Added v1 backend unit tests and a hardware-in-the-loop
+  backwards-compatibility suite (test/hil).
 
 
 ## 1.5.0

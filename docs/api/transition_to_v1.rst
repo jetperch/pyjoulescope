@@ -32,9 +32,9 @@ The **Driver.serial_number** now returns **Driver.device_serial_number**.
 Parameter support has also changed.
 The following parameters have modified behavior:
 
-.. csv-table:: 
+.. csv-table::
     :file: transition_to_v1.csv
-    :widths: 50 25 25
+    :widths: 40 20 20 20
     :header-rows: 1
 
 New JS220 topics are available as parameters.  However, the parameter metadata

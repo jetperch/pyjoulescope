@@ -13,7 +13,7 @@
 # limitations under the License.
 
 
-from .js220 import DeviceJs220
+from .js220 import DeviceJs220, sampling_frequency_parameter
 
 
 _SAMPLING_FREQUENCIES = [
@@ -39,6 +39,8 @@ class DeviceJs320(DeviceJs220):
         self._output_sampling_frequency = 1000000
         self._h_fs = 1000000  # h/fs is the i, v, p rate: 1 Msps max
         self._parameters['sampling_frequency'] = self._output_sampling_frequency
+        self._parameters_override['sampling_frequency'] = \
+            sampling_frequency_parameter(_SAMPLING_FREQUENCIES, 1_000_000)
 
     def _on_sampling_frequency(self, value):
         value = min(int(value), 1000000)

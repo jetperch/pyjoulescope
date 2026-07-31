@@ -72,6 +72,7 @@ class Device:
         self._on_stats_cbk = self._on_stats  # hold reference for unsub
         self._on_stream_cbk = self._on_stream  # hold reference for unsub
         self._parameters = {}
+        self._parameters_override = {}  # name -> device-specific Parameter
         self._parameter_set_queue = []
         for p in PARAMETERS:
             if p.default is not None:
@@ -260,13 +261,18 @@ class Device:
             None (default) returns a list of all parameters.
         :return: The list of all parameters.  If name is provided, then just
             return that single parameters.
+
+        The parameter options reflect the values supported by this device.
+        For backwards compatibility, :meth:`parameter_set` also accepts the
+        legacy values of other Joulescope models where possible.
         """
+        params = [self._parameters_override.get(p.name, p) for p in PARAMETERS]
         if name is not None:
-            for p in PARAMETERS:
+            for p in params:
                 if p.name == name:
                     return copy.deepcopy(p)
             return None
-        return copy.deepcopy(PARAMETERS)
+        return copy.deepcopy(params)
 
     def parameter_set(self, name, value):
         """Set a parameter value.
