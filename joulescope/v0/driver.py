@@ -280,7 +280,13 @@ class Device:
         self._parameters_defaults = PARAMETERS_DEFAULTS
         for p in PARAMETERS:
             if 'read_only' not in p.flags and p.default is not None:
-                self._parameters[p.name] = name_to_value(p.name, p.default)
+                try:
+                    self._parameters[p.name] = name_to_value(p.name, p.default)
+                except KeyError:
+                    if p.validator is not None:
+                        self._parameters[p.name] = p.validator(p.default)
+                    else:
+                        self._parameters[p.name] = p.default
 
     def __str__(self):
         return str(self._usb)

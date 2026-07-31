@@ -281,3 +281,76 @@ class TestStreamBufferInactive(unittest.TestCase):
         self.assertEqual((0, 1000), b.sample_id_range)
         s = b.samples_get(0, 1000)
         np.testing.assert_allclose(1.0, s['signals']['current']['value'])
+
+
+class TestStreamBufferExtendedSignals(unittest.TestCase):
+
+    def _buffer(self, extras):
+        b = StreamBuffer(0.01, frequency=1000000, device='js220',
+                         output_frequency=1000000)
+        b.extra_signals = extras
+        return b
+
+    def test_extra_signals_allocation(self):
+        b = self._buffer([])
+        for idx in [(5, 2), (5, 3), (5, 7)]:
+            self.assertNotIn(idx, b.buffers)
+        b.extra_signals = ['2', 'gpi3', 'T']
+        self.assertEqual(['gpi2', 'gpi3', 'trigger_in'], b.extra_signals)
+        for idx in [(5, 2), (5, 3), (5, 7)]:
+            self.assertIn(idx, b.buffers)
+        b.extra_signals = None
+        for idx in [(5, 2), (5, 3), (5, 7)]:
+            self.assertNotIn(idx, b.buffers)
+
+    def test_extra_signals_invalid(self):
+        b = self._buffer([])
+        with self.assertRaises(KeyError):
+            b.extra_signals = ['__invalid__']
+        with self.assertRaises(ValueError):
+            b.extra_signals = ['current']  # valid field, not extended
+
+    def test_extended_stream_and_samples_get(self):
+        b = self._buffer(['gpi2', 'gpi3', 'trigger_in'])
+        sim = DeviceSim(b, 1000000, 1, 1)
+        n = 1000
+        ones = np.packbits(np.ones(n, dtype=np.uint8), bitorder='little')
+        zeros = np.packbits(np.zeros(n, dtype=np.uint8), bitorder='little')
+        for _ in range(2):
+            sim.feed(n)
+            for index, data in [(2, ones), (3, zeros), (7, ones)]:
+                b.insert('s/x/!data', _msg(5, index, sim.sample_id - n,
+                                           data, 1000000, 1))
+        s = b.samples_get(0, 2 * n, fields=['0', '1', '2', '3', 'T'])
+        self.assertEqual(['0', '1', '2', '3', 'T'],
+                         list(s['signals'].keys()))
+        np.testing.assert_equal(0, s['signals']['0']['value'])
+        np.testing.assert_equal(1, s['signals']['1']['value'])
+        np.testing.assert_equal(1, s['signals']['2']['value'])
+        np.testing.assert_equal(0, s['signals']['3']['value'])
+        np.testing.assert_equal(1, s['signals']['T']['value'])
+        # canonical names also work
+        s2 = b.samples_get(0, 2 * n, fields=['gpi2', 'trigger_in'])
+        np.testing.assert_equal(1, s2['signals']['gpi2']['value'])
+        # legacy statistics remain 6 columns
+        out, _ = b.statistics_get(0, 2 * n)
+        self.assertEqual(len(STATS_FIELD_NAMES), len(out))
+
+    def test_extended_absent_returns_nan(self):
+        b = self._buffer([])
+        sim = DeviceSim(b, 1000000, 1, 1)
+        sim.feed(1000)
+        s = b.samples_get(0, 1000, fields=['current', 'gpi2'])
+        v = s['signals']['gpi2']['value']
+        self.assertEqual(1000, len(v))
+        self.assertTrue(np.all(np.isnan(v)))
+
+    def test_legacy_default_fields_unchanged(self):
+        b = self._buffer(['gpi2'])
+        sim = DeviceSim(b, 1000000, 1, 1)
+        sim.feed(1000)
+        b.insert('s/x/!data', _msg(
+            5, 2, 0, np.packbits(np.ones(1000, dtype=np.uint8),
+                                 bitorder='little'), 1000000, 1))
+        s = b.samples_get(0, 1000)
+        self.assertEqual(LEGACY_FIELDS, list(s['signals'].keys()))

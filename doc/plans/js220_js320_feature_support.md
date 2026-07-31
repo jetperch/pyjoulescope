@@ -130,14 +130,23 @@ plus tests.
 
 ### Stage 3: extended signals
 
-- `v1/stream_buffer.py`: add buffers (5,2), (5,3), (5,7), (4,1); extend
+- `v1/stream_buffer.py`: add buffers (5,2), (5,3), (5,7); extend
   `FIELDS` + aliases; only active buffers participate in
-  `sample_id_range` intersection.
-- `v1/device.py` + subclasses: `signals` parameter; `_stream_topics`
-  derived from selection; JS320 adds `s/v/range/` via `s/i/range/src`
-  guidance documented (v/range stream rides the shared range channel).
+  `sample_id_range` intersection.  Extended buffers allocate lazily
+  (only when selected) to avoid the RAM cost for legacy applications.
+- `v1/device.py` + subclasses: `signals` parameter (short names
+  `i,v,p,r,0,1,2,3,T`, default `i,v,p,r,0,1` == current behavior).
+- `voltage_range` (field_id=4, index=1) is DEFERRED: it is JS320-only
+  and rides the shared range channel (`s/i/range/src=1` replaces the
+  current_range stream), so it cannot be offered as an independent
+  signal.  Access remains via publish()/query() passthrough.
 - Unit tests with canned messages; HIL test streams `0,1,2,3,T` on JS220
   and JS320 and verifies data alignment (GPO loopback where wired).
+- HIL finding (2026-07-31): the JS220 delivers no current_range data
+  when 8+ streams are enabled concurrently (7 with r works; 8 without r
+  works; JS320 streams all 9 fine).  The package rejects the failing
+  selections on JS220.  Root cause in the device/driver is a separate
+  investigation.
 
 ### Stage 4: JLS v2 capture
 

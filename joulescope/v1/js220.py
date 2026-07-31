@@ -13,7 +13,7 @@
 # limitations under the License.
 
 
-from .device import Device
+from .device import Device, _SIGNALS_EXTENDED
 from joulescope.parameters_v1 import PARAMETERS_DICT, name_to_value
 
 
@@ -68,7 +68,7 @@ class DeviceJs220(Device):
         self._input_sampling_frequency = 2000000
         self._output_sampling_frequency = 1000000
         self._parameters['sampling_frequency'] = self._output_sampling_frequency
-        self._stream_topics = ['s/i/', 's/v/', 's/p/', 's/i/range/', 's/gpi/0/', 's/gpi/1/']
+        self._signals_map.update(_SIGNALS_EXTENDED)  # gpi2, gpi3, trigger_in
 
     def parameter_set(self, name, value):
         value_orig = value
@@ -86,6 +86,8 @@ class DeviceJs220(Device):
                 raise KeyError(f'value {value} not allowed for parameter {name}')
             else:
                 value = p.validator(value)
+        if name == 'signals':
+            self._on_signals(value)  # validate for this device model
         self._parameters[name] = value
         if not self.is_open:
             self._parameter_set_queue.append((name, value_orig))
@@ -93,6 +95,17 @@ class DeviceJs220(Device):
         k = self._param_map.get(name)
         if k is not None:
             k(value)
+
+    def _on_signals(self, value):
+        super()._on_signals(value)
+        selected = value.split(',')
+        if self.model == 'js220' and 'r' in selected and len(selected) > 7:
+            # HIL-characterized JS220 limitation (2026-07-31): with 8 or
+            # more streams enabled, the current_range stream delivers no
+            # data, which stalls read().  The JS320 has no such limit.
+            raise ValueError(
+                'JS220 supports at most 7 concurrent signals when '
+                'current_range (r) is selected')
 
     def _on_i_range(self, value):
         if value == 0x80:
@@ -155,8 +168,8 @@ class DeviceJs220(Device):
         elif config == 'ignore':
             pass  # do nothing
         elif config == 'off':
-            for topic in self._stream_topics:
-                self.publish(topic + 'ctrl', 0)
+            for info in self._signals_map.values():
+                self.publish(info['topic'] + 'ctrl', 0)
         else:
             self._log.warning('Unsupported config %s', config)
 

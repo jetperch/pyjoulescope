@@ -48,7 +48,6 @@ class DeviceJs110(Device):
         }
         self._input_sampling_frequency = 2000000
         self._output_sampling_frequency = 2000000
-        self._stream_topics = ['s/i/', 's/v/', 's/p/', 's/i/range/', 's/gpi/0/', 's/gpi/1/']
 
     def _on_current_ranging_samples_window(self, value):
         if value in ['m', 'n']:
@@ -99,6 +98,8 @@ class DeviceJs110(Device):
                 raise KeyError(f'value {value} not allowed for parameter {name}')
             else:
                 value = p.validator(value)
+        if name == 'signals':
+            self._on_signals(value)  # validate for this device model
         self._parameters[name] = value
         if not self.is_open:
             self._parameter_set_queue.append((name, value_orig))

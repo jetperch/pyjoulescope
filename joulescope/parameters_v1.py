@@ -25,6 +25,44 @@ def _buffer_duration_validator(x):
         raise ValueError('too small')
     return int(x + 0.5001)
 
+
+_SIGNALS_TO_SHORT = {
+    'current': 'i', 'i': 'i',
+    'voltage': 'v', 'v': 'v',
+    'power': 'p', 'p': 'p',
+    'current_range': 'r', 'current range': 'r', 'r': 'r',
+    'current_lsb': '0', 'gpi0': '0', '0': '0',
+    'voltage_lsb': '1', 'gpi1': '1', '1': '1',
+    'gpi2': '2', '2': '2',
+    'gpi3': '3', '3': '3',
+    'trigger_in': 'T', 'T': 'T', 't': 'T',
+}
+
+
+def _signals_validator(x):
+    """Validate a signal selection and canonicalize to short names.
+
+    :param x: The signal names as a comma-separated string or iterable.
+    :return: The canonical comma-separated short-name string, such as
+        'i,v,p,r,0,1'.
+    :raise ValueError: On an invalid signal name.
+    """
+    if isinstance(x, str):
+        parts = [p.strip() for p in x.split(',') if p.strip()]
+    else:
+        parts = [str(p).strip() for p in x]
+    result = []
+    for p in parts:
+        try:
+            s = _SIGNALS_TO_SHORT[p]
+        except KeyError:
+            raise ValueError(f'invalid signal name {p}')
+        if s not in result:
+            result.append(s)
+    if not result:
+        raise ValueError('signals must select at least one signal')
+    return ','.join(result)
+
 # list of [param_name, permission, path, default, [(value_name, value), ...]]
 # * permission is either 'r' (read-only) or 'rw' (read-write)
 # * path is the USB (request, index) for the transaction
@@ -307,6 +345,24 @@ PARAMETERS = [
             ('10 Hz', 10, [10])],
         units='Hz',
         flags=['skip_update']
+    ),
+
+    Parameter(
+        name='signals',
+        brief='The signals to stream.',
+        detail='The comma-separated list of signals to stream when streaming '
+               'starts.  The signal names are: '
+               'current (i), voltage (v), power (p), current_range (r), '
+               'gpi0 (0), gpi1 (1), gpi2 (2), gpi3 (3), trigger_in (T).  '
+               'gpi2, gpi3, and trigger_in require a JS220 or JS320.  '
+               'The JS220 supports at most 7 concurrent signals when '
+               'current_range is selected.  '
+               'The default matches the pre-1.6 streaming behavior.',
+        path=None,
+        default='i,v,p,r,0,1',
+        options=None,
+        validator=_signals_validator,
+        flags=['skip_update'],
     ),
 
     Parameter(name='model', path='info', flags=['read_only', 'hidden']),
