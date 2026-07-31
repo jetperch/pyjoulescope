@@ -38,6 +38,7 @@ class Device:
         self._stop_fn = None
         self._input_sampling_frequency = 0
         self._output_sampling_frequency = 0
+        self._h_fs = 2000000  # value published to h/fs on open: the maximum streaming rate
         self._statistics_callbacks = []
         self._statistics_offsets = []
         self._is_streaming = False
@@ -371,7 +372,7 @@ class Device:
         """
         rc = self._driver.open(self._path, mode, timeout)
         self.is_open = True
-        self.publish('h/fs', 2000000)
+        self.publish('h/fs', self._h_fs)
         while len(self._parameter_set_queue):
             name, value = self._parameter_set_queue.pop(0)
             self.parameter_set(name, value)
@@ -390,6 +391,8 @@ class Device:
 
         :param timeout: The timeout in seconds.  None uses the default timeout.
         """
+        if not self.is_open:
+            return
         if len(self._statistics_callbacks):
             self._statistics_stop()
         self.stop()

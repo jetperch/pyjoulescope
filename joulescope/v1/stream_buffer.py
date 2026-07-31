@@ -223,8 +223,15 @@ class StreamBuffer:
             sample_rate = value.get('sample_rate')
             decimate_factor = value.get('decimate_factor')
             local_decimate = 1
-            if decimate_factor == 1 and self._sampling_frequency != sample_rate:
-                local_decimate = sample_rate // self._sampling_frequency
+            if sample_rate and decimate_factor:
+                # Decimate on the host when the stream's effective rate
+                # exceeds the requested output rate.  The JS110 streams
+                # everything at the full rate (decimate_factor 1).  The
+                # JS320 h/fs only decimates i, v, p on the instrument;
+                # the current range and GPI streams remain at 1 Msps.
+                effective_rate = sample_rate // decimate_factor
+                if effective_rate > self._sampling_frequency:
+                    local_decimate = effective_rate // self._sampling_frequency
             b.add(value['sample_id'], value['data'],
                   sample_rate=sample_rate,
                   decimate_factor=decimate_factor,

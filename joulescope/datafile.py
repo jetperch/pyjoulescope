@@ -169,6 +169,18 @@ import logging
 
 log = logging.getLogger(__name__)
 
+
+def _signing_key_protect(key):
+    """Copy a signing key to protect the caller's copy.
+
+    pymonocypher 4.x passes the provided buffer directly to Monocypher 4,
+    which wipes legacy 32-byte signing keys in place as a side effect of
+    the seed → key pair expansion.  Provide a throwaway copy so the
+    caller's key remains intact.  Harmless with pymonocypher 3.x.
+    """
+    return bytes(bytearray(key))
+
+
 MAGIC = b'\xd3tagfmt \r\n \n  \x1a\x1c'
 assert(len(MAGIC) == 16)
 HEADER_SIZE = 32
@@ -384,7 +396,7 @@ class DataFileWriter:
         if bool(compress):
             flags, data = _maybe_compress(data)
         flags |= FLAG_ENCRYPT
-        signature = monocypher.signature_sign(signing_key, data)
+        signature = monocypher.signature_sign(_signing_key_protect(signing_key), data)
         mac, data = monocypher.lock(encryption_key, nonce, data, associated_data)
         log.info('signature = %r', binascii.hexlify(signature))
         log.info('mac       = %r', binascii.hexlify(mac))
@@ -417,13 +429,13 @@ class DataFileWriter:
         payload = bytearray(8)
         payload[0] = 1  # Ed25519 using Blake2b
         payload[1] = self._signature['flags']
-        payload += monocypher.compute_signing_public_key(private_key)
+        payload += monocypher.compute_signing_public_key(_signing_key_protect(private_key))
         self.append(TAG_SIGNATURE_START, payload)
         if 0 == (self._signature['flags'] & SIGNATURE_FLAG_KEY_INCLUDE):
             self._signature['data'] = b''
 
     def signature_end(self):
-        s = monocypher.signature_sign(self._signature['key'], self._signature['data'])
+        s = monocypher.signature_sign(_signing_key_protect(self._signature['key']), self._signature['data'])
         self.append(TAG_SIGNATURE_END, s)
 
     def append_header(self,

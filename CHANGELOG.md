@@ -4,6 +4,16 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 1.6.0 [in progress]
+
+2026 Jul 31
+
+* Added JS320 support.
+* Bumped dependency versions: 
+  * pyjoulescope_driver from 2.1.0 to 2.3.5
+  * Allow pymonocypher 3.x and 4.x (was previously 3 only)
+
+
 ## 1.5.0
 
 2026 Apr 27

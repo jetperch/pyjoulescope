@@ -18,6 +18,7 @@
 
 from pyjoulescope_driver import Driver
 from .device import Device
+from .js320 import DeviceJs320
 from .js220 import DeviceJs220
 from .js110 import DeviceJs110
 import atexit
@@ -54,14 +55,19 @@ class DriverWrapper:
     def _finalize(self):
         while len(self.devices):
             _, device = self.devices.popitem()
-            device.close()
+            try:
+                device.close()
+            except Exception:
+                _log.exception('device close failed during finalize: %s', device)
         d, self.driver = self.driver, None
         d.finalize()
 
     def _on_device_add(self, topic, value):
         if value in self.devices:
             return
-        if 'js220' in value:
+        if 'js320' in value:
+            cls = DeviceJs320
+        elif 'js220' in value:
             cls = DeviceJs220
         elif 'js110' in value:
             cls = DeviceJs110
