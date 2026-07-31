@@ -114,8 +114,11 @@ class DeviceJs220(Device):
         self._output_sampling_frequency = 1000000
         self._parameters['sampling_frequency'] = self._output_sampling_frequency
         self._signals_map.update(_SIGNALS_EXTENDED)  # gpi2, gpi3, trigger_in
+        # advertise only the frequencies that parameter_set accepts: the
+        # shared validation table has no entries below 10 Hz
+        frequencies = [f for f in _SAMPLING_FREQUENCIES if f >= 10]
         self._parameters_override['sampling_frequency'] = \
-            sampling_frequency_parameter(_SAMPLING_FREQUENCIES, 1_000_000)
+            sampling_frequency_parameter(frequencies, 1_000_000)
         self._parameters_override['v_range'] = _V_RANGE_PARAMETER
 
     def parameter_set(self, name, value):

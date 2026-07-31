@@ -109,9 +109,8 @@ class StreamBuffer:
 
     def _update(self):
         self._length = int(self._buffer_duration * self._sampling_frequency)
-        self.buffers.clear()
         self._sample_id_start = None
-        self.buffers = {
+        buffers = {
             # (field_id, index): SampleBuffer
             (1, 0): SampleBuffer(self._length, dtype=np.float32, name='current'),
             (2, 0): SampleBuffer(self._length, dtype=np.float32, name='voltage'),
@@ -120,11 +119,15 @@ class StreamBuffer:
             (5, 0): SampleBuffer(self._length, dtype='u1', name='gpi0'),
             (5, 1): SampleBuffer(self._length, dtype='u1', name='gpi1'),
         }
-        # the legacy statistics format covers exactly these six buffers
-        self._stats_buffers = list(self.buffers.values())
         for idx, (dtype, name) in _EXTENDED_BUFFERS.items():
             if name in self._extra_signals:
-                self.buffers[idx] = SampleBuffer(self._length, dtype=dtype, name=name)
+                buffers[idx] = SampleBuffer(self._length, dtype=dtype, name=name)
+        # single atomic store: a stale driver-thread callback may still be
+        # iterating the previous dict (stop unsubscribes with timeout=0)
+        self.buffers = buffers
+        # the legacy statistics format covers exactly the six base buffers
+        self._stats_buffers = [buffers[k] for k in
+                               [(1, 0), (2, 0), (3, 0), (4, 0), (5, 0), (5, 1)]]
 
     @property
     def extra_signals(self):
@@ -392,6 +395,7 @@ class StreamBuffer:
                     out[n, i]['variance'] = np.nan
                     out[n, i]['min'] = np.nan
                     out[n, i]['max'] = np.nan
+                    continue
                 try:
                     d = b.get_range(k_start, k_end)
                     compute_stats(d, out[n, i])

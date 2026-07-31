@@ -30,8 +30,11 @@ This file contains the list of changes made to pyjoulescope.
     retransmitted stream messages.
   * `from joulescope import *` failed under the default v1 backend.
   * Device.extio_status was defined twice.
-  * Device.close now notifies and unregisters stream process objects
-    (v0 compatible).
+  * Device.close now notifies ('close') and unregisters stream process
+    objects, matching the v0 close notification and the
+    stream_process_register contract.  Applications that registered a
+    stream process object once and reused it across close/open must
+    re-register after reopening.
 * Added v1 backend unit tests and a hardware-in-the-loop
   backwards-compatibility suite (test/hil).
 * Eliminated all pytest warnings:

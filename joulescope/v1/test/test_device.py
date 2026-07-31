@@ -269,3 +269,17 @@ class TestVRangeCompat(unittest.TestCase):
         self.assertEqual('2 V',
                          self._select_published(driver, 'u/js220/000000')[-1])
         d.close()
+
+    def test_all_advertised_sampling_frequencies_settable(self):
+        from joulescope.v1.js220 import DeviceJs220
+        from joulescope.v1.js320 import DeviceJs320
+        for cls, path in [(DeviceJs220, 'u/js220/000000'),
+                          (DeviceJs320, 'u/js320/000000')]:
+            d = cls(FakeDriver(), path)
+            d.open()
+            p = d.parameters('sampling_frequency')
+            for name, value, aliases in p.options:
+                d.parameter_set('sampling_frequency', value)
+                self.assertEqual(value, d.parameter_get(
+                    'sampling_frequency', dtype='actual'), f'{path} {name}')
+            d.close()

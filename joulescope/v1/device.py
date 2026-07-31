@@ -514,6 +514,8 @@ class Device:
         return rv
 
     def _on_stream(self, topic, value):
+        # runs on the driver thread; use a local reference since close()
+        # may set self.stream_buffer to None concurrently
         b = self.stream_buffer
         if b is None:
             return False
@@ -525,10 +527,10 @@ class Device:
             return False
         if e0 == e2:
             return False
-        rv = self._stream_process_call('stream_notify', self.stream_buffer)
+        rv = self._stream_process_call('stream_notify', b)
         if rv:
             self.stop()
-        if self.stream_buffer.is_duration_max or self.stream_buffer.is_contiguous_duration_max:
+        if b.is_duration_max or b.is_contiguous_duration_max:
             self.stop()
 
     def start(self, stop_fn=None, duration=None, contiguous_duration=None):
@@ -548,6 +550,12 @@ class Device:
         If streaming was already in progress, it will be restarted.
         """
         self.stop()
+        # unwind any partial subscriptions left by a prior start() that
+        # failed mid-loop (e.g. device removal); no-op normally
+        topics, self._streaming_topics = self._streaming_topics, []
+        for topic in topics:
+            self.unsubscribe(topic + '!data', self._on_stream_cbk, timeout=0)
+            self.publish(topic + 'ctrl', 0, timeout=0)
         selected = self._signals_selected
         extras = [_SIGNALS_SHORT_TO_EXTENDED[s] for s in selected
                   if s in _SIGNALS_SHORT_TO_EXTENDED]

@@ -354,3 +354,20 @@ class TestStreamBufferExtendedSignals(unittest.TestCase):
                                  bitorder='little'), 1000000, 1))
         s = b.samples_get(0, 1000)
         self.assertEqual(LEGACY_FIELDS, list(s['signals'].keys()))
+
+    def test_data_get_inactive_buffers(self):
+        # signals subset: unselected buffers are inactive; data_get must
+        # fill NaN, not raise (audit fix: missing continue)
+        b = self._buffer([])
+        for idx in [(3, 0), (4, 0), (5, 0), (5, 1)]:
+            b.buffers[idx].active = False
+        sim = DeviceSim(b, 1000000, 1, 1)
+        n = 1000
+        i = np.full(n, 1.0, dtype=np.float32)
+        b.insert('s/x/!data', _msg(1, 0, 0, i, 1000000, 1))
+        b.insert('s/x/!data', _msg(2, 0, 0, i, 1000000, 1))
+        out = b.data_get(0, n, 100)
+        self.assertEqual((10, len(STATS_FIELD_NAMES)), out.shape)
+        self.assertAlmostEqual(1.0, out[0, 0]['mean'], places=6)
+        self.assertTrue(np.isnan(out[0, 2]['mean']))  # power inactive
+        self.assertTrue(np.isnan(out[0, 4]['mean']))  # gpi0 inactive

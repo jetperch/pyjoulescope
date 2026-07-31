@@ -34,10 +34,11 @@ def parser_config(p):
     p.add_argument('--format',
                    dest='out_format',
                    choices=['jls2', 'jls1'],
-                   default='jls2',
+                   default=None,
                    help='The output file format.  '
-                        'jls2 (default) records a JLS v2 file (pyjls).  '
-                        'jls1 records the legacy JLS v1 file.')
+                        'jls2 records a JLS v2 file (pyjls); '
+                        'jls1 records the legacy JLS v1 file.  '
+                        'Defaults to jls2 (jls1 on the v0 backend).')
     p.add_argument('filename',
                    help='The filename for output data.')
     p.add_argument('--profile',
@@ -157,10 +158,17 @@ def _run_jls2(device, filename, duration=None, contiguous_duration=None,
         print('Data capture failed')
         return 1
     finally:
+        # each step must run even if an earlier one fails (device removal)
         if recorder is not None:
-            recorder.close()
+            try:
+                recorder.close()
+            except Exception:
+                logging.getLogger().exception('recorder close failed')
         if signals_prev is not None:
-            device.parameter_set('signals', signals_prev)
+            try:
+                device.parameter_set('signals', signals_prev)
+            except Exception:
+                logging.getLogger().exception('signals restore failed')
         device.close()
     print('done capturing data: %s' % quit_)
     return 0
