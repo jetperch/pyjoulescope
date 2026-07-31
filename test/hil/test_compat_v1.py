@@ -210,22 +210,35 @@ def test_jls_writer(device, tmp_path):
 
 
 def test_capture_entry_point(device_closed, tmp_path):
-    """The capture entry point must produce a readable file.
+    """The capture entry point produces a readable file.
 
-    Records the joulescope capture format contract.  Before stage 4 of
-    doc/plans/js220_js320_feature_support.md this is the legacy v0 JLS
-    format; stage 4 switches the default to JLS v2 (pyjls).
+    run() keeps its pre-1.6 signature.  As of stage 4 of
+    doc/plans/js220_js320_feature_support.md the default output format
+    is JLS v2 (pyjls); --format jls1 selects the legacy format.
     """
     from joulescope.entry_points.capture import run
+    from pyjls import Reader
     path = str(tmp_path / 'capture.jls')
     rv = run(device_closed, path, contiguous_duration=0.1)
     assert rv == 0
     assert os.path.getsize(path) > 0
-    _assert_capture_readable(path, device_closed)
+    with Reader(path) as r:
+        names = [s.name for s in r.signals.values()]
+        assert 'current' in names
+        assert 'voltage' in names
+        for s in r.signals.values():
+            if s.name in ['current', 'voltage']:
+                assert s.length > 0
 
 
-def _assert_capture_readable(path, device):
+def test_capture_entry_point_jls1(device_closed, tmp_path):
+    """--format jls1 writes the legacy v0 JLS format."""
+    from joulescope.entry_points.capture import run
     from joulescope.data_recorder import DataReader
+    path = str(tmp_path / 'capture_v1.jls')
+    rv = run(device_closed, path, contiguous_duration=0.1,
+             out_format='jls1')
+    assert rv == 0
     r = DataReader()
     r.open(path)
     try:

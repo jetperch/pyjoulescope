@@ -112,3 +112,36 @@ def test_downsampled_extended_signals(xdevice):
         assert n == len(data['signals']['T']['value'])
     finally:
         xdevice.parameter_set('sampling_frequency', 1000000)
+
+
+def test_capture_jls2_extended_signals(xdevice, tmp_path):
+    """Capture the full signal set to JLS v2 and verify with pyjls."""
+    from joulescope.entry_points.capture import run
+    from pyjls import Reader
+    signals = ALL_SIGNALS[xdevice.model]
+    path = str(tmp_path / 'extended.jls')
+    xdevice.close()
+    try:
+        rv = run(xdevice, path, contiguous_duration=0.2, signals=signals)
+        assert rv == 0
+    finally:
+        xdevice.open()
+    expect = {'i': 'current', 'v': 'voltage', 'p': 'power',
+              'r': 'current_range', '0': 'gpi[0]', '1': 'gpi[1]',
+              '2': 'gpi[2]', '3': 'gpi[3]', 'T': 'trigger_in'}
+    expect_names = [expect[s] for s in signals.split(',')]
+    with Reader(path) as r:
+        names = [s.name for s in r.signals.values() if s.name != 'global_annotation_signal']
+        for name in expect_names:
+            assert name in names, f'missing {name}'
+        # i/v/p follow h/fs; JS220 gpi/current_range stream at the
+        # native 2 Msps rate.  JLS v2 stores per-signal rates.
+        out_rate = xdevice.output_sampling_frequency
+        for s in r.signals.values():
+            if s.name not in expect_names:
+                continue
+            assert s.length > 0, f'{s.name} has no samples'
+            if s.name in ['current', 'voltage', 'power']:
+                assert s.sample_rate == out_rate, s.name
+            else:
+                assert s.sample_rate >= out_rate, s.name

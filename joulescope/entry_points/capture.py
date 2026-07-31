@@ -1,4 +1,4 @@
-# Copyright 2018 Jetperch LLC
+# Copyright 2018-2026 Jetperch LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,7 +16,6 @@ import signal
 import time
 import logging
 from joulescope import scan_require_one
-from joulescope.data_recorder import DataRecorder
 
 
 def parser_config(p):
@@ -27,6 +26,18 @@ def parser_config(p):
     p.add_argument('--contiguous',
                    type=float,
                    help='The contiguous capture duration (no missing samples) in seconds.')
+    p.add_argument('--signals',
+                   default='i,v',
+                   help='The comma-separated signals to record: '
+                        'i, v, p, r, 0, 1, 2, 3, T.  Defaults to "i,v".  '
+                        'Only i, v, p apply to --format jls1.')
+    p.add_argument('--format',
+                   dest='out_format',
+                   choices=['jls2', 'jls1'],
+                   default='jls2',
+                   help='The output file format.  '
+                        'jls2 (default) records a JLS v2 file (pyjls).  '
+                        'jls1 records the legacy JLS v1 file.')
     p.add_argument('filename',
                    help='The filename for output data.')
     p.add_argument('--profile',
@@ -39,7 +50,9 @@ def on_cmd(args):
     device = scan_require_one(name='Joulescope', config='auto')
     f = lambda: run(device, filename=args.filename,
                     duration=args.duration,
-                    contiguous_duration=args.contiguous)
+                    contiguous_duration=args.contiguous,
+                    signals=args.signals,
+                    out_format=args.out_format)
     if args.profile is None:
         return f()
     elif args.profile == 'cProfile':
@@ -59,7 +72,103 @@ def on_cmd(args):
         raise ValueError('bad profile argument')
 
 
-def run(device, filename, duration=None, contiguous_duration=None):
+def run(device, filename, duration=None, contiguous_duration=None,
+        signals=None, out_format=None):
+    """Capture streaming data to a file.
+
+    :param device: The Joulescope device instance from scan.
+    :param filename: The output filename.
+    :param duration: The capture duration in seconds.
+    :param contiguous_duration: The contiguous capture duration in seconds.
+    :param signals: The comma-separated signals to record for JLS v2.
+        None (default) is equivalent to 'i,v'.
+    :param out_format: The output format, which is one of:
+        * jls2: The JLS v2 format written by pyjls.
+        * jls1: The legacy JLS v1 format written by DataRecorder.
+        * None: (default) equivalent to 'jls2' on the v1 backend and
+          'jls1' on the v0 backend.
+    :return: 0 on success, error code on failure.
+    """
+    is_v1 = hasattr(device, 'publish')
+    if out_format is None:
+        out_format = 'jls2' if is_v1 else 'jls1'
+    if out_format not in ['jls1', 'jls2']:
+        raise ValueError(f'invalid out_format {out_format}')
+    if out_format == 'jls2' and not is_v1:
+        raise ValueError('out_format jls2 requires the v1 backend')
+    if out_format == 'jls1':
+        return _run_jls1(device, filename, duration, contiguous_duration)
+    return _run_jls2(device, filename, duration, contiguous_duration, signals)
+
+
+def _run_loop(device, quit_fn):
+    """Poll device status until the capture completes.
+
+    :param device: The open, streaming device.
+    :param quit_fn: The callable() that returns the quit status.
+    """
+    time_last = time.time()
+    status_failures = 0
+    while not quit_fn():
+        time.sleep(0.01)
+        time_now = time.time()
+        if time_now - time_last > 1.0:
+            s = device.status()
+            if s.get('driver', {}).get('return_code', {}).get('value', 1):
+                status_failures += 1
+                if status_failures >= 3:
+                    raise RuntimeError(f'status_failures = {status_failures}')
+            logging.getLogger().info(s)
+            time_last = time_now
+
+
+def _run_jls2(device, filename, duration=None, contiguous_duration=None,
+              signals=None):
+    """Capture to a JLS v2 file using pyjoulescope_driver.record.Record."""
+    from pyjoulescope_driver.record import Record
+    signals = 'i,v' if signals is None else signals
+    quit_ = False
+
+    def do_quit(*args, **kwargs):
+        nonlocal quit_
+        quit_ = 'quit from SIGINT'
+
+    def on_stop(event, message):
+        nonlocal quit_
+        quit_ = 'quit from stop duration'
+
+    recorder = None
+    signals_prev = None
+    signal.signal(signal.SIGINT, do_quit)
+    try:
+        device.open()
+        signals_prev = device.parameter_get('signals')
+        device.parameter_set('signals', signals)
+        signals = device.parameter_get('signals')  # canonical form
+        recorder = Record(device.driver, device.device_path,
+                          signals=signals, auto=[])
+        recorder.open(filename)
+        device.start(stop_fn=on_stop, duration=duration,
+                     contiguous_duration=contiguous_duration)
+        _run_loop(device, lambda: quit_)
+        device.stop()
+    except Exception:
+        logging.getLogger().exception('while capturing data')
+        print('Data capture failed')
+        return 1
+    finally:
+        if recorder is not None:
+            recorder.close()
+        if signals_prev is not None:
+            device.parameter_set('signals', signals_prev)
+        device.close()
+    print('done capturing data: %s' % quit_)
+    return 0
+
+
+def _run_jls1(device, filename, duration=None, contiguous_duration=None):
+    """Capture to a legacy JLS v1 file using DataRecorder."""
+    from joulescope.data_recorder import DataRecorder
     quit_ = False
 
     def do_quit(*args, **kwargs):
@@ -79,28 +188,9 @@ def run(device, filename, duration=None, contiguous_duration=None):
         device.stream_process_register(recorder)
         device.start(stop_fn=on_stop, duration=duration,
                      contiguous_duration=contiguous_duration)
-        time_last = time.time()
-        sample_id_last = 0
-        sample_id_incr = 1000000
-        sample_id_next = sample_id_last + sample_id_incr
-        status_failures = 0
-        while not quit_:
-            time.sleep(0.01)
-            time_now = time.time()
-            if time_now - time_last > 1.0:
-                s = device.status()
-                if s.get('driver', {}).get('return_code', {}).get('value', 1):
-                    status_failures += 1
-                    if status_failures >= 3:
-                        raise RuntimeError(f'status_failures = {status_failures}')
-                logging.getLogger().info(s)
-                time_last = time_now
-            while device.stream_buffer.sample_id_range[-1] >= sample_id_next:
-                # todo save
-                sample_id_last = sample_id_next
-                sample_id_next += sample_id_incr
+        _run_loop(device, lambda: quit_)
         device.stop()
-    except Exception as ex:
+    except Exception:
         logging.getLogger().exception('while capturing data')
         print('Data capture failed')
         return 1

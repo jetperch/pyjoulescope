@@ -92,6 +92,11 @@ class Device:
         return self._path
 
     @property
+    def driver(self):
+        """The underlying pyjoulescope_driver.Driver instance."""
+        return self._driver
+
+    @property
     def usb_device(self):
         return self._path
 
