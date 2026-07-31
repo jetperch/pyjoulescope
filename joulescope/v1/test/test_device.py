@@ -225,3 +225,47 @@ class TestParametersOverride(unittest.TestCase):
         self.assertNotIn('500 kHz',
                          [o[0] for o in params['sampling_frequency'].options])
         self.assertIn('signals', params)
+
+class TestVRangeCompat(unittest.TestCase):
+    """JS110 v_range values map to safe JS220/JS320 equivalents."""
+
+    def _select_published(self, driver, path):
+        topic = f'{path}/s/v/range/select'
+        return [v for t, v in driver.published if t == topic]
+
+    def _device_open(self, cls, path):
+        driver = FakeDriver()
+        d = cls(driver, path)
+        d.open()
+        return d, driver
+
+    def test_5v_variants_select_15v(self):
+        from joulescope.v1.js220 import DeviceJs220
+        from joulescope.v1.js320 import DeviceJs320
+        for cls, path in [(DeviceJs220, 'u/js220/000000'),
+                          (DeviceJs320, 'u/js320/000000')]:
+            for value in ['5V', '5 V', 'high', 1]:
+                d, driver = self._device_open(cls, path)
+                d.parameter_set('v_range', value)
+                selects = self._select_published(driver, path)
+                self.assertEqual(['15 V'], selects[-1:],
+                                 f'{path} v_range={value!r}')
+                d.close()
+
+    def test_5v_readback_preserved(self):
+        from joulescope.v1.js220 import DeviceJs220
+        d, _ = self._device_open(DeviceJs220, 'u/js220/000000')
+        d.parameter_set('v_range', '5V')
+        self.assertEqual('5V', d.parameter_get('v_range'))
+        d.close()
+
+    def test_15v_and_2v_unchanged(self):
+        from joulescope.v1.js220 import DeviceJs220
+        d, driver = self._device_open(DeviceJs220, 'u/js220/000000')
+        d.parameter_set('v_range', '15V')
+        self.assertEqual('15 V',
+                         self._select_published(driver, 'u/js220/000000')[-1])
+        d.parameter_set('v_range', '2V')
+        self.assertEqual('2 V',
+                         self._select_published(driver, 'u/js220/000000')[-1])
+        d.close()

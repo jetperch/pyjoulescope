@@ -2,7 +2,7 @@ Parameter,JS320,JS220,JS110
 sensor_power,ignored,ignored,ignored
 source,ignored,ignored,ignored
 i_range,✔,✔,✔
-v_range,"15V,5V→15V,2V","15V,5V→15V,2V",✔
+v_range,"15V,2V; 5V→15 V","15V,2V; 5V→15 V",✔
 ovr_to_lsb,❌,❌,❌
 io_voltage,ignored; use Vref,ignored; use Vref,✔
 gpo0,✔,✔,✔

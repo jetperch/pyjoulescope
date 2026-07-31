@@ -21,6 +21,9 @@ This file contains the list of changes made to pyjoulescope.
   --signals and --format options; --format jls1 keeps the legacy format.
 * parameters() now reflects per-device sampling_frequency and v_range
   options on JS220/JS320.
+* v_range now accepts all JS110 5V-range values (5V, 5 V, high, 1) on
+  JS220/JS320 and selects the 15 V range for backwards compatibility.
+  Previously these selected the 2 V range.
 * Fixed v1 backend defects:
   * samples_get inactive-buffer branch returned an undefined variable.
   * SampleBuffer duplicate/overlap handling could corrupt the buffer on

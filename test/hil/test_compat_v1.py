@@ -275,3 +275,22 @@ def test_view_factory_statistics(device):
     finally:
         device.stop()
         view.close()
+
+
+def test_parameter_v_range_5v_compat(device):
+    """JS110 5V-range values select 15 V on JS220/JS320 (any variant)."""
+    if device.model == 'js110':
+        pytest.skip('JS110 has a real 5V range')
+    try:
+        device.parameter_set('v_range', '15V')
+        select_15v = device.query('s/v/range/select')
+        device.parameter_set('v_range', '2V')
+        select_2v = device.query('s/v/range/select')
+        assert select_2v != select_15v
+        for value in ['5V', '5 V', 'high', 1, '15 V']:
+            device.parameter_set('v_range', value)
+            assert device.query('s/v/range/select') == select_15v, repr(value)
+        device.parameter_set('v_range', '5V')
+        assert device.parameter_get('v_range') == '5V'  # readback preserved
+    finally:
+        device.parameter_set('v_range', '15V')

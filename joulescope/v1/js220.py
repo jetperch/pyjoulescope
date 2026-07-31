@@ -68,10 +68,12 @@ def sampling_frequency_parameter(frequencies, default):
 _V_RANGE_PARAMETER = Parameter(
     name='v_range',
     brief='Select the voltage measurement range (gain)',
+    detail='The JS110 5V range values are accepted for backwards '
+           'compatibility and select the 15 V range.',
     path='setting',
     default='15V',
     options=[
-        ('15V', '15 V', ['15 V', 'low', 0]),
+        ('15V', '15 V', ['15 V', 'low', 0, '5V', '5 V', 'high', 1]),
         ('2V', '2 V', ['2 V', 2]),
     ])
 
@@ -126,6 +128,8 @@ class DeviceJs220(Device):
             if name == 'v_range' and value in ['2V', '2 V', '2', 2]:
                 value = '2 V'
             else:
+                if name == 'v_range' and isinstance(value, str):
+                    value = value.replace(' ', '')  # '5 V' -> '5V'
                 value = name_to_value(name, value)
         except KeyError:
             if p.validator is None:
@@ -167,10 +171,14 @@ class DeviceJs220(Device):
         if value == 'auto':
             self.publish('s/v/range/mode', 'auto')
         else:
-            # JS110 current ranges are 5 and 15 V, cannot map to 2 V
-            if value in ['2V', '2 V']:
+            if value in ['2V', '2 V', 2]:
                 value = '2 V'
-            elif value in ['15V', '15 V', 0]:
+            elif value in ['15V', '15 V', 'low', 0]:
+                value = '15 V'
+            elif value in ['5V', '5 V', 'high', 1]:
+                # The JS110 5V range has no JS220/JS320 equivalent.
+                # Use 15 V for backwards compatibility: it accepts any
+                # 5V-range signal, unlike 2 V.
                 value = '15 V'
             self.publish('s/v/range/select', value)
             self.publish('s/v/range/mode', 'manual')
