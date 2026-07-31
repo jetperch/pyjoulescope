@@ -24,6 +24,7 @@ import binascii
 import struct
 import numpy as np
 import monocypher
+import warnings
 
 
 F1 = b'\xd3tagfmt \r\n \n  \x1a\x1cH\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x2f\x3c\x0b\x52TAG\x00\n\x00\x00\x00\x00\x01\x02\x03\x04\x05\x06\x07\x08\t\x00\x00\xb7\xe9d%END\x00\x00\x00\x00\x00\x00\x00\x00\x00\xbc\x93z\xc0'
@@ -67,9 +68,8 @@ class TestDataFile(unittest.TestCase):
 
         fr = datafile.DataFileReader(fh)
         for tag, value in tags:
-            tag_rd, value_rd = yield fr
-            tag_rd, = struct.unpack('<I', tag_rd)
-            self.assertEqual(tag, tag_rd)
+            tag_rd, value_rd = next(fr)
+            self.assertEqual(tag, int.from_bytes(tag_rd, 'little'))
             self.assertEqual(value, value_rd)
         with self.assertRaises(StopIteration):
             next(fr)
@@ -104,7 +104,7 @@ class TestDataFile(unittest.TestCase):
         return fr, {
             'data': data,
             'signing_key_prv': signing_key_prv,
-            'signing_key_pub': monocypher.compute_signing_public_key(signing_key_prv),
+            'signing_key_pub': datafile.signing_key_public(signing_key_prv),
             'encryption_key': encryption_key,
             'nonce': nonce,
             'associated_data': associated_data,
@@ -298,3 +298,64 @@ class TestDataFile(unittest.TestCase):
         next(fr)
         with self.assertRaises(ValueError):
             next(fr)
+
+
+class TestSigningKey(unittest.TestCase):
+    """Signing key normalization for pymonocypher 3.x and 4.x."""
+
+    SEED = bytes(range(32))
+    MSG = b'joulescope datafile signing test'
+
+    def test_public_key_from_seed_and_full_key(self):
+        public = datafile.signing_key_public(self.SEED)
+        self.assertEqual(32, len(public))
+        full = self.SEED + public
+        self.assertEqual(public, datafile.signing_key_public(full))
+
+    def test_seed_and_full_key_sign_identically(self):
+        public = datafile.signing_key_public(self.SEED)
+        full = self.SEED + public
+        sig_seed = monocypher.signature_sign(
+            datafile._signing_key(self.SEED), self.MSG)
+        sig_full = monocypher.signature_sign(
+            datafile._signing_key(full), self.MSG)
+        self.assertEqual(sig_seed, sig_full)
+        self.assertTrue(monocypher.signature_check(
+            sig_seed, public, self.MSG))
+
+    def test_caller_key_not_wiped(self):
+        key = bytearray(range(32))
+        datafile.signing_key_public(key)
+        monocypher.signature_sign(datafile._signing_key(key), self.MSG)
+        self.assertEqual(bytearray(range(32)), key)
+
+    def test_no_deprecation_warnings(self):
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always')
+            public = datafile.signing_key_public(self.SEED)
+            sig = monocypher.signature_sign(
+                datafile._signing_key(self.SEED), self.MSG)
+            self.assertTrue(monocypher.signature_check(
+                sig, public, self.MSG))
+        deprecations = [w for w in caught
+                        if issubclass(w.category, DeprecationWarning)]
+        self.assertEqual([], deprecations)
+
+    def test_signature_file_roundtrip(self):
+        fh = io.BytesIO(F1)
+        fw = datafile.DataFileWriter(fh)
+        fw.signature_start(self.SEED)
+        fw.append(42, b'payload')
+        fw.signature_end()
+        fw.finalize()
+        fh.seek(0)
+        fr = datafile.DataFileReader(fh)
+        tags = []
+        while True:
+            try:
+                tag, _ = next(fr)
+            except StopIteration:
+                break
+            tags.append(bytes(tag))
+        self.assertIn(b'SGS', tags)
+        self.assertIn(b'SGE', tags)

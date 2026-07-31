@@ -17,8 +17,8 @@ Test the circular plot buffer with data reduction
 """
 
 import unittest
+from joulescope import datafile
 from joulescope.v0.calibration import Calibration
-import monocypher
 import numpy as np
 import os
 
@@ -37,8 +37,7 @@ CAL1_1G = [0.0006828914450133605, 0.00016375303534373303, 1.4626174421742075e-05
 
 
 PRIVATE_KEY = bytes(range(32))
-# pass a copy: pymonocypher 4.x wipes 32-byte signing keys in place
-PUBLIC_KEY = monocypher.compute_signing_public_key(bytes(bytearray(PRIVATE_KEY)))
+PUBLIC_KEY = datafile.signing_key_public(PRIVATE_KEY)
 
 
 class TestCalibrate(unittest.TestCase):

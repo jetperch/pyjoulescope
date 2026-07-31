@@ -169,7 +169,11 @@ class DataRecorder:
             for stat_idx, stat in enumerate(NP_STATS_NAMES[1:]):
                 x_id = ((field_idx & 0x0f) << 4) | ((stat_idx + 1) & 0x0f)
                 x = data[:, field_idx][stat]
-                arrays[x_id] = x.astype(np.float32)
+                # empty windows hold the ±float64 max invalid marker,
+                # which intentionally becomes ±inf in the float32 file
+                # format; readers use length == 0, not the value
+                with np.errstate(over='ignore'):
+                    arrays[x_id] = x.astype(np.float32)
         value = array_storage.pack(arrays, r_stop)
         value = value.tobytes()
         self._writer.collection_end(collection, value)

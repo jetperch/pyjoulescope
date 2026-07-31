@@ -34,6 +34,15 @@ This file contains the list of changes made to pyjoulescope.
     (v0 compatible).
 * Added v1 backend unit tests and a hardware-in-the-loop
   backwards-compatibility suite (test/hil).
+* Eliminated all pytest warnings:
+  * datafile now normalizes signing keys for pymonocypher 3.x and 4.x:
+    32-byte legacy seeds and 64-byte full keys both work on both
+    versions and produce identical signatures.  New
+    datafile.signing_key_public().
+  * data_recorder reduction cast suppresses the expected ±inf overflow
+    for empty-window float64 max markers (file format unchanged).
+  * test_datafile.test_write_read was a dead nose-style generator test
+    whose body never executed; now a real test.
 
 
 ## 1.5.0
