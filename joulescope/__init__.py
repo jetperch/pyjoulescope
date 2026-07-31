@@ -35,10 +35,13 @@ else:
 
 
 VERSION = __version__  # for backwards compatibility
-__all__ = ['scan', 'scan_require_one', 'scan_for_changes', 'bootloaders_run_application',
-           'bootloader_go', 'JlsWriter', 'DeviceNotify',
+__all__ = ['scan', 'scan_require_one', 'scan_for_changes',
+           'JlsWriter', 'DeviceNotify',
            '__version__', '__title__', '__description__', '__url__',
            '__author__', '__author_email__', '__license__', '__copyright__']
+if _joulescope_backend in ['0', 'v0']:
+    # bootloader functions are only available on the v0 backend
+    __all__ += ['bootloaders_run_application', 'bootloader_go']
 
 
 if sys.hexversion < 0x030900:

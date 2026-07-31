@@ -99,3 +99,39 @@ class TestSampleBuffer(unittest.TestCase):
         start_idx, end_idx = c.range
         data = c.get_range(start_idx, end_idx)
         np.testing.assert_equal(1, data)
+
+    def test_duplicate_message_ignored(self):
+        c = SampleBuffer(100, dtype=np.float32)
+        a = np.arange(10, dtype=np.float32)
+        b = np.arange(10, 20, dtype=np.float32)
+        c.add(0, a)
+        c.add(10, b)
+        c.add(10, b)  # duplicate retransmission
+        self.assertEqual((0, 20), c.range)
+        np.testing.assert_equal(np.arange(20, dtype=np.float32),
+                                c.get_range(*c.range))
+
+    def test_duplicate_message_ignored_no_decimate_args(self):
+        c = SampleBuffer(100, dtype=np.float32)
+        c.add(0, np.arange(10, dtype=np.float32))
+        c.add(0, np.arange(10, dtype=np.float32))
+        self.assertEqual((0, 10), c.range)
+
+    def test_partial_overlap_trimmed(self):
+        c = SampleBuffer(100, dtype=np.float32)
+        c.add(0, np.arange(10, dtype=np.float32))
+        c.add(5, np.arange(5, 20, dtype=np.float32))
+        self.assertEqual((0, 20), c.range)
+        np.testing.assert_equal(np.arange(20, dtype=np.float32),
+                                c.get_range(*c.range))
+
+    def test_duplicate_with_decimate(self):
+        c = SampleBuffer(100, dtype=np.float32)
+        a = np.arange(10, dtype=np.float32)
+        b = np.arange(10, 20, dtype=np.float32)
+        c.add(0, a, sample_rate=1000, decimate_factor=4)
+        c.add(40, b, sample_rate=1000, decimate_factor=4)
+        c.add(40, b, sample_rate=1000, decimate_factor=4)  # duplicate
+        self.assertEqual((0, 20), c.range)
+        np.testing.assert_equal(np.arange(20, dtype=np.float32),
+                                c.get_range(*c.range))

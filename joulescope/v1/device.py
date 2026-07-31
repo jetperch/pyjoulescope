@@ -397,6 +397,10 @@ class Device:
             self._statistics_stop()
         self.stop()
         self.is_open = False
+        # notify and unregister the stream process objects (v0 compatible)
+        self._stream_process_call('close')
+        self._stream_cbk_objs.clear()
+        self._stream_cbk_objs_add.clear()
         self.stream_buffer = None
         return self._driver.close(self._path, timeout)
 
@@ -618,19 +622,6 @@ class Device:
                 }
             }
         }
-
-    def extio_status(self):
-        """Read the EXTIO GPI value.
-
-        :return: A dict containing the extio status.  Each key is the status
-            item name.  The value is itself a dict with the following keys:
-
-            * name: The status name, which is the same as the top-level key.
-            * value: The actual value
-            * units: The units, if applicable.
-            * format: The recommended formatting string (optional).
-        """
-        return {}
 
     def __enter__(self):
         """Device context manager, automatically open."""

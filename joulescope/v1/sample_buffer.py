@@ -135,12 +135,15 @@ class SampleBuffer:
         if self._sample_id == sample_id:
             pass  # normal operation
         elif sample_id < self._sample_id:
-            k = len(data) * decimate_factor
+            # data is in incoming-decimated samples; local decimation applies later
+            k = len(data) * self._incoming_decimate
             if (sample_id + k) < self._sample_id:
                 return  # complete duplication
             else:  # partial overlap
-                k = (self._sample_id - sample_id) // decimate_factor
+                k = (self._sample_id - sample_id) // self._incoming_decimate
                 data = data[k:]
+                if 0 == len(data):
+                    return  # complete duplication
                 sample_id = self._sample_id
         else:  # sample_id > self._sample_id
             skip_sz = sample_id // decimate_k - self._head
@@ -156,6 +159,8 @@ class SampleBuffer:
                 else:
                     self._buffer[ptr1:] = self._skip_fill
                     self._buffer[:ptr2] = self._skip_fill
+
+        self._sample_id = sample_id + len(data) * self._incoming_decimate
 
         if self._local_decimate > 1:
             ptr1 = self._wrap(self._head)

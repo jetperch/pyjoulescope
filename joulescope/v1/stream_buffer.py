@@ -340,18 +340,12 @@ class StreamBuffer:
             ['current', 'voltage', 'power', 'current_range', 'current_lsb', 'voltage_lsb'].
             The available fields are:
 
-            * raw: The raw u16 data from Joulescope.
-              Equivalent to self.raw_get(start, stop)
-            * raw_current: The raw 14-bit current data in LSBs.
-            * raw_voltage: The raw 14-bit voltage data in LSBs.
             * current: The calibrated float32 current data array in amperes.
             * voltage: The calibrated float32 voltage data array in volts.
-            * current_voltage: The calibrated float32 Nx2 array of current, voltage.
             * power: The calibrated float32 power data array in watts.
-            * bits: The (voltage_lsb << 5) | (current_lsb << 4) | current_range
             * current_range: The current range. 0 = 10A, 6 = 18 uA, 7=off.
-            * current_lsb: The current LSB, which can be assign to a general purpose input.
-            * voltage_lsb: The voltage LSB, which can be assign to a general purpose input.
+            * current_lsb: The general purpose input 0 (gpi0).
+            * voltage_lsb: The general purpose input 1 (gpi1).
 
         :return: The dict containing top-level 'time' and 'signals' keys.
             The 'time' value is a dict contain the timing metadata for
@@ -407,7 +401,7 @@ class StreamBuffer:
                 else:
                     d = np.empty(stop - start, dtype=np.float32)
                     d[:] = np.nan
-                    result['signals'][field] = {'value': out, 'units': units}
+                    result['signals'][field] = {'value': d, 'units': units}
             except KeyError:
                 pass  # cannot include this signal
         if is_single_result:
