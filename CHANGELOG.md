@@ -43,6 +43,7 @@ This file contains the list of changes made to pyjoulescope.
     for empty-window float64 max markers (file format unchanged).
   * test_datafile.test_write_read was a dead nose-style generator test
     whose body never executed; now a real test.
+* Dropped python 3.11 support. 
 
 
 ## 1.5.0
