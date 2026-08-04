@@ -4,9 +4,9 @@
 This file contains the list of changes made to pyjoulescope.
 
 
-## 1.6.0 [in progress]
+## 1.6.0
 
-2026 Jul 31
+2026 Aug 4
 
 * Added JS320 support.
 * Bumped dependency versions: 
