@@ -30,7 +30,7 @@ def parser_config(p):
 
 
 def on_cmd(args):
-    for d in scan(name='bootloader'):
+    for d in scan('bootloader'):
         d.open()
         print(f'Found {d}')
         try:

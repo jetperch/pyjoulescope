@@ -48,7 +48,7 @@ def parser_config(p):
 
 
 def on_cmd(args):
-    device = scan_require_one(name='Joulescope', config='auto')
+    device = scan_require_one('Joulescope', config='auto')
     f = lambda: run(device, filename=args.filename,
                     duration=args.duration,
                     contiguous_duration=args.contiguous,
@@ -110,10 +110,11 @@ def _run_loop(device, quit_fn):
     """
     time_last = time.time()
     status_failures = 0
+    poll_status = not hasattr(device, 'publish')  # v1 status() is constant
     while not quit_fn():
         time.sleep(0.01)
         time_now = time.time()
-        if time_now - time_last > 1.0:
+        if poll_status and time_now - time_last > 1.0:
             s = device.status()
             if s.get('driver', {}).get('return_code', {}).get('value', 1):
                 status_failures += 1

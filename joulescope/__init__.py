@@ -21,7 +21,7 @@ from .version import __version__, __title__, __description__, __url__, \
 
 _joulescope_backend = os.environ.get('JOULESCOPE_BACKEND', '1').lower()
 if _joulescope_backend in ['1', 'v1']:
-    from joulescope.v1 import scan, scan_require_one, scan_for_changes, DeviceNotify
+    from joulescope.v1 import scan, scan_require_one, scan_for_changes, DeviceNotify, ScanError
     from joulescope.jls_v2_writer import JlsWriter
 elif _joulescope_backend in ['0', 'v0']:
     from joulescope.v0.driver import scan, scan_require_one, scan_for_changes, \
@@ -39,7 +39,9 @@ __all__ = ['scan', 'scan_require_one', 'scan_for_changes',
            'JlsWriter', 'DeviceNotify',
            '__version__', '__title__', '__description__', '__url__',
            '__author__', '__author_email__', '__license__', '__copyright__']
-if _joulescope_backend in ['0', 'v0']:
+if _joulescope_backend in ['1', 'v1']:
+    __all__ += ['ScanError']
+elif _joulescope_backend in ['0', 'v0']:
     # bootloader functions are only available on the v0 backend
     __all__ += ['bootloaders_run_application', 'bootloader_go']
 

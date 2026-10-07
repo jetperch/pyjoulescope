@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from joulescope.units import str_to_number
 from pyjls import Writer, SourceDef, SignalDef, SignalType, DataType
 import numpy as np
 
@@ -31,42 +32,46 @@ SIGNALS = {
 }
 
 
-def _signals_validator(s):
+def signals_validator(s):
+    """Validate the JLS writer signal names.
+
+    :param s: The signal names as a comma-separated string or a list,
+        such as "current,voltage".  See :data:`SIGNALS`.
+    :return: The list of lowercase signal names.
+    :raise ValueError: On an unsupported signal name.
+    """
     result = []
     if isinstance(s, str):
         p = s.split(',')
     else:
         p = s
     for signal_name in p:
-        k = signal_name.lower()
+        k = signal_name.strip().lower()
         if k not in SIGNALS:
             raise ValueError(f'unsupported signal {signal_name}')
         result.append(k)
     return result
 
 
-def _sampling_rate_validator(s):
-    if isinstance(s, str):
-        if s.endswith('Hz'):
-            s = s[:-2]
-        parts = s.split()
-        if len(parts) == 1:
-            s = int(parts[0])
-        elif len(parts) == 2:
-            n, u = s.split()
-            s = int(n)
-            if u[0] == 'M':
-                s *= 1000000
-            elif u[0] == 'k':
-                s *= 1000
-        else:
-            raise ValueError(f'could not validate {s}')
-    return int(s)
+def sampling_rate_validator(s):
+    """Validate a sampling rate.
+
+    :param s: The sampling rate as a number, or as a string such as
+        "1 MHz", "500 kHz", or "2000000".
+    :return: The integer sampling rate in Hz.
+    :raise ValueError: If s is not a valid sampling rate.
+    """
+    return int(str_to_number(s))
+
+
+# Deprecated private names, for backwards compatibility.
+_signals_validator = signals_validator
+_sampling_rate_validator = sampling_rate_validator
 
 
 class JlsWriter:
 
-    def __init__(self, device, filename, signals=None):
+    def __init__(self, device, filename, signals=None, info=None, sampling_frequency=None):
         """Create a new JLS file writer instance.
 
         :param device: The Joulescope device instance.
@@ -74,18 +79,41 @@ class JlsWriter:
         :param signals: The signals to record as either a list of string names
             or a comma-separated string.  The supported signals include
             ['current', 'voltage', 'power']
+        :param info: The device information from :meth:`Device.info`.
+            None (default) reads it from the device.
+        :param sampling_frequency: The sampling frequency in Hz.
+            None (default) reads it from the device.
 
         This class implements joulescope.driver.StreamProcessApi and may also
         be used as a context manager.
+
+        When the device is open, the constructor reads any missing device
+        information, and :meth:`open` does not access the device.  You may
+        then call :meth:`open` from a stream or statistics callback, such as
+        to start recording on a trigger.  Otherwise, :meth:`open` reads the
+        missing information, and you must call it from your thread.
         """
         self._device = device
         self._filename = filename
         if signals is None:
             signals = ['current', 'voltage']
-        signals = _signals_validator(signals)
+        signals = signals_validator(signals)
         self._signals = signals
+        self._info = info
+        self._sampling_frequency = None
+        if sampling_frequency is not None:
+            self._sampling_frequency = sampling_rate_validator(sampling_frequency)
+        if getattr(device, 'is_open', False):
+            self._device_read()
         self._wr = None
         self._idx = 0
+
+    def _device_read(self):
+        if self._info is None:
+            self._info = self._device.info()
+        if self._sampling_frequency is None:
+            sampling_frequency = self._device.parameter_get('sampling_frequency')
+            self._sampling_frequency = sampling_rate_validator(sampling_frequency)
 
     def __enter__(self):
         self.open()
@@ -97,9 +125,9 @@ class JlsWriter:
     def open(self):
         """Open and configure the JLS writer file."""
         self.close()
-        info = self._device.info()
-        sampling_rate = self._device.parameter_get('sampling_frequency')
-        sampling_rate = _sampling_rate_validator(sampling_rate)
+        self._device_read()
+        info = self._info
+        sampling_rate = self._sampling_frequency
 
         source = SourceDef(
             source_id=1,

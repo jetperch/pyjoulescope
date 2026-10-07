@@ -29,7 +29,7 @@ def parser_config(p):
 
 
 def on_cmd(args):
-    d = scan_require_one(name='Joulescope')
+    d = scan_require_one('Joulescope')
     d.open()
     try:
         d.parameter_set('sensor_power', 'on')

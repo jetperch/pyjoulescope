@@ -36,7 +36,7 @@ def parser_config(p):
 
 def on_cmd(args):
     rv = 0
-    devices = scan(name='Joulescope', config=args.config)
+    devices = scan('Joulescope', config=args.config)
     for device in devices:
         try:
             if args.select and int(device.device_serial_number) != int(args.select):

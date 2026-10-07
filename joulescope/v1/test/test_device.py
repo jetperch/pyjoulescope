@@ -14,8 +14,16 @@
 
 """Test the v1 Device using a stubbed joulescope_driver."""
 
+import threading
 import unittest
+import warnings
+from unittest import mock
+from pyjoulescope_driver import DeviceContext, SubscribeContext
+from joulescope import deprecation
 from joulescope.v1.device import Device
+from joulescope.v1.js110 import DeviceJs110
+from joulescope.v1.js220 import DeviceJs220
+from joulescope.v1.js320 import DeviceJs320
 
 
 class FakeDriver:
@@ -24,9 +32,11 @@ class FakeDriver:
         self.published = []
         self.subscribed = []
         self.unsubscribed = []
+        self.fns = {}  # topic -> fn, for active subscriptions
+        self.queries = {}
 
     def open(self, path, mode=None, timeout=None):
-        return 0
+        return DeviceContext(self, path)
 
     def close(self, path, timeout=None):
         return 0
@@ -36,9 +46,25 @@ class FakeDriver:
 
     def subscribe(self, topic, flags, fn, timeout=None):
         self.subscribed.append(topic)
+        self.fns[topic] = fn
+        return SubscribeContext(self, [(topic, fn)])
 
     def unsubscribe(self, topic, fn, timeout=None):
         self.unsubscribed.append(topic)
+        self.fns.pop(topic, None)
+
+    def unsubscribe_all(self, fn, timeout=None):
+        self.unsubscribed.append(fn)
+
+    def query(self, topic, timeout=None):
+        return self.queries[topic]
+
+    def publish_and_wait(self, publish_topic, publish_value, response_topic,
+                         timeout=None, match=None):
+        self.published.append((publish_topic, publish_value))
+        if response_topic not in self.queries:
+            raise TimeoutError('publish_and_wait timed out')
+        return self.queries[response_topic]
 
 
 class StreamProcess:
@@ -64,10 +90,6 @@ class TestDeviceStreamProcess(unittest.TestCase):
         d.open()
         d.close()
         self.assertEqual(1, obj.closed)  # not called again: unregistered
-
-
-if __name__ == '__main__':
-    unittest.main()
 
 
 class TestSignalsParameter(unittest.TestCase):
@@ -283,3 +305,217 @@ class TestVRangeCompat(unittest.TestCase):
                 self.assertEqual(value, d.parameter_get(
                     'sampling_frequency', dtype='actual'), f'{path} {name}')
             d.close()
+
+
+def _stats_value(sample_start=0, sample_stop=1_000_000, charge=1.0, energy=2.0):
+    """Construct a minimal driver statistics value."""
+    signal = {'avg': {'value': 0.5, 'units': 'A'}, 'std': {'value': 0.1, 'units': 'A'}}
+    return {
+        'time': {'samples': {'value': [sample_start, sample_stop], 'units': 'samples'}},
+        'signals': {'current': dict(signal), 'voltage': dict(signal)},
+        'accumulators': {
+            'charge': {'value': charge, 'units': 'C'},
+            'energy': {'value': energy, 'units': 'J'},
+        },
+    }
+
+
+class DeprecationTestCase(unittest.TestCase):
+
+    def setUp(self):
+        p = mock.patch.object(deprecation, '_warned', set())
+        p.start()
+        self.addCleanup(p.stop)
+
+
+class TestStatistics(DeprecationTestCase):
+
+    def _open(self, cls=DeviceJs220, path='u/js220/000000', config=None):
+        driver = FakeDriver()
+        d = cls(driver, path)
+        d.config = config
+        d.open()
+        return d, driver
+
+    def _publish(self, driver, d, **kwargs):
+        topic = f'{d.device_path}/{d._statistics_topics()[1]}'
+        driver.fns[topic](topic, _stats_value(**kwargs))
+
+    def test_callback_source_added(self):
+        d, driver = self._open()
+        values = []
+        d.statistics_callback_register(values.append)
+        self.assertIn(('u/js220/000000/s/stats/ctrl', 1), driver.published)
+        self._publish(driver, d)
+        self.assertEqual('sensor', values[0]['source'])
+        self.assertEqual(0.5, values[0]['signals']['current']['µ']['value'])
+
+    def test_source_deprecated_warns_once(self):
+        d, _ = self._open()
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter('always')
+            d.statistics_callback_register(print, 'sensor')
+            d.statistics_callback_unregister(print, 'sensor')
+            d.statistics_callback_register(print)
+        self.assertEqual(1, len(w))
+        self.assertIs(DeprecationWarning, w[0].category)
+
+    def test_statistics_source_by_model_and_config(self):
+        for cls, path, config, source, topic in [
+                (DeviceJs110, 'u/js110/1', None, 'host', 's/stats/value'),
+                (DeviceJs110, 'u/js110/1', 'auto', 'host', 's/stats/value'),
+                (DeviceJs110, 'u/js110/1', 'off', 'sensor', 's/sstats/value'),
+                (DeviceJs220, 'u/js220/1', 'off', 'sensor', 's/stats/value'),
+                (DeviceJs320, 'u/js320/1', 'auto', 'sensor', 's/stats/value')]:
+            with self.subTest(path=path, config=config):
+                d, driver = self._open(cls, path, config)
+                values = []
+                d.statistics_callback_register(values.append)
+                self.assertEqual(source, d.statistics_source)
+                self.assertIn(f'{path}/{topic}', driver.fns)
+                self._publish(driver, d)
+                self.assertEqual(source, values[0]['source'])
+                d.statistics_callback_unregister(values.append)
+                self.assertNotIn(f'{path}/{topic}', driver.fns)
+
+    def test_get(self):
+        d, driver = self._open()
+        t = threading.Timer(0.01, lambda: self._publish(driver, d))
+        t.start()
+        value = d.statistics_get(timeout=1.0)
+        t.join()
+        self.assertEqual(0.5, value['signals']['current']['µ']['value'])
+
+    def test_get_buffers_consecutive_values(self):
+        d, driver = self._open()
+        with self.assertRaises(TimeoutError):
+            d.statistics_get(timeout=0.01)  # registers
+        for k in range(3):
+            self._publish(driver, d, sample_start=k, sample_stop=k + 1)
+        samples = [d.statistics_get(0)['time']['samples']['value'][0] for _ in range(3)]
+        self.assertEqual([0, 1, 2], samples)
+
+    def test_get_queue_overflow_drops_oldest(self):
+        d, driver = self._open()
+        with self.assertRaises(TimeoutError):
+            d.statistics_get(timeout=0)
+        for k in range(105):
+            self._publish(driver, d, sample_start=k, sample_stop=k + 1)
+        self.assertEqual(5, d.statistics_get(0)['time']['samples']['value'][0])
+
+    def test_get_requires_open(self):
+        d = DeviceJs220(FakeDriver(), 'u/js220/1')
+        with self.assertRaises(RuntimeError):
+            d.statistics_get()
+        with self.assertRaises(RuntimeError):
+            d.statistics_iter()
+
+    def test_iter_count(self):
+        d, driver = self._open()
+        it = d.statistics_iter(count=2, timeout=1.0)
+        threading.Timer(0.01, lambda: [self._publish(driver, d) for _ in range(3)]).start()
+        self.assertEqual(2, len(list(it)))
+
+    def test_iter_timeout(self):
+        d, _ = self._open()
+        with self.assertRaises(TimeoutError):
+            next(d.statistics_iter(timeout=0.01))
+
+    def test_iter_stops_on_close(self):
+        d, driver = self._open()
+        values = []
+
+        def run():
+            for value in d.statistics_iter(timeout=2.0):
+                values.append(value)
+
+        def wait_for(predicate):
+            for _ in range(2000):
+                if predicate():
+                    return
+                threading.Event().wait(0.001)
+            self.fail('wait_for timed out')
+
+        thread = threading.Thread(target=run)
+        thread.start()
+        wait_for(lambda: len(d._statistics_callbacks))
+        self._publish(driver, d)
+        wait_for(lambda: len(values))
+        d.close()
+        thread.join(timeout=2.0)
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(1, len(values))
+
+    def test_close_unregisters_queue(self):
+        d, driver = self._open()
+        with self.assertRaises(TimeoutError):
+            d.statistics_get(timeout=0)
+        d.close()
+        self.assertEqual([], d._statistics_callbacks)
+        self.assertNotIn('u/js220/000000/s/stats/value', driver.fns)
+        self.assertIn(('u/js220/000000/s/stats/ctrl', 0), driver.published)
+
+
+class TestDeviceMisc(DeprecationTestCase):
+
+    def test_status_deprecated_warns_once(self):
+        for cls in [Device, DeviceJs110, DeviceJs220, DeviceJs320]:
+            d = cls(FakeDriver(), 'u/js220/1')
+            with warnings.catch_warnings(record=True) as w:
+                warnings.simplefilter('always')
+                self.assertEqual(0, d.status()['driver']['return_code']['value'])
+            self.assertEqual(1 if cls is Device else 0, len(w))
+
+    def test_model_and_serial_number(self):
+        d = Device(FakeDriver(), 'u/&js220/000415/')
+        self.assertEqual('u/&js220/000415', d.device_path)
+        self.assertEqual('js220', d.model)
+        self.assertEqual('000415', d.serial_number)
+        self.assertEqual('&JS220-000415', str(d))
+
+    def test_topics_relative_to_device(self):
+        driver = FakeDriver()
+        d = Device(driver, 'u/js220/1')
+        d.open()
+        d.publish('/s/i/range/mode', 'auto')
+        d.publish('s/v/range/mode', 'auto')
+        self.assertEqual([('u/js220/1/h/fs', 2000000), ('u/js220/1/s/i/range/mode', 'auto'),
+                          ('u/js220/1/s/v/range/mode', 'auto')], driver.published)
+
+    def test_close_unsubscribes_remaining(self):
+        driver = FakeDriver()
+        d = Device(driver, 'u/js220/1')
+        d.open()
+        d.subscribe('s/gpi/+/!value', 'pub', print)
+        d.close()
+        self.assertEqual({}, driver.fns)
+
+    def test_unsubscribe_all(self):
+        driver = FakeDriver()
+        d = Device(driver, 'u/js220/1')
+        d.unsubscribe_all(print)
+        self.assertEqual([print], driver.unsubscribed)
+
+    def test_query_gpi_value(self):
+        driver = FakeDriver()
+        d = Device(driver, 'u/js220/1')
+        with self.assertRaises(RuntimeError):
+            d._query_gpi_value()
+        driver.queries['u/js220/1/s/gpi/+/!value'] = 3
+        self.assertEqual(3, d._query_gpi_value())
+        self.assertEqual(('u/js220/1/s/gpi/+/!req', 0), driver.published[-1])
+
+    def test_js220_info_versions(self):
+        driver = FakeDriver()
+        driver.queries = {'u/js220/1/c/hw/version': 0x01020003,
+                          'u/js220/1/c/fw/version': 0x01030004,
+                          'u/js220/1/s/fpga/version': 0x01040005}
+        info = DeviceJs220(driver, 'u/js220/1').info()
+        self.assertEqual('1.2.3', info['hardware_version'])
+        self.assertEqual('1.2.3', info['ctl']['hw']['rev'])
+        self.assertEqual('1.3.4', info['ctl']['fw']['ver'])
+        self.assertEqual('1.4.5', info['sensor']['fpga']['ver'])
+
+
+if __name__ == '__main__':
+    unittest.main()

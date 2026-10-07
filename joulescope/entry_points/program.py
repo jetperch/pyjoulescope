@@ -78,16 +78,16 @@ def _controller_program_from_app(d, data):
 
 def controller_program(data):
     try:
-        d = scan_require_one(name='bootloader')
+        d = scan_require_one('bootloader')
         fn = _controller_program_from_bootloader
     except RuntimeError:
-        d = scan_require_one(name='joulescope')
+        d = scan_require_one('joulescope')
         fn = _controller_program_from_app
     return fn(d, data)
 
 
 def sensor_program(data):
-    d = scan_require_one(name='joulescope')
+    d = scan_require_one('joulescope')
     try:
         d.open()
         start_time = time.time()
@@ -99,7 +99,7 @@ def sensor_program(data):
 
 
 def calibration_program(data, is_factory):
-    d = scan_require_one(name='joulescope')
+    d = scan_require_one('joulescope')
     try:
         d.open()
         start_time = time.time()
@@ -113,9 +113,9 @@ def calibration_program(data, is_factory):
 def _upgrade(filename):
     from joulescope.v0.firmware_manager import upgrade
     try:
-        d = scan_require_one(name='bootloader')
+        d = scan_require_one('bootloader')
     except RuntimeError:
-        d = scan_require_one(name='joulescope')
+        d = scan_require_one('joulescope')
     d.open()
     upgrade(d, filename, progress_cbk=_progress)
     return 0

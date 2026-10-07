@@ -26,7 +26,59 @@ The data structure contains the following top-level keys:
     - **∫**: The integrated value, only for **current** and **power**.
     
 -   **accumulators**: The integrated charge and energy values.
--   **source**: Either **sensor** (on instrument) or **stream_buffer** (on host).
+-   **source**: Where the statistics were computed.  The v1 backend
+    provides **sensor** (on the instrument) or **host** (by the host
+    driver from the full-rate sample stream).  The legacy v0 backend
+    provides **sensor** or **stream_buffer**.
+
+Statistics source
+-----------------
+
+The model and the scan config select where the statistics are computed.
+:attr:`Device.statistics_source <joulescope.v1.device.Device.statistics_source>`
+reports the source for a device.
+
+=========  ====================  ==========================================
+Model      scan config           Source
+=========  ====================  ==========================================
+JS110      'auto', 'ignore',     host: computed by the host driver from the
+           None                  2 Msps sample stream.
+JS110      'off'                 sensor: computed on the instrument.
+JS220      any                   sensor: computed on the instrument.
+JS320      any                   sensor: computed on the instrument.
+=========  ====================  ==========================================
+
+The ``source`` argument of ``statistics_callback_register`` and
+``statistics_callback_unregister`` is deprecated and ignored.  It issues
+a DeprecationWarning on first use.
+
+
+Statistics on your thread
+-------------------------
+
+Statistics callbacks run on the USB thread, so they must return quickly
+and must not call back into the device.  Most scripts instead want the
+statistics on their own thread.  Use
+:meth:`Device.statistics_get <joulescope.v1.device.Device.statistics_get>`
+or :meth:`Device.statistics_iter <joulescope.v1.device.Device.statistics_iter>`,
+which block until the next value arrives::
+
+    import joulescope
+
+    with joulescope.scan_require_one(config='auto') as device:
+        device.parameter_set('reduction_frequency', '2 Hz')
+        for stats in device.statistics_iter(count=20):  # 10 seconds
+            i = stats['signals']['current']['µ']['value']
+            print(f'{i:.9f} A')
+
+The first call starts buffering, so consecutive calls return consecutive
+values without gaps.  Both wait 2 seconds for each value by default and
+raise TimeoutError if none arrives.  ``statistics_iter`` without a count
+continues until the device closes.
+
+
+Example
+-------
 
 Here is an example statistics data structure::
 

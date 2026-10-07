@@ -78,6 +78,15 @@ class DeviceJs110(Device):
         self.publish('h/fs', int(value))
         self._output_sampling_frequency_set(value)
 
+    @property
+    def statistics_source(self):
+        return 'sensor' if self.config == 'off' else 'host'
+
+    def _statistics_topics(self):
+        if self.statistics_source == 'sensor':
+            return None, 's/sstats/value'  # s/sstats/ctrl defaults to enabled
+        return super()._statistics_topics()
+
     def _config_apply(self, config=None):
         for key, value in PARAMETERS_DEFAULTS.get(config, {}).items():
             self.parameter_set(key, value)
@@ -119,36 +128,4 @@ class DeviceJs110(Device):
             'model': self.model,
             'hardware_version': 'H',
             'serial_number': self.serial_number,
-        }
-
-    def status(self):
-        return {
-            'driver': {
-                'settings_result': {
-                    'value': 0,
-                    'units': ''},
-                'fpga_frame_counter': {
-                    'value': 0,
-                    'units': 'frames'},
-                'fpga_discard_counter': {
-                    'value': 0,
-                    'units': 'frames'},
-                'sensor_flags': {
-                    'value': 0,
-                    'format': '0x{:02x}',
-                    'units': ''},
-                'sensor_i_range': {
-                    'value': 0,
-                    'format': '0x{:02x}',
-                    'units': ''},
-                'sensor_source': {
-                    'value': 0,
-                    'format': '0x{:02x}',
-                    'units': ''},
-                'return_code': {
-                    'value': 0,
-                    'format': '{}',
-                    'units': '',
-                },
-            }
         }

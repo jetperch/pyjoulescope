@@ -26,7 +26,7 @@ def parser_config(p):
 
 
 def on_cmd(args):
-    device = scan_require_one(name='Joulescope', config='auto')
+    device = scan_require_one('Joulescope', config='auto')
     quit_ = False
     data_queue = Queue()
 

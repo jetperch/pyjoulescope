@@ -4,6 +4,42 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 1.6.1
+
+2026 Oct 7 [in progress]
+
+* Bumped pyjoulescope_driver from 2.4.0 to 2.5.0.
+* The v1 backend now tracks devices with pyjoulescope_driver
+  Driver.device_watch, which reports each device addition and removal
+  once, without races between the device list and hotplug events.
+  DeviceNotify reports DevicePath instances, which are str instances.
+* scan(), scan_require_one() and scan_for_changes() accept device
+  specifications, the same as pyjoulescope_driver Driver.device_paths(),
+  such as scan_require_one('js320').  They only select Joulescope
+  instruments (brand "Joulescope").
+  The first argument is now specs; "Joulescope" and "bootloader" still
+  work, and the name keyword is deprecated.
+  scan_require_one() raises ScanError, which is a ValueError and a
+  RuntimeError, with a message listing the available devices.
+* Added Device.statistics_get() and Device.statistics_iter() to receive
+  statistics on the caller's thread.
+* Added Device.statistics_source and the statistics "source" key.
+  Deprecated the ignored statistics_callback_register() source argument.
+* Deprecated Device.status(), which returns constant values on v1.
+* JlsWriter accepts info and sampling_frequency arguments, and reads the
+  device at construction when the device is open, so open() may be called
+  from a callback.
+* Made jls_v2_writer.signals_validator() and sampling_rate_validator()
+  public.  The private names remain as aliases.
+* Documented threads and the recommended run length pattern.
+* Fixed v1 Device.unsubscribe_all(), which called Driver.unsubscribe.
+* The v1 Device now uses pyjoulescope_driver DeviceContext, DevicePath,
+  publish_and_wait() and version_to_str() instead of its own copies.
+  Device.close() unsubscribes any remaining subscriptions, and
+  Device.model omits the bootloader "&" prefix.
+* Entry points no longer poll the v1 Device.status().
+
+
 ## 1.6.0
 
 2026 Aug 4

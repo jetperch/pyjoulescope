@@ -16,7 +16,9 @@
 """The pyjoulescope_driver wrapper to implement the v0 API."""
 
 
-from pyjoulescope_driver import Driver
+from pyjoulescope_driver import Driver, device_filter
+from pyjoulescope_driver.device_filter import DeviceFilterError
+from joulescope.deprecation import warn_once
 from .device import Device
 from .js320 import DeviceJs320
 from .js220 import DeviceJs220
@@ -27,6 +29,11 @@ from typing import List
 
 
 _log = logging.getLogger(__name__)
+_DEVICE_CLASSES = {
+    'js320': DeviceJs320,
+    'js220': DeviceJs220,
+    'js110': DeviceJs110,
+}
 
 
 class DriverWrapper:
@@ -47,12 +54,10 @@ class DriverWrapper:
         self.driver.log_level = 'INFO'
         atexit.register(self._finalize)
         self.devices = {}
-        self.driver.subscribe('@/!add', 'pub', self._on_device_add)
-        self.driver.subscribe('@/!remove', 'pub', self._on_device_remove)
-        for d in self.driver.device_paths():
-            self._on_device_add('@/!add', d)
+        self._watch = self.driver.device_watch(self._on_device_add, self._on_device_remove)
 
     def _finalize(self):
+        self._watch.unsubscribe()
         while len(self.devices):
             _, device = self.devices.popitem()
             try:
@@ -62,82 +67,128 @@ class DriverWrapper:
         d, self.driver = self.driver, None
         d.finalize()
 
-    def _on_device_add(self, topic, value):
-        if value in self.devices:
+    def _on_device_add(self, device_path):
+        # DevicePath.model omits the bootloader "&", as in "u/&js220/000415".
+        cls = _DEVICE_CLASSES.get(device_path.model)
+        if cls is None:
+            _log.info('Unsupported device: %s', device_path)
             return
-        if 'js320' in value:
-            cls = DeviceJs320
-        elif 'js220' in value:
-            cls = DeviceJs220
-        elif 'js110' in value:
-            cls = DeviceJs110
-        else:
-            _log.info('Unsupported device: %s', value)
-            return
-        self.devices[value] = cls(self.driver, value)
+        self.devices[device_path] = cls(self.driver, device_path)
 
-    def _on_device_remove(self, topic, value):
-        d = self.devices.pop(value, None)
+    def _on_device_remove(self, device_path):
+        d = self.devices.pop(device_path, None)
         if d is not None:
             d.close()
 
-    def scan(self, name: str = None, config=None):
-        if name is None or name.lower() == 'joulescope':
-            devices = self.devices.values()
-            devices = [d for d in devices if d.device_path[2] != '&']
-            devices = sorted(devices, key=lambda x: str(x))
-            for d in devices:
-                d.config = config
-        elif name.lower() == 'bootloader':
-            devices = self.devices.values()
-            devices = [d for d in devices if d.device_path[2] == '&']
-            devices = sorted(devices, key=lambda x: str(x))
-            for d in devices:
-                d.config = config
+    def paths(self, specs=None):
+        """Find the matching device paths.  See :func:`scan`."""
+        specs = _specs_legacy(specs)
+        if specs == _BOOTLOADER:
+            return [p for p in self.devices if p.is_bootloader]
+        paths = device_filter.find(self.devices, specs, _BRAND)
+        if not _specs_select_bootloader(specs):
+            paths = [p for p in paths if not p.is_bootloader]
+        return paths
+
+    def scan(self, specs=None, config=None):
+        devices = sorted([self.devices[p] for p in self.paths(specs)], key=str)
+        for d in devices:
+            d.config = config
         return devices
 
 
-def scan(name: str = None, config=None) -> List[Device]:
+# The joulescope package only supports Joulescope instruments.
+_BRAND = 'Joulescope'
+
+# The legacy scan names: "Joulescope" selects all devices in application
+# mode, and "bootloader" selects all devices in bootloader mode.
+_BOOTLOADER = 'bootloader'
+_LEGACY_NAMES = {'joulescope': None, _BOOTLOADER: _BOOTLOADER}
+
+
+def _specs_legacy(specs):
+    if isinstance(specs, str):
+        return _LEGACY_NAMES.get(specs.strip().lower(), specs)
+    return specs
+
+
+def _specs_name(specs, name):
+    if name is None:
+        return specs
+    warn_once('scan_name', 'scan name is deprecated, use specs')
+    return name if specs is None else specs
+
+
+def _specs_select_bootloader(specs):
+    """Check if specs explicitly select bootloader mode, as in "&js220"."""
+    if specs is None:
+        return False
+    if isinstance(specs, str):
+        specs = [specs]
+    return any('&' in spec for spec in specs)
+
+
+def scan(specs=None, config=None, name=None) -> List[Device]:
     """Scan for connected devices.
 
-    :param name: The case-insensitive device name to scan.
-        None (default) is equivalent to 'Joulescope'.
+    :param specs: The device specifications, which is one of:
+
+        * None (default) to select all devices.
+        * a string containing one or more comma-separated device
+          specifications, such as "js320" or "31NB, u/js220/000415".
+        * a list of device specification strings.
+
+        See :meth:`pyjoulescope_driver.DevicePath.match` for the
+        specification format.  For backwards compatibility,
+        "Joulescope" selects all devices, and "bootloader" selects
+        all devices in bootloader mode.
     :param config: The configuration for the :class:`Device`.
-    :return: The list of :class:`Device` instances.  A new instance is created
-        for each detected device.  Use :func:`scan_for_changes` to preserved
-        existing instances.
-    :raises: None - guaranteed not to raise an exception
+    :param name: Deprecated alias for specs, for backwards compatibility.
+    :return: The list of :class:`Device` instances, sorted by name.
+        Devices in bootloader mode are only included when requested by
+        "bootloader" or a "&" model specification, such as "&js220".
+    :raise TypeError: If specs has an invalid type.
     """
-    d = DriverWrapper()
-    return d.scan(name, config)
+    specs = _specs_name(specs, name)
+    return DriverWrapper().scan(specs, config)
 
 
-def scan_require_one(name: str = None, config=None) -> Device:
+class ScanError(DeviceFilterError, RuntimeError):
+    """The scan did not find exactly one device.
+
+    This exception is both a
+    :class:`pyjoulescope_driver.device_filter.DeviceFilterError`
+    (a ValueError) and, for backwards compatibility, a RuntimeError.
+    """
+
+
+def scan_require_one(specs=None, config=None, name=None) -> Device:
     """Scan for one and only one device.
 
-    :param name: The case-insensitive device name to scan.
-        None (default) is equivalent to 'Joulescope'.
+    :param specs: The device specifications.  See :func:`scan`.
     :param config: The configuration for the :class:`Device`.
+    :param name: Deprecated alias for specs.
     :return: The :class:`Device` found.
-    :raise RuntimeError: If no devices or more than one device was found.
+    :raise ScanError: If zero or multiple devices match.
     """
-    devices = scan(name, config=config)
-    if not len(devices):
-        raise RuntimeError("no devices found")
-    if len(devices) > 1:
-        raise RuntimeError("multiple devices found")
+    specs = _specs_name(specs, name)
+    devices = scan(specs, config=config)
+    if len(devices) != 1:
+        specs_list = [specs] if isinstance(specs, str) else specs
+        raise ScanError(specs_list, _BRAND, [d.device_path for d in devices],
+                        DriverWrapper().paths())
     return devices[0]
 
 
-def scan_for_changes(name: str = None, devices=None, config=None):
+def scan_for_changes(specs=None, devices=None, config=None, name=None):
     """Scan for device changes.
 
-    :param name: The case-insensitive device name to scan.
-        None (default) is equivalent to 'Joulescope'.
+    :param specs: The device specifications.  See :func:`scan`.
     :param devices: The list of existing :class:`Device` instances returned
         by a previous scan.  Pass None or [] if no scan has yet been performed.
     :param config: The configuration for the :class:`Device` which is one of
         ['auto', 'ignore', 'off'].  None is equivalent to 'auto'.
+    :param name: Deprecated alias for specs.
     :return: The tuple of lists (devices_now, devices_added, devices_removed).
         "devices_now" is the list of all currently connected devices.  If the
         device was in "devices", then return the :class:`Device` instance from
@@ -146,7 +197,7 @@ def scan_for_changes(name: str = None, devices=None, config=None):
         "devices_removed" is the list of devices in "devices" but not "devices_now".
     """
     devices_prev = [] if devices is None else devices
-    devices_next = scan(name, config=config)
+    devices_next = scan(_specs_name(specs, name), config=config)
     devices_added = []
     devices_removed = []
     devices_now = []
@@ -180,29 +231,28 @@ class DeviceNotify:
             about the device.  In general, the application should rescan for
             relevant devices.
         """
-        self._on_add_fn = self._on_add
-        self._on_remove_fn = self._on_remove
         self._cbk = cbk
-        self._driver = None
+        self._watch = None
+        self._watching = False
         self._cbk(True, None)
         self.open()
 
-    def _on_add(self, topic, value):
-        self._cbk(True, value)
+    def _on_add(self, device_path):
+        if self._watching:  # the initial cbk(True, None) covers connected devices
+            self._cbk(True, device_path)
 
-    def _on_remove(self, topic, value):
-        self._cbk(False, value)
+    def _on_remove(self, device_path):
+        if self._watching:
+            self._cbk(False, device_path)
 
     def open(self):
         self.close()
-        self._driver = DriverWrapper()
-        d = self._driver.driver
-        d.subscribe('@/!add', 'pub', self._on_add_fn)
-        d.subscribe('@/!remove', 'pub', self._on_remove_fn)
+        d = DriverWrapper().driver
+        self._watch = d.device_watch(self._on_add, self._on_remove)
+        self._watching = True
 
     def close(self):
-        if self._driver is not None:
-            d = self._driver.driver
-            self._driver = None
-            d.unsubscribe('@/!add', self._on_add_fn)
-            d.unsubscribe('@/!remove', self._on_remove_fn)
+        self._watching = False
+        if self._watch is not None:
+            watch, self._watch = self._watch, None
+            watch.unsubscribe()

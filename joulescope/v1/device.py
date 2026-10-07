@@ -13,14 +13,17 @@
 # limitations under the License.
 
 
+from joulescope.deprecation import warn_once
 from joulescope.parameters_v1 import PARAMETERS, PARAMETERS_DICT, name_to_value, value_to_name
 from .stream_buffer import StreamBuffer
 from joulescope.view import View
+from pyjoulescope_driver import DeviceContext, DevicePath
+import collections
 import copy
 import logging
 import numpy as np
 import queue
-import time
+import threading
 
 
 # The streaming signals common to all v1 devices, keyed by the canonical
@@ -45,16 +48,30 @@ _SIGNALS_EXTENDED = {
 # Map the short signal names to StreamBuffer extended signal names.
 _SIGNALS_SHORT_TO_EXTENDED = {'2': 'gpi2', '3': 'gpi3', 'T': 'trigger_in'}
 
+# The default timeout for statistics_get and statistics_iter, in seconds.
+_STATISTICS_TIMEOUT = 2.0
+
+# The maximum number of statistics values that statistics_get and
+# statistics_iter buffer for the caller: 50 seconds at the default 2 Hz.
+_STATISTICS_QUEUE_LENGTH = 100
+
+
+def _source_deprecated(source):
+    if source is not None:
+        warn_once('statistics_source',
+                  'The statistics callback source is deprecated and ignored.  '
+                  'See Device.statistics_source.')
+
 
 class Device:
 
     def __init__(self, driver, device_path):
         self.config = None
         self._driver = driver
-        while device_path.endswith('/'):
-            device_path = device_path[:-1]
+        device_path = DevicePath(device_path.rstrip('/'))
         self._log = logging.getLogger(__name__ + '.' + device_path.replace('/', '.'))
         self._path = device_path
+        self._ctx = DeviceContext(driver, device_path)  # replaced by open()
         self.is_open = False
         self._stream_cbk_objs = []
         self._stream_cbk_objs_add = []
@@ -64,6 +81,9 @@ class Device:
         self._h_fs = 2000000  # value published to h/fs on open: the maximum streaming rate
         self._statistics_callbacks = []
         self._statistics_offsets = []
+        self._statistics_queue = None  # deque for statistics_get, when active
+        self._statistics_queue_cond = threading.Condition()
+        self._statistics_active = None  # (ctrl, topic, source) while subscribed
         self._is_streaming = False
         self._signals_map = dict(_SIGNALS_BASE)
         self._streaming_topics = []
@@ -85,7 +105,7 @@ class Device:
                         self._parameters[p.name] = p.default
 
     def __str__(self):
-        _, model, serial_number = self._path.split('/')
+        _, model, serial_number = self._path.split('/')  # keep "&" in bootloader mode
         return f'{model.upper()}-{serial_number}'
 
     @property
@@ -167,12 +187,15 @@ class Device:
             for details on the data format.
             This function will be called from the USB processing thread.
             Any calls back into self MUST BE resynchronized.
-        :param source: The statistics source where the computation is performed.
-            Ignored, always use sensor-side statistics for the JS220.
+            See :meth:`statistics_get` to receive statistics on the
+            caller's thread instead.
+        :param source: Deprecated and ignored.  The model and the scan
+            config select the source, see :attr:`statistics_source`.
 
         WARNING: calling :meth:`statistics_callback` after calling this method
         may result in unusual behavior.  Do not mix these API calls.
         """
+        _source_deprecated(source)
         if cbk is None:
             return
         if not callable(cbk):
@@ -187,14 +210,32 @@ class Device:
 
         :param cbk: The callback previously provided to
             :meth:`statistics_callback_register`.
-        :param source: The callback source.
+        :param source: Deprecated and ignored.
         """
+        _source_deprecated(source)
         try:
             self._statistics_callbacks.remove(cbk)
         except ValueError:
             self._log.warning('statistics_callback_unregister but callback not registered.')
         if not len(self._statistics_callbacks):
             self._statistics_stop()
+
+    @property
+    def statistics_source(self):
+        """The statistics source, which is one of:
+
+        * 'sensor': computed on the instrument.
+        * 'host': computed by the host driver from the full-rate
+          sample stream.
+
+        The JS220 and JS320 always use 'sensor'.  The JS110 uses 'sensor'
+        when scanned with config='off', and 'host' otherwise.
+        """
+        return 'sensor'
+
+    def _statistics_topics(self):
+        """The statistics (ctrl, value) topics.  ctrl may be None."""
+        return 's/stats/ctrl', 's/stats/value'
 
     def _on_stats(self, topic, value):
         period = 1 / 2e6
@@ -204,7 +245,6 @@ class Device:
             duration = s_start
             charge = value['accumulators']['charge']['value']
             energy = value['accumulators']['energy']['value']
-            offsets = [duration, charge, energy]
             self._statistics_offsets = [duration, charge, energy]
         duration, charge, energy = self._statistics_offsets
         value['time']['range'] = {
@@ -219,24 +259,115 @@ class Device:
             k['σ2'] = {'value': k['std']['value'] ** 2, 'units': k['std']['units']}
             if 'integral' in k:
                 k['∫'] = k['integral']
+        active = self._statistics_active
+        value['source'] = self.statistics_source if active is None else active[2]
         for cbk in self._statistics_callbacks:
             cbk(value)
 
     def _statistics_start(self):
         if self.is_open:
-            if 'js110' in self.device_path and self.config == 'off':
-                self.subscribe('s/sstats/value', 'pub', self._on_stats_cbk)
-            else:
-                self.publish('s/stats/ctrl', 1)
-                self.subscribe('s/stats/value', 'pub', self._on_stats_cbk)
+            ctrl, topic = self._statistics_topics()
+            self._statistics_active = (ctrl, topic, self.statistics_source)
+            if ctrl is not None:
+                self.publish(ctrl, 1)
+            self.subscribe(topic, 'pub', self._on_stats_cbk)
 
     def _statistics_stop(self):
-        if self.is_open:
-            if 'js110' in self.device_path and self.config == 'off':
-                self.unsubscribe('s/sstats/value', self._on_stats_cbk)
-            else:
-                self.unsubscribe('s/stats/value', self._on_stats_cbk)
-                self.publish('s/stats/ctrl', 0)
+        if self.is_open and self._statistics_active is not None:
+            ctrl, topic, _ = self._statistics_active
+            self._statistics_active = None
+            self.unsubscribe(topic, self._on_stats_cbk)
+            if ctrl is not None:
+                self.publish(ctrl, 0)
+
+    def _on_statistics_queue(self, value):
+        with self._statistics_queue_cond:
+            q = self._statistics_queue
+            if q is None:
+                return
+            if len(q) == q.maxlen:
+                self._log.warning('statistics_get queue full: dropping oldest value')
+            q.append(value)
+            self._statistics_queue_cond.notify_all()
+
+    def _statistics_queue_stop(self):
+        with self._statistics_queue_cond:
+            q, self._statistics_queue = self._statistics_queue, None
+            self._statistics_queue_cond.notify_all()
+        if q is not None:
+            self.statistics_callback_unregister(self._on_statistics_queue)
+
+    def statistics_get(self, timeout=None):
+        """Get the next statistics value on the caller's thread.
+
+        :param timeout: The maximum time to wait in float seconds.
+            None (default) waits 2 seconds.
+        :return: The statistics data structure, the same as provided to
+            :meth:`statistics_callback_register` callbacks.
+        :raise RuntimeError: If the device is not open.
+        :raise TimeoutError: If no statistics value arrives in time.
+
+        The first call starts buffering statistics values until
+        :meth:`close`, so consecutive calls return consecutive values
+        without gaps.  The buffer holds the 100 most recent values,
+        which is 50 seconds at the default reduction_frequency of 2 Hz.
+        """
+        if not self.is_open:
+            raise RuntimeError('statistics_get requires an open device')
+        timeout = _STATISTICS_TIMEOUT if timeout is None else float(timeout)
+        cond = self._statistics_queue_cond
+        with cond:
+            register = self._statistics_queue is None
+            if register:
+                self._statistics_queue = collections.deque(maxlen=_STATISTICS_QUEUE_LENGTH)
+        if register:  # outside the lock: the driver thread calls _on_statistics_queue
+            self.statistics_callback_register(self._on_statistics_queue)
+        with cond:
+            ready = cond.wait_for(self._statistics_queue_ready, timeout)
+            if self._statistics_queue is None:
+                raise RuntimeError('device closed during statistics_get')
+            if not ready:
+                raise TimeoutError(f'statistics_get timed out after {timeout} seconds')
+            return self._statistics_queue.popleft()
+
+    def _statistics_queue_ready(self):
+        q = self._statistics_queue
+        return q is None or len(q) > 0
+
+    def statistics_iter(self, count=None, timeout=None):
+        """Iterate over statistics values on the caller's thread.
+
+        :param count: The number of statistics values.  None (default)
+            iterates until the device closes or the caller stops.
+        :param timeout: The maximum time to wait for each value in
+            float seconds.  None (default) waits 2 seconds.
+        :return: The iterator over statistics data structures.
+        :raise RuntimeError: If the device is not open.
+        :raise TimeoutError: If a statistics value does not arrive in time.
+
+        Example::
+
+            for stats in device.statistics_iter(count=10):
+                print(stats['signals']['current']['µ']['value'])
+
+        See :meth:`statistics_get`.
+        """
+        if not self.is_open:
+            raise RuntimeError('statistics_iter requires an open device')
+
+        def generate():
+            n = 0
+            while count is None or n < count:
+                try:
+                    value = self.statistics_get(timeout)
+                except RuntimeError:
+                    if not self.is_open:
+                        return  # device closed
+                    raise
+                yield value
+                n += 1
+
+        return generate()
 
     def statistics_accumulators_clear(self):
         """Clear the charge and energy accumulators."""
@@ -308,11 +439,6 @@ class Device:
         except KeyError:
             return value
 
-    def _topic_make(self, topic):
-        if topic[0] != '/':
-            topic = '/' + topic
-        return self._path + topic
-
     def publish(self, topic, value, timeout=None):
         """Publish to the underlying joulescope_driver instance.
 
@@ -322,7 +448,7 @@ class Device:
             to complete.  None waits the default amount.
             0 does not wait and subscription will occur asynchronously.
         """
-        return self._driver.publish(self._topic_make(topic), value, timeout)
+        return self._ctx.publish(topic.lstrip('/'), value, timeout)
 
     def query(self, topic, timeout=None):
         """Query the underlying joulescope_driver instance.
@@ -333,7 +459,7 @@ class Device:
             0 does not wait and subscription will occur asynchronously.
         :return: The value associated with topic.
         """
-        return self._driver.query(self._topic_make(topic), timeout)
+        return self._ctx.query(topic.lstrip('/'), timeout)
 
     def subscribe(self, topic, flags, fn, timeout=None):
         """Subscribe to receive topic updates.
@@ -367,7 +493,7 @@ class Device:
             0 does not wait and subscription will occur asynchronously.
         :raise RuntimeError: on subscribe failure.
         """
-        return self._driver.subscribe(self._topic_make(topic), flags, fn, timeout)
+        return self._ctx.subscribe(topic.lstrip('/'), flags, fn, timeout)
 
     def unsubscribe(self, topic, fn, timeout=None):
         """Unsubscribe a callback to a topic.
@@ -378,7 +504,7 @@ class Device:
             to complete.  None waits the default amount.
             0 does not wait and subscription will occur asynchronously.
         """
-        return self._driver.unsubscribe(self._topic_make(topic), fn, timeout)
+        return self._ctx.unsubscribe(topic.lstrip('/'), fn, timeout)
 
     def unsubscribe_all(self, fn, timeout=None):
         """Unsubscribe a callback from all topics.
@@ -388,7 +514,7 @@ class Device:
             to complete.  None waits the default amount.
             0 does not wait and subscription will occur asynchronously.
         """
-        return self._driver.unsubscribe(fn, timeout)
+        return self._driver.unsubscribe_all(fn, timeout)
 
     def _config_apply(self, config=None):
         """Apply a configuration set by scan.
@@ -433,7 +559,7 @@ class Device:
             * None: equivalent to 'defaults'.
         :param timeout: The timeout in seconds.  None uses the default timeout.
         """
-        rc = self._driver.open(self._path, mode, timeout)
+        self._ctx = self._driver.open(self._path, mode, timeout)
         self.is_open = True
         self.publish('h/fs', self._h_fs)
         while len(self._parameter_set_queue):
@@ -447,7 +573,7 @@ class Device:
                                           device=device,
                                           output_frequency=self._output_sampling_frequency)
         self._config_apply(self.config)
-        return rc
+        return self._ctx
 
     def close(self, timeout=None):
         """Close this device and release resources.
@@ -456,6 +582,7 @@ class Device:
         """
         if not self.is_open:
             return
+        self._statistics_queue_stop()
         if len(self._statistics_callbacks):
             self._statistics_stop()
         self.stop()
@@ -465,15 +592,16 @@ class Device:
         self._stream_cbk_objs.clear()
         self._stream_cbk_objs_add.clear()
         self.stream_buffer = None
-        return self._driver.close(self._path, timeout)
+        return self._ctx.close(timeout)  # also unsubscribes any remaining subscriptions
 
     @property
     def model(self):
-        return self._path.split('/')[1]
+        """The lowercase model, such as "js220"."""
+        return self._path.model
 
     @property
     def serial_number(self):
-        return self._path.split('/')[-1]
+        return self._path.serial_number
 
     @property
     def device_serial_number(self):
@@ -692,13 +820,40 @@ class Device:
     def status(self):
         """Get the current device status.
 
-        :return: A dict containing status information.
+        :return: A dict containing constant status information.
+
+        Deprecated: the v1 backend has no status to report, so this
+        always returns the same values.
         """
+        warn_once('status', 'Device.status() is deprecated: it returns constant values.')
         return {
             'driver': {
+                'settings_result': {
+                    'value': 0,
+                    'units': ''},
+                'fpga_frame_counter': {
+                    'value': 0,
+                    'units': 'frames'},
+                'fpga_discard_counter': {
+                    'value': 0,
+                    'units': 'frames'},
+                'sensor_flags': {
+                    'value': 0,
+                    'format': '0x{:02x}',
+                    'units': ''},
+                'sensor_i_range': {
+                    'value': 0,
+                    'format': '0x{:02x}',
+                    'units': ''},
+                'sensor_source': {
+                    'value': 0,
+                    'format': '0x{:02x}',
+                    'units': ''},
                 'return_code': {
                     'value': 0,
-                }
+                    'format': '{}',
+                    'units': '',
+                },
             }
         }
 
@@ -712,21 +867,10 @@ class Device:
         self.close()
 
     def _query_gpi_value(self):
-        gpi_value = None
-
-        def on_gpi_value(topic, value):
-            nonlocal gpi_value
-            gpi_value = value
-
-        self.subscribe('s/gpi/+/!value', 'pub', on_gpi_value)
-        self.publish('s/gpi/+/!req', 0)
-        t_start = time.time()
-        while gpi_value is None:
-            if time.time() - t_start > 1.0:
-                raise RuntimeError('_query_gpi_value timed out')
-            time.sleep(0.001)
-        self.unsubscribe('s/gpi/+/!value', on_gpi_value)
-        return gpi_value
+        try:
+            return self._ctx.publish_and_wait('s/gpi/+/!req', 0, 's/gpi/+/!value', timeout=1.0)
+        except TimeoutError as ex:
+            raise RuntimeError('_query_gpi_value timed out') from ex
 
     def extio_status(self):
         """Read the EXTIO GPI value.

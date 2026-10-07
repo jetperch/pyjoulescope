@@ -18,6 +18,7 @@ Test the JLS v2 writer.
 
 import unittest
 from joulescope import JlsWriter
+from joulescope.jls_v2_writer import signals_validator, sampling_rate_validator
 from joulescope.v0.stream_buffer import StreamBuffer, usb_packet_factory
 from pyjls import Reader
 import tempfile
@@ -33,6 +34,7 @@ class FakeJS110:
 
     def __init__(self):
         self._sampling_frequency = 2000000
+        self.info_calls = 0
 
     def __str__(self):
         return 'Joulescope:000001'
@@ -50,6 +52,7 @@ class FakeJS110:
             raise ValueError(r'invalid parameter {name}')
 
     def info(self):
+        self.info_calls += 1
         return {
             'type': 'info',
             'ver': 1,
@@ -123,4 +126,55 @@ class TestJlsWriter(unittest.TestCase):
             i_data = r.fsr(1, 0, i.length)
             np.testing.assert_allclose(np.arange(0, i.length * 2, 2), i_data)
 
+    def _source_and_rate(self):
+        with Reader(self._filename1) as r:
+            return r.sources[1], r.signals[1].sample_rate
 
+    def test_info_args(self):
+        d = FakeJS110()
+        info = {'model': 'JS320', 'hardware_version': '1.0.0', 'serial_number': '8W2A'}
+        with JlsWriter(d, self._filename1, info=info, sampling_frequency='1 MHz'):
+            pass
+        self.assertEqual(0, d.info_calls)
+        source, sample_rate = self._source_and_rate()
+        self.assertEqual('JS320', source.model)
+        self.assertEqual('8W2A', source.serial_number)
+        self.assertEqual(1000000, sample_rate)
+
+    def test_open_device_read_at_construction(self):
+        d = FakeJS110()
+        d.is_open = True
+        wr = JlsWriter(d, self._filename1)
+        self.assertEqual(1, d.info_calls)
+        d.info = None  # open() must not access the device, such as from a callback
+        d.parameter_get = None
+        with wr:
+            pass
+        source, sample_rate = self._source_and_rate()
+        self.assertEqual('000001', source.serial_number)
+        self.assertEqual(2000000, sample_rate)
+
+    def test_closed_device_read_at_open(self):
+        d = FakeJS110()
+        wr = JlsWriter(d, self._filename1)
+        self.assertEqual(0, d.info_calls)
+        with wr:
+            pass
+        self.assertEqual(1, d.info_calls)
+
+
+class TestValidators(unittest.TestCase):
+
+    def test_signals(self):
+        self.assertEqual(['current', 'voltage'], signals_validator('current, Voltage'))
+        self.assertEqual(['power'], signals_validator(['power']))
+        with self.assertRaises(ValueError):
+            signals_validator('gpi0')
+
+    def test_sampling_rate(self):
+        for value, expect in [(2000000, 2000000), ('2000000', 2000000), ('1 MHz', 1000000),
+                              ('500 kHz', 500000), ('10 Hz', 10), ('1MHz', 1000000)]:
+            with self.subTest(value=value):
+                self.assertEqual(expect, sampling_rate_validator(value))
+        with self.assertRaises(ValueError):
+            sampling_rate_validator('fast')

@@ -28,7 +28,7 @@ def parser_config(p):
 
 def on_cmd(args):
     quit_ = False
-    device = scan_require_one(name='Joulescope', config='off')
+    device = scan_require_one('Joulescope', config='off')
 
     def do_quit(*args, **kwargs):
         nonlocal quit_
@@ -58,10 +58,10 @@ def on_cmd(args):
     signal.signal(signal.SIGINT, do_quit)
     try:
         if args.compare:
-            device.statistics_callback_register(lambda s: statistics_cbk(s, '< '), 'sensor')
-            device.statistics_callback_register(lambda s: statistics_cbk(s, '> '), 'stream_buffer')
+            device.statistics_callback_register(lambda s: statistics_cbk(s, '< '))
+            device.statistics_callback_register(lambda s: statistics_cbk(s, '> '))
         else:
-            device.statistics_callback_register(statistics_cbk, 'sensor')
+            device.statistics_callback_register(statistics_cbk)
         device.parameter_set('buffer_duration', 1)
         device.open()
         device.parameter_set('i_range', 'auto')
@@ -70,7 +70,6 @@ def on_cmd(args):
             device.parameter_set('source', 'raw')
             device.start(stop_fn=on_stop)
         while not quit_:
-            device.status()
             time.sleep(0.100)
     except Exception as ex:
         logging.getLogger().exception('While getting statistics')

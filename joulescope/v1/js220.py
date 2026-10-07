@@ -16,6 +16,7 @@
 from .device import Device, _SIGNALS_EXTENDED
 from joulescope.parameter import Parameter
 from joulescope.parameters_v1 import PARAMETERS_DICT, name_to_value
+from pyjoulescope_driver.program import version_to_str
 
 
 _I_RANGE_LOOKUP = {
@@ -87,14 +88,6 @@ def _signal_bool(value):
         return True
     else:
         raise ValueError('invalid signal level.')
-
-
-def _version_u32_to_str(v):
-    v = int(v)
-    major = (v >> 24) & 0xff
-    minor = (v >> 16) & 0xff
-    patch = v & 0xffff
-    return f'{major}.{minor}.{patch}'
 
 
 class DeviceJs220(Device):
@@ -231,7 +224,7 @@ class DeviceJs220(Device):
             self._log.warning('Unsupported config %s', config)
 
     def info(self):
-        hardware_version = _version_u32_to_str(self.query('c/hw/version'))
+        hardware_version = version_to_str(self.query('c/hw/version'))
         info = {
             'type': 'info',
             'ver': 2,
@@ -240,55 +233,22 @@ class DeviceJs220(Device):
             'serial_number': self.serial_number,
             'ctl': {
                 'hw': {
-                    'rev': _version_u32_to_str(self.query('c/hw/version')),
+                    'rev': hardware_version,
                     'sn_mcu': self.serial_number,
                     'sn_mfg': self.serial_number,
                     'ver': hardware_version,
                 },
                 'fw': {
-                    'ver': _version_u32_to_str(self.query('c/fw/version')),
+                    'ver': version_to_str(self.query('c/fw/version')),
                 }
             },
             'sensor': {
                 'fw': {
-                    'ver': _version_u32_to_str(self.query('s/fpga/version')),
+                    'ver': version_to_str(self.query('s/fpga/version')),
                 },
                 'fpga': {
-                    'ver': _version_u32_to_str(self.query('s/fpga/version')),
+                    'ver': version_to_str(self.query('s/fpga/version')),
                 },
             },
         }
         return info
-
-    def status(self):
-        return {
-            'driver': {
-                'settings_result': {
-                    'value': 0,
-                    'units': ''},
-                'fpga_frame_counter': {
-                    'value': 0,
-                    'units': 'frames'},
-                'fpga_discard_counter': {
-                    'value': 0,
-                    'units': 'frames'},
-                'sensor_flags': {
-                    'value': 0,
-                    'format': '0x{:02x}',
-                    'units': ''},
-                'sensor_i_range': {
-                    'value': 0,
-                    'format': '0x{:02x}',
-                    'units': ''},
-                'sensor_source': {
-                    'value': 0,
-                    'format': '0x{:02x}',
-                    'units': ''},
-                'return_code': {
-                    'value': 0,
-                    'format': '{}',
-                    'units': '',
-                },
-            }
-        }
-
