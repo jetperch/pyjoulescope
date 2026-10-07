@@ -4,7 +4,7 @@
 This file contains the list of changes made to pyjoulescope.
 
 
-## 1.6.1
+## 1.7.0
 
 2026 Oct 7 [in progress]
 
