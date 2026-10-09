@@ -92,6 +92,18 @@ class TestDeviceStreamProcess(unittest.TestCase):
         self.assertEqual(1, obj.closed)  # not called again: unregistered
 
 
+class TestReadRemoved(unittest.TestCase):
+
+    def test_read_raises_on_removal(self):
+        d = DeviceJs220(FakeDriver(), 'u/js220/000000')
+        d.open()
+        t = threading.Timer(0.1, d._on_remove)  # as the driver thread does on unplug
+        t.start()
+        with self.assertRaisesRegex(RuntimeError, 'device removed'):
+            d.read(duration=0.5)
+        t.join()
+
+
 class TestSignalsParameter(unittest.TestCase):
 
     def _device(self, cls=None, path='u/js220/000000'):

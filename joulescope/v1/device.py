@@ -872,13 +872,15 @@ class Device:
             raise ValueError(f'duration {duration} > {duration_max} max seconds')
         q = queue.Queue()
 
-        def on_stop(*args, **kwargs):
+        def on_stop(event=0, message=''):
             self._log.info('received stop callback: pending stop')
-            q.put(None)
+            q.put(message)
 
         self.start(on_stop, duration=duration, contiguous_duration=contiguous_duration)
-        q.get()
+        message = q.get()
         self.stop()
+        if self.stream_buffer is None:  # such as an unplug, which closes the device
+            raise RuntimeError(f'read stopped: {message or "device closed"}')
         start_id, end_id = self.stream_buffer.sample_id_range
         self._log.info('read available range %s, %s', start_id, end_id)
         if contiguous_duration is not None:
