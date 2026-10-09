@@ -38,11 +38,11 @@ LEGACY_FIELDS = ['current', 'voltage', 'power', 'current_range',
                  'current_lsb', 'voltage_lsb']
 
 
-def _msg(field_id, index, sample_id, data, sample_rate, decimate_factor):
+def _msg(field_id, index, sample_id, data, sample_rate, decimate_factor, utc=0):
     """Replicate the pyjoulescope_driver binding stream message dict."""
     return {
         'sample_id': sample_id,
-        'utc': 0,
+        'utc': utc,
         'field_id': field_id,
         'index': index,
         'sample_rate': sample_rate,
@@ -73,7 +73,7 @@ class DeviceSim:
         self.sample_id = 0  # full-rate (native) sample id
 
     def feed(self, duration_ids, current=1.0, voltage=2.0, current_range=3,
-             gpi0=0, gpi1=1):
+             gpi0=0, gpi1=1, utc=0):
         """Feed one message per stream covering duration_ids native ids."""
         sample_id = self.sample_id
         n_ivp = duration_ids // self._ivp_decimate
@@ -93,7 +93,7 @@ class DeviceSim:
                 ((5, 1), g1, self._aux_decimate)]:
             self._b.insert('s/x/!data', _msg(
                 field_id, index, sample_id, data,
-                self._sample_rate, decimate))
+                self._sample_rate, decimate, utc))
         self.sample_id += duration_ids
 
 
@@ -371,3 +371,40 @@ class TestStreamBufferExtendedSignals(unittest.TestCase):
         self.assertAlmostEqual(1.0, out[0, 0]['mean'], places=6)
         self.assertTrue(np.isnan(out[0, 2]['mean']))  # power inactive
         self.assertTrue(np.isnan(out[0, 4]['mean']))  # gpi0 inactive
+
+
+class TestStreamBufferUtcAnchor(unittest.TestCase):
+
+    def test_none_before_data(self):
+        b = StreamBuffer(0.01, frequency=2000000, device='js110')
+        self.assertIsNone(b.utc_anchor)
+
+    def test_full_rate(self):
+        b = StreamBuffer(0.01, frequency=2000000, device='js110')
+        sim = DeviceSim(b, 2000000, 1, 1)
+        sim.feed(1000, utc=100)
+        sim.feed(1000, utc=200)
+        self.assertEqual((1000, 200), b.utc_anchor)
+
+    def test_instrument_decimate(self):
+        b = StreamBuffer(0.01, frequency=16000000, device='js220',
+                         output_frequency=1000000)
+        sim = DeviceSim(b, 16000000, 16, 16)
+        sim.feed(16000)
+        sim.feed(16000, utc=300)
+        self.assertEqual((1000, 300), b.utc_anchor)
+
+    def test_host_decimate(self):
+        b = StreamBuffer(0.01, frequency=2000000, device='js110',
+                         output_frequency=1000000)
+        sim = DeviceSim(b, 2000000, 1, 1)
+        sim.feed(2000)
+        sim.feed(2000, utc=400)
+        self.assertEqual((1000, 400), b.utc_anchor)
+        self.assertEqual((0, 2000), b.sample_id_range)
+
+    def test_reset_clears(self):
+        b = StreamBuffer(0.01, frequency=2000000, device='js110')
+        DeviceSim(b, 2000000, 1, 1).feed(1000, utc=100)
+        b.reset()
+        self.assertIsNone(b.utc_anchor)

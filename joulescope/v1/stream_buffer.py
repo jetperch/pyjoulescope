@@ -104,6 +104,7 @@ class StreamBuffer:
         self._duration_max = 0
         self._contiguous_duration_max = 0
         self._sample_id_start = None
+        self._utc_anchor = None
         self._callback = None
         self._update()
 
@@ -260,6 +261,17 @@ class StreamBuffer:
         _, s_max = self.sample_id_range
         return (s_max - len(self)), s_max
 
+    @property
+    def utc_anchor(self):
+        """The most recent mapping from sample id to UTC time.
+
+        :return: The tuple (sample_id, utc) where sample_id is in this
+            buffer's output sample id space and utc is the
+            :mod:`joulescope.time` timestamp for that sample, or None
+            before the first sample.
+        """
+        return self._utc_anchor
+
     def time_to_sample_id(self, t):
         idx_start, idx_end = self.limits_samples
         t_start, t_end = self.limits_time
@@ -287,6 +299,7 @@ class StreamBuffer:
         for b in self.buffers.values():
             b.clear()
         self._sample_id_start = None
+        self._utc_anchor = None
 
     def insert(self, topic, value):
         try:
@@ -308,6 +321,11 @@ class StreamBuffer:
                   sample_rate=sample_rate,
                   decimate_factor=decimate_factor,
                   local_decimate_factor=local_decimate)
+            utc = value.get('utc')
+            if utc is not None:
+                # same output sample id scaling as SampleBuffer.add
+                k = (decimate_factor or 1) * local_decimate
+                self._utc_anchor = (value['sample_id'] // k, int(utc))
             if self._sample_id_start is None:
                 e1, e2 = self.sample_id_range
                 if e1 is not None and e1 != e2:

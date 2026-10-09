@@ -192,7 +192,9 @@ def test_statistics_accumulators_clear(device):
 def test_jls_writer(device, tmp_path):
     from joulescope import JlsWriter
     from pyjls import Reader
+    from joulescope.time import timestamp_to_seconds
     path = str(tmp_path / 'test.jls')
+    t_start = time.time()
     with JlsWriter(device, path, signals='current,voltage') as wr:
         device.stream_process_register(wr)
         try:
@@ -207,6 +209,9 @@ def test_jls_writer(device, tmp_path):
             if s.name in ['current', 'voltage']:
                 assert s.length > 0
                 assert s.sample_rate == device.output_sampling_frequency
+                # issue #37: the start time was 2018-01-01
+                utc = r.sample_id_to_timestamp(s.signal_id, 0)
+                assert abs(timestamp_to_seconds(utc) - t_start) < 5.0
 
 
 def test_capture_entry_point(device_closed, tmp_path):

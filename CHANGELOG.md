@@ -28,6 +28,10 @@ This file contains the list of changes made to pyjoulescope.
   statistics on the caller's thread.
 * Added Device.statistics_source, and corrected the statistics "source"
   key, which was always "sensor", to "host" for JS110 host statistics.
+* JlsWriter now writes UTC time to JLS v2 files, so viewers show the
+  capture time instead of 2018-01-01 (#37).  The v1 StreamBuffer adds
+  utc_anchor, and JlsWriter.fsr_f32() accepts an optional utc.
+  The deprecated v0 backend still writes no UTC.
   The statistics_callback_register() source argument now selects the
   source on the JS110, as on the v0 backend.  The JS220 and JS320
   ignore "host" with a DeprecationWarning.

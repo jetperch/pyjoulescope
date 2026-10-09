@@ -19,7 +19,11 @@ Test the JLS v2 writer.
 import unittest
 from joulescope import JlsWriter
 from joulescope.jls_v2_writer import signals_validator, sampling_rate_validator
+from joulescope.jls_v2_writer import UTC_INTERVAL
+from joulescope.time import seconds_to_timestamp
 from joulescope.v0.stream_buffer import StreamBuffer, usb_packet_factory
+from joulescope.v1.stream_buffer import StreamBuffer as StreamBufferV1
+from joulescope.v1.test.test_stream_buffer import DeviceSim
 from pyjls import Reader
 import tempfile
 import numpy as np
@@ -125,6 +129,49 @@ class TestJlsWriter(unittest.TestCase):
 
             i_data = r.fsr(1, 0, i.length)
             np.testing.assert_allclose(np.arange(0, i.length * 2, 2), i_data)
+            # v0 has no UTC: the reader default, 2018-01-01
+            self.assertEqual([(0, 0)], r.time_map_get(1).tolist())
+
+    def _time_maps(self):
+        with Reader(self._filename1) as r:
+            return {k: r.time_map_get(k).tolist() for k in [1, 2]}
+
+    def _v1_capture(self, utcs, n=1000, **kwargs):
+        d = FakeJS110()
+        b = StreamBufferV1(1.0, frequency=2000000, device='js110')
+        sim = DeviceSim(b, 2000000, 1, 1)
+        with JlsWriter(d, self._filename1, **kwargs) as wr:
+            for utc in utcs:
+                sim.feed(n, utc=utc)
+                wr.stream_notify(b)
+                wr.stream_notify(b)  # unchanged anchor must not duplicate
+
+    def test_v1_utc_first_and_close(self):
+        t0 = seconds_to_timestamp(1.8e9)
+        dt = (1000 << 30) // 2000000
+        self._v1_capture([t0, t0 + dt, t0 + 2 * dt])
+        expect = [(0, t0), (2000, t0 + 2 * dt)]
+        self.assertEqual({1: expect, 2: expect}, self._time_maps())
+        with Reader(self._filename1) as r:
+            self.assertEqual(t0 + dt, r.sample_id_to_timestamp(1, 1000))
+
+    def test_v1_utc_interval(self):
+        t0 = seconds_to_timestamp(1.8e9)
+        utcs = [t0, t0 + UTC_INTERVAL // 2, t0 + UTC_INTERVAL, t0 + UTC_INTERVAL + 1]
+        self._v1_capture(utcs, signals='current')
+        with Reader(self._filename1) as r:
+            m = r.time_map_get(1).tolist()
+        self.assertEqual([(0, t0), (2000, t0 + UTC_INTERVAL),
+                          (3000, t0 + UTC_INTERVAL + 1)], m)
+
+    def test_fsr_f32_utc(self):
+        d = FakeJS110()
+        t0 = seconds_to_timestamp(1.8e9)
+        with JlsWriter(d, self._filename1, signals='current') as wr:
+            wr.fsr_f32('current', 0, np.zeros(1000), utc=t0)
+            wr.fsr_f32('current', 1000, np.zeros(1000))
+        with Reader(self._filename1) as r:
+            self.assertEqual([(0, t0)], r.time_map_get(1).tolist())
 
     def _source_and_rate(self):
         with Reader(self._filename1) as r:

@@ -31,6 +31,8 @@ SIGNALS = {
     'power': (3, 'W'),
 }
 
+UTC_INTERVAL = 60 * 2 ** 30  #: The UTC entry interval, in joulescope.time units.
+
 
 def signals_validator(s):
     """Validate the JLS writer signal names.
@@ -110,6 +112,9 @@ class JlsWriter:
             self._sampling_frequency = sampling_rate_validator(sampling_frequency)
         self._wr = None
         self._idx = 0
+        self._utc_next = None
+        self._utc_last = None
+        self._utc_pending = None
 
     def _device_read(self):
         if self._info is None:
@@ -167,13 +172,44 @@ class JlsWriter:
             raise
 
         self._wr = wr
+        self._utc_next = None
+        self._utc_last = None
+        self._utc_pending = None
         return wr
 
     def close(self):
         """Finalize and close the JLS file."""
         wr, self._wr = self._wr, None
         if wr is not None:
-            wr.close()
+            try:
+                if self._utc_pending is not None:
+                    self._utc_write(wr, *self._utc_pending)
+            finally:
+                self._utc_pending = None
+                wr.close()
+
+    def _utc_write(self, wr, sample_id, utc):
+        self._utc_last = sample_id
+        for s in self._signals:
+            wr.utc(SIGNALS[s][0], sample_id, utc)
+
+    def _utc_update(self, anchor):
+        # Same cadence as pyjoulescope_driver Record: the first anchor,
+        # one per UTC_INTERVAL, and the latest anchor at close.
+        if anchor is None:
+            return
+        sample_id, utc = anchor
+        if self._utc_last is not None and sample_id <= self._utc_last:
+            return  # entries must advance
+        if self._utc_next is None:
+            self._utc_write(self._wr, sample_id, utc)
+            self._utc_next = utc + UTC_INTERVAL
+        elif utc >= self._utc_next:
+            self._utc_write(self._wr, sample_id, utc)
+            self._utc_next += UTC_INTERVAL
+            self._utc_pending = None
+        else:
+            self._utc_pending = anchor
 
     def stream_notify(self, stream_buffer):
         """Handle incoming stream data.
@@ -187,6 +223,8 @@ class JlsWriter:
         start_id, end_id = stream_buffer.sample_id_range
         start_id = max(self._idx, start_id)
         if start_id < end_id:
+            # the v0 StreamBuffer has no UTC information
+            self._utc_update(getattr(stream_buffer, 'utc_anchor', None))
             data = stream_buffer.samples_get(start_id, end_id, fields=self._signals)
             for s in self._signals:
                 x = np.ascontiguousarray(data['signals'][s]['value'])
@@ -195,15 +233,21 @@ class JlsWriter:
             self._idx = end_id
         return False
 
-    def fsr_f32(self, signal_name, sample_id, x):
+    def fsr_f32(self, signal_name, sample_id, x, utc=None):
         """Write signal data directly.
 
         :param signal_name: The signal name string.
         :param sample_id: The starting sample id for x.
         :param x: The 1-d ndarray of float sample data
+        :param utc: The optional :mod:`joulescope.time` UTC timestamp
+            for sample_id.  Provide it for the first write, and then
+            periodically, such as every minute, so that readers can
+            display the sample time.
         """
         idx = SIGNALS[signal_name][0]
         sample_id = int(sample_id)
+        if utc is not None:
+            self._wr.utc(idx, sample_id, int(utc))
         if x.dtype != np.float32:
             x = x.astype(np.float32)
         self._wr.fsr_f32(idx, sample_id, np.ascontiguousarray(x))
