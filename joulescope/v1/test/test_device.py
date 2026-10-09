@@ -677,6 +677,23 @@ class TestDeviceRemove(unittest.TestCase):
         self.assertEqual(1, len(result))
         self.assertEqual({'sensor': []}, d._statistics_callbacks)
 
+    def test_remove_while_statistics_get_registers(self):
+        # removal between the stats subscribe and the callback append
+        d, driver = self._open()
+        statistics_start = d._statistics_start
+
+        def statistics_start_then_remove(source):
+            statistics_start(source)
+            d._on_remove()
+
+        d._statistics_start = statistics_start_then_remove
+        with self.assertRaises(RuntimeError):
+            d.statistics_get(timeout=1.0)
+        self.assertEqual({'sensor': []}, d._statistics_callbacks)
+        d._statistics_start = statistics_start
+        d.open()
+        self.assertEqual({}, driver.fns)  # no stale statistics subscription
+
 
 if __name__ == '__main__':
     unittest.main()

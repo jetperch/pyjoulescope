@@ -374,12 +374,20 @@ class Device:
             raise RuntimeError('statistics_get requires an open device')
         timeout = _STATISTICS_TIMEOUT if timeout is None else float(timeout)
         cond = self._statistics_queue_cond
+        q = None
         with cond:
-            register = self._statistics_queue is None
-            if register:
-                self._statistics_queue = collections.deque(maxlen=_STATISTICS_QUEUE_LENGTH)
-        if register:  # outside the lock: the driver thread calls _on_statistics_queue
+            if self._statistics_queue is None:
+                q = collections.deque(maxlen=_STATISTICS_QUEUE_LENGTH)
+                self._statistics_queue = q
+        if q is not None:  # outside the lock: the driver thread calls _on_statistics_queue
             self.statistics_callback_register(self._on_statistics_queue)
+            with cond:
+                stale = self._statistics_queue is not q
+            if stale:  # close or removal stopped q before the callback was added
+                for source, cbks in list(self._statistics_callbacks.items()):
+                    if self._on_statistics_queue in cbks:
+                        self.statistics_callback_unregister(self._on_statistics_queue, source)
+                        break
         with cond:
             ready = cond.wait_for(self._statistics_queue_ready, timeout)
             if self._statistics_queue is None:
