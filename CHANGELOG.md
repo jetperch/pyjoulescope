@@ -6,7 +6,7 @@ This file contains the list of changes made to pyjoulescope.
 
 ## 1.7.0
 
-2026 Oct 7 [in progress]
+2026 Oct 9
 
 * Bumped pyjoulescope_driver from 2.4.0 to 2.5.0.
   Device.open() in the default mode now restores the JS220 settings,
