@@ -9,6 +9,9 @@ This file contains the list of changes made to pyjoulescope.
 2026 Oct 7 [in progress]
 
 * Bumped pyjoulescope_driver from 2.4.0 to 2.5.0.
+  Device.open() in the default mode now restores the JS220 settings,
+  including the statistics rate, to their defaults, as the JS320 always
+  did.  Use open(mode='restore') to keep the instrument's settings.
 * The v1 backend now tracks devices with pyjoulescope_driver
   Driver.device_watch, which reports each device addition and removal
   once, without races between the device list and hotplug events.
@@ -23,16 +26,30 @@ This file contains the list of changes made to pyjoulescope.
   RuntimeError, with a message listing the available devices.
 * Added Device.statistics_get() and Device.statistics_iter() to receive
   statistics on the caller's thread.
-* Added Device.statistics_source and the statistics "source" key.
-  Deprecated the ignored statistics_callback_register() source argument.
+* Added Device.statistics_source, and corrected the statistics "source"
+  key, which was always "sensor", to "host" for JS110 host statistics.
+  The statistics_callback_register() source argument now selects the
+  source on the JS110, as on the v0 backend.  The JS220 and JS320
+  ignore "host" with a DeprecationWarning.
+* Added Device.firmware: "app" or "bootloader".
 * Deprecated Device.status(), which returns constant values on v1.
-* JlsWriter accepts info and sampling_frequency arguments, and reads the
-  device at construction when the device is open, so open() may be called
-  from a callback.
+* JlsWriter accepts info and sampling_frequency arguments.  With both,
+  open() does not access the device, so a callback may call it.
 * Made jls_v2_writer.signals_validator() and sampling_rate_validator()
   public.  The private names remain as aliases.
 * Documented threads and the recommended run length pattern.
 * Fixed v1 Device.unsubscribe_all(), which called Driver.unsubscribe.
+* Fixed device removal, which called Device.close() on the driver thread:
+  the Device now releases its host-side state without blocking, calls
+  any stop_fn with event 1, and closes its stream process objects.
+* Fixed DeviceNotify, which could miss a device inserted while starting.
+  It now follows the device list that scan() uses.
+* Fixed scan() for a device removed during the scan.
+* Fixed v1 statistics time.range and time.delta on the JS320, which were
+  8x too large.  The Device assumed a 2 MHz sample id rate; it now uses
+  the driver's time.sample_freq, which is 16 MHz on the JS320.
+* Fixed v1 statistics time.range and accumulators after close() and
+  open(), which kept the offsets from the previous open.
 * The v1 Device now uses pyjoulescope_driver DeviceContext, DevicePath,
   publish_and_wait() and version_to_str() instead of its own copies.
   Device.close() unsubscribes any remaining subscriptions, and

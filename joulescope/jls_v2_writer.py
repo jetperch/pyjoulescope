@@ -80,18 +80,23 @@ class JlsWriter:
             or a comma-separated string.  The supported signals include
             ['current', 'voltage', 'power']
         :param info: The device information from :meth:`Device.info`.
-            None (default) reads it from the device.
+            None (default) reads it from the device in :meth:`open`.
         :param sampling_frequency: The sampling frequency in Hz.
-            None (default) reads it from the device.
+            None (default) reads it from the device in :meth:`open`.
 
         This class implements joulescope.driver.StreamProcessApi and may also
         be used as a context manager.
 
-        When the device is open, the constructor reads any missing device
-        information, and :meth:`open` does not access the device.  You may
-        then call :meth:`open` from a stream or statistics callback, such as
-        to start recording on a trigger.  Otherwise, :meth:`open` reads the
-        missing information, and you must call it from your thread.
+        The constructor does not access the device.  :meth:`open` reads
+        the device information that was not provided, so call it from your
+        thread, not from a stream or statistics callback.  To open from a
+        callback, such as to start recording on a trigger, first read
+        the information on your thread and pass it to the constructor::
+
+            info = device.info()
+            fs = device.parameter_get('sampling_frequency')
+            wr = JlsWriter(device, 'trigger.jls', info=info, sampling_frequency=fs)
+            # wr.open() and wr.close() are now safe from a callback
         """
         self._device = device
         self._filename = filename
@@ -103,8 +108,6 @@ class JlsWriter:
         self._sampling_frequency = None
         if sampling_frequency is not None:
             self._sampling_frequency = sampling_rate_validator(sampling_frequency)
-        if getattr(device, 'is_open', False):
-            self._device_read()
         self._wr = None
         self._idx = 0
 
@@ -123,7 +126,12 @@ class JlsWriter:
         self.close()
 
     def open(self):
-        """Open and configure the JLS writer file."""
+        """Open and configure the JLS writer file.
+
+        This method reads the device information that the constructor
+        did not receive, so see the constructor for which thread may
+        call it.
+        """
         self.close()
         self._device_read()
         info = self._info

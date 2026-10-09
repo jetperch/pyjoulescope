@@ -82,10 +82,11 @@ class DeviceJs110(Device):
     def statistics_source(self):
         return 'sensor' if self.config == 'off' else 'host'
 
-    def _statistics_topics(self):
-        if self.statistics_source == 'sensor':
-            return None, 's/sstats/value'  # s/sstats/ctrl defaults to enabled
-        return super()._statistics_topics()
+    def _statistics_sources(self):
+        # The instrument computes 'sensor' statistics at 2 Hz without the
+        # standard deviation, and s/sstats/ctrl defaults to enabled.
+        return {'sensor': (None, 's/sstats/value'),
+                'host': ('s/stats/ctrl', 's/stats/value')}
 
     def _config_apply(self, config=None):
         for key, value in PARAMETERS_DEFAULTS.get(config, {}).items():

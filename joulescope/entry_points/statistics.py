@@ -22,7 +22,7 @@ def parser_config(p):
     """Display Joulescope statistics."""
     p.add_argument('--compare',
                    action='store_true',
-                   help='Compare sensor statistics to host stream_buffer statistics.')
+                   help='Compare sensor statistics to host statistics (JS110 only).')
     return on_cmd
 
 
@@ -58,8 +58,8 @@ def on_cmd(args):
     signal.signal(signal.SIGINT, do_quit)
     try:
         if args.compare:
-            device.statistics_callback_register(lambda s: statistics_cbk(s, '< '))
-            device.statistics_callback_register(lambda s: statistics_cbk(s, '> '))
+            device.statistics_callback_register(lambda s: statistics_cbk(s, '< '), 'sensor')
+            device.statistics_callback_register(lambda s: statistics_cbk(s, '> '), 'host')
         else:
             device.statistics_callback_register(statistics_cbk)
         device.parameter_set('buffer_duration', 1)

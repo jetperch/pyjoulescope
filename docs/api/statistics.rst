@@ -34,23 +34,28 @@ The data structure contains the following top-level keys:
 Statistics source
 -----------------
 
-The model and the scan config select where the statistics are computed.
+The model and the scan config select where the statistics are computed
+by default.
 :attr:`Device.statistics_source <joulescope.v1.device.Device.statistics_source>`
-reports the source for a device.
+reports the default source for a device.
 
 =========  ====================  ==========================================
-Model      scan config           Source
+Model      scan config           Default source
 =========  ====================  ==========================================
 JS110      'auto', 'ignore',     host: computed by the host driver from the
-           None                  2 Msps sample stream.
-JS110      'off'                 sensor: computed on the instrument.
+           None                  2 Msps sample stream, which requires
+                                 streaming.
+JS110      'off'                 sensor: computed on the instrument at 2 Hz,
+                                 without the standard deviation.
 JS220      any                   sensor: computed on the instrument.
 JS320      any                   sensor: computed on the instrument.
 =========  ====================  ==========================================
 
-The ``source`` argument of ``statistics_callback_register`` and
-``statistics_callback_unregister`` is deprecated and ignored.  It issues
-a DeprecationWarning on first use.
+The ``source`` argument of ``statistics_callback_register`` selects the
+source for that callback: 'sensor', 'host', or the legacy v0 name
+'stream_buffer' for 'host'.  The JS110 supports both sources, even at the
+same time.  The JS220 and JS320 only compute statistics on the
+instrument, so they ignore 'host' and issue a DeprecationWarning once.
 
 
 Statistics on your thread

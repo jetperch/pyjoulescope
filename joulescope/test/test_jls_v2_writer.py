@@ -141,18 +141,38 @@ class TestJlsWriter(unittest.TestCase):
         self.assertEqual('8W2A', source.serial_number)
         self.assertEqual(1000000, sample_rate)
 
-    def test_open_device_read_at_construction(self):
+    def test_constructor_does_not_access_open_device(self):
         d = FakeJS110()
         d.is_open = True
         wr = JlsWriter(d, self._filename1)
+        self.assertEqual(0, d.info_calls)
+        d.parameter_set('sampling_frequency', 100000)  # after construction, before open
+        with wr:
+            pass
         self.assertEqual(1, d.info_calls)
-        d.info = None  # open() must not access the device, such as from a callback
+        source, sample_rate = self._source_and_rate()
+        self.assertEqual('000001', source.serial_number)
+        self.assertEqual(100000, sample_rate)
+
+    def test_args_allow_open_from_callback(self):
+        d = FakeJS110()
+        wr = JlsWriter(d, self._filename1, info=d.info(), sampling_frequency=d.parameter_get('sampling_frequency'))
+        d.info = None  # open() must not access the device
         d.parameter_get = None
         with wr:
             pass
         source, sample_rate = self._source_and_rate()
         self.assertEqual('000001', source.serial_number)
         self.assertEqual(2000000, sample_rate)
+
+    def test_reopen_reuses_device_read(self):
+        d = FakeJS110()
+        wr = JlsWriter(d, self._filename1)
+        wr.open()
+        wr.close()
+        wr.open()
+        wr.close()
+        self.assertEqual(1, d.info_calls)
 
     def test_closed_device_read_at_open(self):
         d = FakeJS110()

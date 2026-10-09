@@ -98,9 +98,9 @@ class TestDriverWrapper(unittest.TestCase):
         self.d.add('u/mb/1')
         self.assertNotIn('u/mb/1', self.w.devices)
         device = self.w.devices['u/js220/2']
-        with mock.patch.object(device, 'close') as close:
+        with mock.patch.object(device, '_on_remove') as on_remove:
             self.d.remove('u/js220/2')
-        close.assert_called_once_with()
+        on_remove.assert_called_once_with()
         self.assertNotIn('u/js220/2', self.w.devices)
         self.d.remove('u/js220/2')  # not present
 
@@ -108,6 +108,38 @@ class TestDriverWrapper(unittest.TestCase):
         self.d.add('u/&js220/3')
         self.assertEqual(['u/js320/8W2A'], [x.device_path for x in self.w.scan()])
         self.assertEqual(['u/&js220/3'], [x.device_path for x in self.w.scan('bootloader')])
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            self.assertEqual(['u/&js220/3'],
+                             [x.device_path for x in self.w.scan(name='bootloader')])
+
+    def test_scan_during_removal(self):
+        # the driver thread removes a device between the path match and the lookup
+        paths = self.w.paths
+        with mock.patch.object(self.w, 'paths', lambda specs: (self.d.remove('u/js320/8W2A'),
+                                                                 paths(specs))[1]):
+            self.assertEqual([], self.w.scan())
+
+    def test_notify(self):
+        events = []
+        self.w.notify_register(lambda *args: events.append(args))
+        self.d.add('u/js220/1')
+        self.d.add('u/mb/1')  # all devices, not just the supported models
+        self.d.remove('u/js220/1')
+        self.assertEqual([(True, 'u/js220/1'), (True, 'u/mb/1'), (False, 'u/js220/1')], events)
+        self.w.notify_unregister(events.append)  # not registered: ignored
+
+    def test_notify_exception_isolated(self):
+        events = []
+
+        def raises(*args):
+            raise RuntimeError('cbk')
+
+        self.w.notify_register(raises)
+        self.w.notify_register(lambda *args: events.append(args))
+        with self.assertLogs(v1_driver._log, 'ERROR'):
+            self.d.add('u/js220/1')
+        self.assertEqual([(True, 'u/js220/1')], events)
 
     def test_finalize(self):
         self.w._finalize()
@@ -204,26 +236,45 @@ class TestScan(unittest.TestCase):
 class TestDeviceNotify(unittest.TestCase):
 
     def setUp(self):
-        self.d = FakeDriver()
-        self.d.connected = ['u/js320/8W2A']
-        wrapper = mock.Mock(driver=self.d)
-        p = mock.patch.object(v1_driver, 'DriverWrapper', return_value=wrapper)
-        p.start()
-        self.addCleanup(p.stop)
+        patches = [
+            mock.patch.object(v1_driver, 'Driver', FakeDriver),
+            mock.patch.object(v1_driver.atexit, 'register'),
+            mock.patch.object(v1_driver.DriverWrapper, '__singleton__', None),
+            mock.patch.object(FakeDriver, 'connected', ['u/js320/8W2A']),
+        ]
+        for p in patches:
+            p.start()
+            self.addCleanup(p.stop)
         self.events = []
 
     def cbk(self, inserted, info):
         self.events.append((inserted, info))
+        if info is None:  # the initial call sees the current devices
+            self.scanned = [d.device_path for d in v1_driver.scan()]
 
     def test_notify(self):
         n = v1_driver.DeviceNotify(self.cbk)
+        d = v1_driver.DriverWrapper().driver
         self.assertEqual([(True, None)], self.events)  # connected devices not repeated
-        self.d.add('u/js220/1')
-        self.d.remove('u/js320/8W2A')
+        self.assertEqual(['u/js320/8W2A'], self.scanned)
+        d.add('u/js220/1')
+        d.remove('u/js320/8W2A')
         self.assertEqual([(True, None), (True, 'u/js220/1'), (False, 'u/js320/8W2A')],
                          self.events)
         n.close()
         n.close()
-        self.assertEqual([], self.d.watches)
-        self.d.add('u/js110/1')
+        d.add('u/js110/1')
         self.assertEqual(3, len(self.events))
+        n.open()
+        d.add('u/js110/2')
+        self.assertEqual((True, 'u/js110/2'), self.events[-1])
+        n.close()
+
+    def test_scan_consistent_with_notifications(self):
+        # Every device is either in the initial scan or reported, never neither.
+        n = v1_driver.DeviceNotify(self.cbk)
+        d = v1_driver.DriverWrapper().driver
+        d.add('u/js220/1')
+        reported = [info for inserted, info in self.events if inserted and info is not None]
+        self.assertEqual(['u/js320/8W2A', 'u/js220/1'], self.scanned + reported)
+        n.close()

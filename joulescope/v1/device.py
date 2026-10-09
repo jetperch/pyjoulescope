@@ -20,6 +20,7 @@ from joulescope.view import View
 from pyjoulescope_driver import DeviceContext, DevicePath
 import collections
 import copy
+import functools
 import logging
 import numpy as np
 import queue
@@ -56,11 +57,12 @@ _STATISTICS_TIMEOUT = 2.0
 _STATISTICS_QUEUE_LENGTH = 100
 
 
-def _source_deprecated(source):
-    if source is not None:
-        warn_once('statistics_source',
-                  'The statistics callback source is deprecated and ignored.  '
-                  'See Device.statistics_source.')
+# The statistics source names and the legacy v0 alias.
+_STATISTICS_SOURCE_NAMES = {'sensor', 'host'}
+_STATISTICS_SOURCE_ALIASES = {'stream_buffer': 'host'}
+
+# The stop_fn event for device removal: v0 DeviceEvent.COMMUNICATION_ERROR.
+_EVENT_DEVICE_REMOVED = 1
 
 
 class Device:
@@ -79,17 +81,16 @@ class Device:
         self._input_sampling_frequency = 0
         self._output_sampling_frequency = 0
         self._h_fs = 2000000  # value published to h/fs on open: the maximum streaming rate
-        self._statistics_callbacks = []
-        self._statistics_offsets = []
+        self._statistics_callbacks = {}  # source -> [cbk]
+        self._statistics_offsets = {}  # source -> [duration, charge, energy]
         self._statistics_queue = None  # deque for statistics_get, when active
         self._statistics_queue_cond = threading.Condition()
-        self._statistics_active = None  # (ctrl, topic, source) while subscribed
+        self._statistics_active = {}  # source -> (ctrl, topic, fn) while subscribed
         self._is_streaming = False
         self._signals_map = dict(_SIGNALS_BASE)
         self._streaming_topics = []
         self._buffer_duration = 30
         self.stream_buffer = None
-        self._on_stats_cbk = self._on_stats  # hold reference for unsub
         self._on_stream_cbk = self._on_stream  # hold reference for unsub
         self._parameters = {}
         self._parameters_override = {}  # name -> device-specific Parameter
@@ -158,12 +159,11 @@ class Device:
 
     @property
     def statistics_callback(self):
-        """Get the registered statistics callback."""
-        cbks = self._statistics_callbacks
-        if len(cbks):
-            return cbks[0]
-        else:
-            return None
+        """Get the first registered statistics callback."""
+        for cbks in self._statistics_callbacks.values():
+            if len(cbks):
+                return cbks[0]
+        return None
 
     @statistics_callback.setter
     def statistics_callback(self, cbk):
@@ -175,8 +175,9 @@ class Device:
             This function will be called from the USB processing thread.
             Any calls back into self MUST BE resynchronized.
         """
-        for unregister_cbk in list(self._statistics_callbacks):
-            self.statistics_callback_unregister(unregister_cbk)
+        for source, cbks in list(self._statistics_callbacks.items()):
+            for unregister_cbk in list(cbks):
+                self.statistics_callback_unregister(unregister_cbk, source)
         self.statistics_callback_register(cbk)
 
     def statistics_callback_register(self, cbk, source=None):
@@ -189,40 +190,59 @@ class Device:
             Any calls back into self MUST BE resynchronized.
             See :meth:`statistics_get` to receive statistics on the
             caller's thread instead.
-        :param source: Deprecated and ignored.  The model and the scan
-            config select the source, see :attr:`statistics_source`.
+        :param source: The statistics source, which is one of:
+
+            * None (default): the model and scan config default,
+              see :attr:`statistics_source`.
+            * 'sensor': computed on the instrument.
+            * 'host': computed by the host driver from the full-rate
+              sample stream, so it requires streaming.  'stream_buffer'
+              is the legacy v0 name.
+
+            The JS110 supports both sources, even at the same time.
+            The JS220 and JS320 only compute statistics on the
+            instrument: they ignore 'host', with a DeprecationWarning.
+        :raise ValueError: If source is not a statistics source name.
 
         WARNING: calling :meth:`statistics_callback` after calling this method
         may result in unusual behavior.  Do not mix these API calls.
         """
-        _source_deprecated(source)
         if cbk is None:
             return
         if not callable(cbk):
             self._log.warning('Requested callback is not callable')
             return
-        if not len(self._statistics_callbacks):
-            self._statistics_start()
-        self._statistics_callbacks.append(cbk)
+        source = self._statistics_source_resolve(source)
+        cbks = self._statistics_callbacks.setdefault(source, [])
+        if not len(cbks):
+            self._statistics_start(source)
+        cbks.append(cbk)
 
     def statistics_callback_unregister(self, cbk, source=None):
         """Unregister a statistics callback.
 
         :param cbk: The callback previously provided to
             :meth:`statistics_callback_register`.
-        :param source: Deprecated and ignored.
+        :param source: The source provided to
+            :meth:`statistics_callback_register`.  None (default)
+            searches all sources.
         """
-        _source_deprecated(source)
-        try:
-            self._statistics_callbacks.remove(cbk)
-        except ValueError:
-            self._log.warning('statistics_callback_unregister but callback not registered.')
-        if not len(self._statistics_callbacks):
-            self._statistics_stop()
+        if source is None:
+            sources = [s for s, cbks in self._statistics_callbacks.items() if cbk in cbks]
+        else:
+            sources = [self._statistics_source_resolve(source)]
+        for source in sources:
+            cbks = self._statistics_callbacks.get(source, [])
+            if cbk in cbks:
+                cbks.remove(cbk)
+                if not len(cbks):
+                    self._statistics_stop(source)
+                return
+        self._log.warning('statistics_callback_unregister: callback not registered')
 
     @property
     def statistics_source(self):
-        """The statistics source, which is one of:
+        """The default statistics source, which is one of:
 
         * 'sensor': computed on the instrument.
         * 'host': computed by the host driver from the full-rate
@@ -230,23 +250,50 @@ class Device:
 
         The JS220 and JS320 always use 'sensor'.  The JS110 uses 'sensor'
         when scanned with config='off', and 'host' otherwise.
+        :meth:`statistics_callback_register` selects the source for each
+        callback.
         """
         return 'sensor'
 
-    def _statistics_topics(self):
-        """The statistics (ctrl, value) topics.  ctrl may be None."""
-        return 's/stats/ctrl', 's/stats/value'
+    def _statistics_sources(self):
+        """The supported statistics sources.
 
-    def _on_stats(self, topic, value):
-        period = 1 / 2e6
+        :return: The dict mapping each source name to its
+            (ctrl topic, value topic).  The ctrl topic is None when the
+            value topic is always enabled.
+        """
+        return {'sensor': ('s/stats/ctrl', 's/stats/value')}
+
+    def _statistics_source_resolve(self, source):
+        """Resolve a caller-provided source to one this device supports."""
+        default = self.statistics_source
+        if source is None:
+            return default
+        name = str(source).lower()
+        name = _STATISTICS_SOURCE_ALIASES.get(name, name)
+        if name not in _STATISTICS_SOURCE_NAMES:
+            raise ValueError(f'invalid statistics source {source!r}: '
+                             f'use one of {sorted(_STATISTICS_SOURCE_NAMES)}')
+        if name not in self._statistics_sources():
+            model = self.model.upper()
+            warn_once(f'statistics_source_{self.model}',
+                      f'The {model} computes statistics on the instrument: '
+                      f'statistics source {source!r} is deprecated and ignored.')
+            return default
+        return name
+
+    def _on_stats(self, source, topic, value):
+        # The JS320 reports 16 Msps sample ids; the JS110 and JS220 report 2 Msps.
+        period = 1 / value['time'].get('sample_freq', {}).get('value', 2e6)
         s_start, s_stop = [x * period for x in value['time']['samples']['value']]
 
-        if not len(self._statistics_offsets):
+        offsets = self._statistics_offsets.get(source)
+        if offsets is None:
             duration = s_start
             charge = value['accumulators']['charge']['value']
             energy = value['accumulators']['energy']['value']
-            self._statistics_offsets = [duration, charge, energy]
-        duration, charge, energy = self._statistics_offsets
+            offsets = self._statistics_offsets[source] = [duration, charge, energy]
+        duration, charge, energy = offsets
         value['time']['range'] = {
             'value': [s_start - duration, s_stop - duration],
             'units': 's'
@@ -259,24 +306,24 @@ class Device:
             k['σ2'] = {'value': k['std']['value'] ** 2, 'units': k['std']['units']}
             if 'integral' in k:
                 k['∫'] = k['integral']
-        active = self._statistics_active
-        value['source'] = self.statistics_source if active is None else active[2]
-        for cbk in self._statistics_callbacks:
+        value['source'] = source
+        for cbk in list(self._statistics_callbacks.get(source, [])):
             cbk(value)
 
-    def _statistics_start(self):
-        if self.is_open:
-            ctrl, topic = self._statistics_topics()
-            self._statistics_active = (ctrl, topic, self.statistics_source)
+    def _statistics_start(self, source):
+        if self.is_open and source not in self._statistics_active:
+            ctrl, topic = self._statistics_sources()[source]
+            fn = functools.partial(self._on_stats, source)
+            self._statistics_active[source] = (ctrl, topic, fn)
             if ctrl is not None:
                 self.publish(ctrl, 1)
-            self.subscribe(topic, 'pub', self._on_stats_cbk)
+            self.subscribe(topic, 'pub', fn)
 
-    def _statistics_stop(self):
-        if self.is_open and self._statistics_active is not None:
-            ctrl, topic, _ = self._statistics_active
-            self._statistics_active = None
-            self.unsubscribe(topic, self._on_stats_cbk)
+    def _statistics_stop(self, source):
+        active = self._statistics_active.pop(source, None)
+        if self.is_open and active is not None:
+            ctrl, topic, fn = active
+            self.unsubscribe(topic, fn)
             if ctrl is not None:
                 self.publish(ctrl, 0)
 
@@ -290,12 +337,23 @@ class Device:
             q.append(value)
             self._statistics_queue_cond.notify_all()
 
-    def _statistics_queue_stop(self):
+    def _statistics_queue_stop(self, unregister=True):
+        """Stop statistics_get buffering and wake any waiting caller.
+
+        :param unregister: False to leave the driver untouched, such as
+            after device removal.
+        """
         with self._statistics_queue_cond:
             q, self._statistics_queue = self._statistics_queue, None
             self._statistics_queue_cond.notify_all()
-        if q is not None:
+        if q is None:
+            return
+        if unregister:
             self.statistics_callback_unregister(self._on_statistics_queue)
+        else:
+            for cbks in self._statistics_callbacks.values():
+                if self._on_statistics_queue in cbks:
+                    cbks.remove(self._on_statistics_queue)
 
     def statistics_get(self, timeout=None):
         """Get the next statistics value on the caller's thread.
@@ -439,6 +497,10 @@ class Device:
         except KeyError:
             return value
 
+    def _topic_make(self, topic):
+        """Get the absolute topic, for backwards compatibility."""
+        return self._ctx.topic(topic.lstrip('/'))
+
     def publish(self, topic, value, timeout=None):
         """Publish to the underlying joulescope_driver instance.
 
@@ -561,12 +623,14 @@ class Device:
         """
         self._ctx = self._driver.open(self._path, mode, timeout)
         self.is_open = True
+        self._statistics_offsets.clear()  # the sample ids and accumulators may restart
         self.publish('h/fs', self._h_fs)
         while len(self._parameter_set_queue):
             name, value = self._parameter_set_queue.pop(0)
             self.parameter_set(name, value)
-        if len(self._statistics_callbacks):
-            self._statistics_start()
+        for source, cbks in self._statistics_callbacks.items():
+            if len(cbks):
+                self._statistics_start(source)
         device = 'js110' if 'js110' in self._path.lower() else 'js220'
         self.stream_buffer = StreamBuffer(self._buffer_duration,
                                           frequency=self._input_sampling_frequency,
@@ -583,8 +647,8 @@ class Device:
         if not self.is_open:
             return
         self._statistics_queue_stop()
-        if len(self._statistics_callbacks):
-            self._statistics_stop()
+        for source in list(self._statistics_active):
+            self._statistics_stop(source)
         self.stop()
         self.is_open = False
         # notify and unregister the stream process objects (v0 compatible)
@@ -593,6 +657,44 @@ class Device:
         self._stream_cbk_objs_add.clear()
         self.stream_buffer = None
         return self._ctx.close(timeout)  # also unsubscribes any remaining subscriptions
+
+    def _on_remove(self):
+        """Handle device removal, on the driver thread.
+
+        The driver has already closed the device, so this only updates
+        the host-side state and must not block on the driver.  Any
+        stop_fn receives event 1 (v0 DeviceEvent.COMMUNICATION_ERROR).
+        """
+        if not self.is_open:
+            return
+        self._log.info('device removed')
+        self.is_open = False
+        self._statistics_queue_stop(unregister=False)
+        self._statistics_active.clear()
+        if self._is_streaming:
+            self._is_streaming = False
+            self._streaming_topics = []
+            fn, self._stop_fn = self._stop_fn, None
+            if callable(fn):
+                fn(_EVENT_DEVICE_REMOVED, 'device removed')
+            self._stream_process_call('stop')
+        self._stream_process_call('close')
+        self._stream_cbk_objs.clear()
+        self._stream_cbk_objs_add.clear()
+        self.stream_buffer = None
+        self._ctx.close(timeout=0)  # release the subscriptions without waiting
+
+    @property
+    def firmware(self):
+        """The running firmware image, which is one of:
+
+        * 'app': the application firmware.
+        * 'bootloader': the JS110 or JS220 bootloader, which the device
+          path shows with the "&" model prefix.
+        * 'recovery': the JS320 recovery image.  The driver does not yet
+          report it, so a JS320 is always 'app'.
+        """
+        return 'bootloader' if self._path.is_bootloader else 'app'
 
     @property
     def model(self):

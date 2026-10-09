@@ -54,9 +54,11 @@ class DriverWrapper:
         self.driver.log_level = 'INFO'
         atexit.register(self._finalize)
         self.devices = {}
+        self._notify_fns = []  # DeviceNotify callbacks fn(is_add, device_path)
         self._watch = self.driver.device_watch(self._on_device_add, self._on_device_remove)
 
     def _finalize(self):
+        self._notify_fns.clear()
         self._watch.unsubscribe()
         while len(self.devices):
             _, device = self.devices.popitem()
@@ -72,26 +74,57 @@ class DriverWrapper:
         cls = _DEVICE_CLASSES.get(device_path.model)
         if cls is None:
             _log.info('Unsupported device: %s', device_path)
-            return
-        self.devices[device_path] = cls(self.driver, device_path)
+        else:
+            self.devices[device_path] = cls(self.driver, device_path)
+        self._notify(True, device_path)
 
     def _on_device_remove(self, device_path):
+        # on the driver thread: the driver already closed the device
         d = self.devices.pop(device_path, None)
         if d is not None:
-            d.close()
+            d._on_remove()
+        self._notify(False, device_path)
+
+    def notify_register(self, fn):
+        """Register a device notification callback.
+
+        :param fn: The callable(is_add, device_path) called from the
+            driver thread for every device addition and removal
+            processed after this call, in order.  Reading
+            :attr:`devices` then shows the same device set that the
+            notifications continue from.
+        """
+        self._notify_fns.append(fn)
+
+    def notify_unregister(self, fn):
+        """Unregister a :meth:`notify_register` callback."""
+        try:
+            self._notify_fns.remove(fn)
+        except ValueError:
+            pass
+
+    def _notify(self, is_add, device_path):
+        for fn in list(self._notify_fns):
+            try:
+                fn(is_add, device_path)
+            except Exception:
+                _log.exception('device notify callback')
 
     def paths(self, specs=None):
         """Find the matching device paths.  See :func:`scan`."""
         specs = _specs_legacy(specs)
+        paths = list(self.devices)  # snapshot: the driver thread adds and removes
         if specs == _BOOTLOADER:
-            return [p for p in self.devices if p.is_bootloader]
-        paths = device_filter.find(self.devices, specs, _BRAND)
+            return [p for p in paths if p.is_bootloader]
+        paths = device_filter.find(paths, specs, _BRAND)
         if not _specs_select_bootloader(specs):
             paths = [p for p in paths if not p.is_bootloader]
         return paths
 
-    def scan(self, specs=None, config=None):
-        devices = sorted([self.devices[p] for p in self.paths(specs)], key=str)
+    def scan(self, specs=None, config=None, name=None):
+        """Scan for connected devices.  See :func:`scan`."""
+        devices = [self.devices.get(p) for p in self.paths(_specs_name(specs, name))]
+        devices = sorted([d for d in devices if d is not None], key=str)
         for d in devices:
             d.config = config
         return devices
@@ -227,32 +260,23 @@ class DeviceNotify:
 
         :param cbk: The function called on device insertion or removal.  The
             arguments are (inserted, info).  "inserted" is True on insertion
-            and False on removal.  "info" contains platform-specific details
-            about the device.  In general, the application should rescan for
-            relevant devices.
+            and False on removal.  "info" contains the device path for the
+            device.  The device path is also None on the one initial call,
+            which happens once the notifications are active.  In general,
+            the application should rescan for relevant devices.
+            Insertion and removal callbacks run on the driver thread.
         """
         self._cbk = cbk
-        self._watch = None
-        self._watching = False
-        self._cbk(True, None)
+        self._wrapper = None
         self.open()
-
-    def _on_add(self, device_path):
-        if self._watching:  # the initial cbk(True, None) covers connected devices
-            self._cbk(True, device_path)
-
-    def _on_remove(self, device_path):
-        if self._watching:
-            self._cbk(False, device_path)
+        self._cbk(True, None)
 
     def open(self):
         self.close()
-        d = DriverWrapper().driver
-        self._watch = d.device_watch(self._on_add, self._on_remove)
-        self._watching = True
+        self._wrapper = DriverWrapper()
+        self._wrapper.notify_register(self._cbk)
 
     def close(self):
-        self._watching = False
-        if self._watch is not None:
-            watch, self._watch = self._watch, None
-            watch.unsubscribe()
+        wrapper, self._wrapper = self._wrapper, None
+        if wrapper is not None:
+            wrapper.notify_unregister(self._cbk)

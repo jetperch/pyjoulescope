@@ -307,11 +307,15 @@ class TestVRangeCompat(unittest.TestCase):
             d.close()
 
 
-def _stats_value(sample_start=0, sample_stop=1_000_000, charge=1.0, energy=2.0):
+def _stats_value(sample_start=0, sample_stop=1_000_000, charge=1.0, energy=2.0,
+                 sample_freq=None):
     """Construct a minimal driver statistics value."""
     signal = {'avg': {'value': 0.5, 'units': 'A'}, 'std': {'value': 0.1, 'units': 'A'}}
+    time = {'samples': {'value': [sample_start, sample_stop], 'units': 'samples'}}
+    if sample_freq is not None:
+        time['sample_freq'] = {'value': sample_freq, 'units': 'Hz'}
     return {
-        'time': {'samples': {'value': [sample_start, sample_stop], 'units': 'samples'}},
+        'time': time,
         'signals': {'current': dict(signal), 'voltage': dict(signal)},
         'accumulators': {
             'charge': {'value': charge, 'units': 'C'},
@@ -337,8 +341,9 @@ class TestStatistics(DeprecationTestCase):
         d.open()
         return d, driver
 
-    def _publish(self, driver, d, **kwargs):
-        topic = f'{d.device_path}/{d._statistics_topics()[1]}'
+    def _publish(self, driver, d, source=None, **kwargs):
+        source = d.statistics_source if source is None else source
+        topic = f'{d.device_path}/{d._statistics_sources()[source][1]}'
         driver.fns[topic](topic, _stats_value(**kwargs))
 
     def test_callback_source_added(self):
@@ -350,15 +355,105 @@ class TestStatistics(DeprecationTestCase):
         self.assertEqual('sensor', values[0]['source'])
         self.assertEqual(0.5, values[0]['signals']['current']['µ']['value'])
 
-    def test_source_deprecated_warns_once(self):
-        d, _ = self._open()
+    def test_time_range_uses_sample_freq(self):
+        for cls, path, sample_freq, expect in [
+                (DeviceJs220, 'u/js220/1', None, 0.5),  # legacy: 2 Msps
+                (DeviceJs220, 'u/js220/1', 2_000_000, 0.5),
+                (DeviceJs320, 'u/js320/1', 16_000_000, 0.0625)]:
+            with self.subTest(path=path, sample_freq=sample_freq):
+                d, driver = self._open(cls, path)
+                values = []
+                d.statistics_callback_register(values.append)
+                self._publish(driver, d, sample_freq=sample_freq)
+                self.assertEqual([0.0, expect], values[0]['time']['range']['value'])
+                self.assertEqual(expect, values[0]['time']['delta']['value'])
+
+    def test_reopen_resets_offsets(self):
+        d, driver = self._open()
+        values = []
+        d.statistics_callback_register(values.append)
+        self._publish(driver, d, sample_start=4_000_000, sample_stop=5_000_000, charge=3.0)
+        d.close()
+        d.open()
+        self._publish(driver, d, sample_start=0, sample_stop=1_000_000, charge=1.0)
+        self.assertEqual([0.0, 0.5], values[1]['time']['range']['value'])
+        self.assertEqual(0.0, values[1]['accumulators']['charge']['value'])
+
+    def test_source_sensor_accepted_without_warning(self):
+        for cls, path in [(DeviceJs220, 'u/js220/1'), (DeviceJs320, 'u/js320/1'),
+                          (DeviceJs110, 'u/js110/1')]:
+            with self.subTest(path=path):
+                d, driver = self._open(cls, path)
+                with warnings.catch_warnings(record=True) as w:
+                    warnings.simplefilter('always')
+                    d.statistics_callback_register(print, 'sensor')
+                    d.statistics_callback_unregister(print, 'sensor')
+                self.assertEqual([], w)
+                self.assertEqual({}, driver.fns)
+
+    def test_source_host_ignored_on_js220_warns_once(self):
+        d, driver = self._open()
+        values = []
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter('always')
-            d.statistics_callback_register(print, 'sensor')
-            d.statistics_callback_unregister(print, 'sensor')
-            d.statistics_callback_register(print)
+            d.statistics_callback_register(values.append, 'host')
+            d.statistics_callback_register(print, 'stream_buffer')
+            d.statistics_callback_unregister(print, 'host')
         self.assertEqual(1, len(w))
         self.assertIs(DeprecationWarning, w[0].category)
+        self.assertIn('JS220', str(w[0].message))
+        self.assertEqual(['u/js220/000000/s/stats/value'], list(driver.fns))
+        self._publish(driver, d)
+        self.assertEqual('sensor', values[0]['source'])
+
+    def test_source_invalid_raises(self):
+        d, _ = self._open()
+        with self.assertRaises(ValueError):
+            d.statistics_callback_register(print, 'fpga')
+        self.assertIsNone(d.statistics_callback)
+
+    def test_js110_both_sources(self):
+        d, driver = self._open(DeviceJs110, 'u/js110/1', config='auto')
+        sensor, host = [], []
+        d.statistics_callback_register(sensor.append, 'sensor')
+        d.statistics_callback_register(host.append, 'stream_buffer')  # legacy v0 name
+        self.assertEqual(['u/js110/1/s/sstats/value', 'u/js110/1/s/stats/value'],
+                         list(driver.fns))
+        self.assertIn(('u/js110/1/s/stats/ctrl', 1), driver.published)
+        self._publish(driver, d, 'sensor', sample_start=10, sample_stop=20, charge=5.0)
+        self._publish(driver, d, 'host', sample_start=0, sample_stop=10, charge=1.0)
+        self._publish(driver, d, 'host', sample_start=10, sample_stop=20, charge=2.0)
+        self.assertEqual(['sensor'], [v['source'] for v in sensor])
+        self.assertEqual(['host', 'host'], [v['source'] for v in host])
+        # accumulator offsets are per source
+        self.assertEqual(0.0, sensor[0]['accumulators']['charge']['value'])
+        self.assertEqual([0.0, 1.0], [v['accumulators']['charge']['value'] for v in host])
+        d.statistics_callback_unregister(sensor.append)  # source found by search
+        self.assertEqual(['u/js110/1/s/stats/value'], list(driver.fns))
+        d.close()
+        self.assertEqual({}, driver.fns)
+        self.assertIn(('u/js110/1/s/stats/ctrl', 0), driver.published)
+
+    def test_unregister_unknown_callback_logs(self):
+        d, _ = self._open()
+        with self.assertLogs(d._log, 'WARNING'):
+            d.statistics_callback_unregister(print)
+
+    def test_statistics_callback_property(self):
+        d, driver = self._open()
+        self.assertIsNone(d.statistics_callback)
+        d.statistics_callback = print
+        d.statistics_callback = len  # replaces
+        self.assertIs(len, d.statistics_callback)
+        self.assertEqual(['u/js220/000000/s/stats/value'], list(driver.fns))
+
+    def test_callbacks_restart_on_reopen(self):
+        d, driver = self._open()
+        d.statistics_callback_register(print)
+        d.close()
+        self.assertEqual({}, driver.fns)
+        d.open()
+        self.assertEqual(['u/js220/000000/s/stats/value'], list(driver.fns))
 
     def test_statistics_source_by_model_and_config(self):
         for cls, path, config, source, topic in [
@@ -438,7 +533,7 @@ class TestStatistics(DeprecationTestCase):
 
         thread = threading.Thread(target=run)
         thread.start()
-        wait_for(lambda: len(d._statistics_callbacks))
+        wait_for(lambda: len(d._statistics_callbacks.get('sensor', [])))
         self._publish(driver, d)
         wait_for(lambda: len(values))
         d.close()
@@ -451,7 +546,7 @@ class TestStatistics(DeprecationTestCase):
         with self.assertRaises(TimeoutError):
             d.statistics_get(timeout=0)
         d.close()
-        self.assertEqual([], d._statistics_callbacks)
+        self.assertEqual({'sensor': []}, d._statistics_callbacks)
         self.assertNotIn('u/js220/000000/s/stats/value', driver.fns)
         self.assertIn(('u/js220/000000/s/stats/ctrl', 0), driver.published)
 
@@ -472,6 +567,13 @@ class TestDeviceMisc(DeprecationTestCase):
         self.assertEqual('js220', d.model)
         self.assertEqual('000415', d.serial_number)
         self.assertEqual('&JS220-000415', str(d))
+        self.assertEqual('bootloader', d.firmware)
+        self.assertEqual('app', Device(FakeDriver(), 'u/js320/8W2A').firmware)
+
+    def test_topic_make(self):
+        d = Device(FakeDriver(), 'u/js220/1')
+        self.assertEqual('u/js220/1/s/i/range/mode', d._topic_make('/s/i/range/mode'))
+        self.assertEqual('u/js220/1/s/i/range/mode', d._topic_make('s/i/range/mode'))
 
     def test_topics_relative_to_device(self):
         driver = FakeDriver()
@@ -515,6 +617,65 @@ class TestDeviceMisc(DeprecationTestCase):
         self.assertEqual('1.2.3', info['ctl']['hw']['rev'])
         self.assertEqual('1.3.4', info['ctl']['fw']['ver'])
         self.assertEqual('1.4.5', info['sensor']['fpga']['ver'])
+
+
+class TestDeviceRemove(unittest.TestCase):
+    """Device removal, which the driver reports on its own thread."""
+
+    def _open(self):
+        driver = FakeDriver()
+        d = DeviceJs220(driver, 'u/js220/1')
+        d.open()
+        return d, driver
+
+    def test_not_open(self):
+        d = DeviceJs220(FakeDriver(), 'u/js220/1')
+        d._on_remove()  # no-op
+        self.assertFalse(d.is_open)
+
+    def test_streaming(self):
+        d, driver = self._open()
+        obj = StreamProcess()
+        stops = []
+        d.stream_process_register(obj)
+        d.statistics_callback_register(print)
+        d.start(stop_fn=lambda *args: stops.append(args))
+        d.subscribe('s/gpi/+/!value', 'pub', print)
+        published = list(driver.published)
+        d._on_remove()
+        self.assertFalse(d.is_open)
+        self.assertFalse(d.is_streaming)
+        self.assertEqual([(1, 'device removed')], stops)
+        self.assertEqual(1, obj.closed)
+        self.assertIsNone(d.stream_buffer)
+        self.assertEqual(published, driver.published)  # no ctrl=0: the device is gone
+        self.assertEqual({}, driver.fns)  # released without waiting
+        d.close()  # already closed: no-op
+        self.assertEqual(published, driver.published)
+        d.open()  # callbacks survive, as for close()
+        self.assertEqual(['u/js220/1/s/stats/value'], list(driver.fns))
+
+    def test_wakes_statistics_get(self):
+        d, driver = self._open()
+        result = []
+
+        def run():
+            try:
+                d.statistics_get(timeout=5.0)
+            except RuntimeError as ex:
+                result.append(ex)
+
+        thread = threading.Thread(target=run)
+        thread.start()
+        for _ in range(2000):
+            if 'u/js220/1/s/stats/value' in driver.fns:
+                break
+            threading.Event().wait(0.001)
+        d._on_remove()
+        thread.join(timeout=2.0)
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(1, len(result))
+        self.assertEqual({'sensor': []}, d._statistics_callbacks)
 
 
 if __name__ == '__main__':

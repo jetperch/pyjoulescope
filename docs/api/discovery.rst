@@ -32,6 +32,8 @@ MiniBitty devices, never match.
 Scans exclude devices in bootloader mode, unless you request them with
 "bootloader" or a "&" model specification, such as "&js220".  For
 backwards compatibility, "Joulescope" selects all devices.
+:attr:`Device.firmware <joulescope.v1.device.Device.firmware>` reports
+"app" or "bootloader" for each device.
 
 :func:`scan_require_one` raises :class:`joulescope.v1.driver.ScanError`
 when zero or multiple devices match.  Its message lists the matching and

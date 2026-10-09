@@ -19,6 +19,9 @@ from joulescope.parameters_v1 import PARAMETERS_DICT, name_to_value
 from pyjoulescope_driver.program import version_to_str
 
 
+_version_u32_to_str = version_to_str  # backwards compatibility
+
+
 _I_RANGE_LOOKUP = {
     0x01: '10 A',
     0x02: '10 A',

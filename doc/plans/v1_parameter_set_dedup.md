@@ -34,7 +34,7 @@ Existing `TestVRangeCompat`, `TestSignalsParameter` and
 
 ## Also noted
 
-`joulescope/entry_points/statistics.py --compare` registers two
-callbacks for sensor and stream_buffer statistics.  The v1 backend has
-one statistics source per device, so both print the same values.
-Remove the option or restrict it to the v0 backend.
+`joulescope/entry_points/statistics.py --compare` registers sensor and
+host statistics callbacks, which only differ on the JS110.  On the JS220
+and JS320, both print the same values after a DeprecationWarning.
+Restrict the option to the JS110.
