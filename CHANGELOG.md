@@ -4,6 +4,18 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 1.7.1
+
+2026 Oct 10
+
+* Bumped pyjoulescope_driver from 2.5.0 to 2.5.1, which fixes a memory
+  leak on each unplug on Linux and macOS, and reports a device that
+  another program holds as `IN_USE`.
+* Fixed v1 Device.read() when the device is removed during the read.  It
+  raised AttributeError, and now raises RuntimeError("read stopped: device
+  removed").
+
+
 ## 1.7.0
 
 2026 Oct 9
@@ -59,9 +71,6 @@ This file contains the list of changes made to pyjoulescope.
   Device.close() unsubscribes any remaining subscriptions, and
   Device.model omits the bootloader "&" prefix.
 * Entry points no longer poll the v1 Device.status().
-* Fixed v1 Device.read() when the device is removed during the read.  It
-  raised AttributeError, and now raises RuntimeError("read stopped: device
-  removed").
 
 
 ## 1.6.0
