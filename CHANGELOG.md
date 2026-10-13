@@ -6,7 +6,7 @@ This file contains the list of changes made to pyjoulescope.
 
 ## 1.7.1
 
-2026 Oct 10
+2026 Oct 13
 
 * Bumped pyjoulescope_driver from 2.5.0 to 2.5.1, which fixes a memory
   leak on each unplug on Linux and macOS, and reports a device that
