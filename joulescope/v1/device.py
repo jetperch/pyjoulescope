@@ -755,7 +755,9 @@ class Device:
         # runs on the driver thread; use a local reference since close()
         # may set self.stream_buffer to None concurrently
         b = self.stream_buffer
-        if b is None:
+        if b is None or not self._is_streaming:
+            # closed, or a message already in flight when stop() unsubscribed
+            # with timeout=0: drop it so stream_notify ends with stop()
             return False
         _, e1 = b.sample_id_range
         b.insert(topic, value)
@@ -802,6 +804,7 @@ class Device:
         self.stream_buffer.duration_max = duration
         self.stream_buffer.contiguous_duration_max = contiguous_duration
         self._stop_fn = stop_fn
+        self._is_streaming = True  # before subscribing: data may arrive during the loop
         for name, info in self._signals_map.items():
             b = self.stream_buffer.buffers.get(info['idx'])
             if name in selected:
@@ -813,7 +816,6 @@ class Device:
                 self._streaming_topics.append(topic)
             elif b is not None:
                 b.active = False
-        self._is_streaming = True
         self._stream_process_call('start', self.stream_buffer)
 
     def stop(self):

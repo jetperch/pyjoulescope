@@ -77,8 +77,64 @@ class StreamProcess:
     def close(self):
         self.closed += 1
 
+    def stream_notify(self, stream_buffer):
+        self.notified += 1
+        return False
+
+    notified = 0
+
+
+class FakeStreamBuffer:
+    """Just enough StreamBuffer for Device._on_stream."""
+
+    def __init__(self):
+        self.end = 0
+        self.is_duration_max = False
+        self.is_contiguous_duration_max = False
+
+    @property
+    def sample_id_range(self):
+        return 0, self.end
+
+    def insert(self, topic, value):
+        self.end += 1000
+
 
 class TestDeviceStreamProcess(unittest.TestCase):
+
+    def test_data_after_stop_is_dropped(self):
+        # stop() unsubscribes with timeout=0, so a stream message already
+        # on the driver thread arrives after stop(): it must not reach
+        # stream_notify, whose JlsWriter may already be closed.
+        d = DeviceJs220(FakeDriver(), 'u/js220/000000')
+        obj = StreamProcess()
+        d.open()
+        d.stream_process_register(obj)
+        d.start()
+        d.stream_buffer = FakeStreamBuffer()
+        d._on_stream('s/i/!data', None)
+        self.assertEqual(1, obj.notified)
+        d.stop()
+        d._on_stream('s/i/!data', None)
+        self.assertEqual(1, obj.notified)
+        d.close()
+
+    def test_streaming_while_subscribing(self):
+        # data can arrive during the start() subscribe loop: not dropped
+        seen = []
+        d = None
+
+        class Driver(FakeDriver):
+            def subscribe(self, topic, flags, fn, timeout=None):
+                seen.append(d.is_streaming)
+                return super().subscribe(topic, flags, fn, timeout)
+
+        d = DeviceJs220(Driver(), 'u/js220/000000')
+        d.open()
+        d.start()
+        self.assertTrue(seen)
+        self.assertTrue(all(seen))
+        d.close()
 
     def test_close_notifies_and_unregisters(self):
         d = Device(FakeDriver(), 'u/js220/000000')

@@ -14,6 +14,12 @@ This file contains the list of changes made to pyjoulescope.
 * Fixed v1 Device.read() when the device is removed during the read.  It
   raised AttributeError, and now raises RuntimeError("read stopped: device
   removed").
+* Fixed a v1 stop race: a stream message already on the driver thread
+  when stop() returned still reached stream_notify(), so a JlsWriter
+  closed right after stop() logged AttributeError 'fsr_f32'.  The v1
+  Device now drops stream data after stop(), and JlsWriter.close() and
+  stream_notify() are serialized, with stream_notify() ignored after
+  close().
 
 
 ## 1.7.0

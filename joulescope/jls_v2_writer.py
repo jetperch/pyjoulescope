@@ -15,6 +15,7 @@
 from joulescope.units import str_to_number
 from pyjls import Writer, SourceDef, SignalDef, SignalType, DataType
 import numpy as np
+import threading
 
 
 """This modules writes Joulescope streaming data to JLS v2 files.
@@ -115,6 +116,10 @@ class JlsWriter:
         self._utc_next = None
         self._utc_last = None
         self._utc_pending = None
+        # close() runs on the caller's thread while stream_notify() runs on
+        # the driver thread, and a stream message already in flight when the
+        # device stops may arrive after close() started.
+        self._lock = threading.Lock()
 
     def _device_read(self):
         if self._info is None:
@@ -178,15 +183,20 @@ class JlsWriter:
         return wr
 
     def close(self):
-        """Finalize and close the JLS file."""
-        wr, self._wr = self._wr, None
-        if wr is not None:
-            try:
-                if self._utc_pending is not None:
-                    self._utc_write(wr, *self._utc_pending)
-            finally:
-                self._utc_pending = None
-                wr.close()
+        """Finalize and close the JLS file.
+
+        Safe to call from any thread, and more than once.  A
+        :meth:`stream_notify` that arrives after close() is ignored.
+        """
+        with self._lock:
+            wr, self._wr = self._wr, None
+            if wr is not None:
+                try:
+                    if self._utc_pending is not None:
+                        self._utc_write(wr, *self._utc_pending)
+                finally:
+                    self._utc_pending = None
+                    wr.close()
 
     def _utc_write(self, wr, sample_id, utc):
         self._utc_last = sample_id
@@ -220,17 +230,20 @@ class JlsWriter:
         """
         # called from USB thead, keep fast!
         # long-running operations will cause sample drops
-        start_id, end_id = stream_buffer.sample_id_range
-        start_id = max(self._idx, start_id)
-        if start_id < end_id:
-            # the v0 StreamBuffer has no UTC information
-            self._utc_update(getattr(stream_buffer, 'utc_anchor', None))
-            data = stream_buffer.samples_get(start_id, end_id, fields=self._signals)
-            for s in self._signals:
-                x = np.ascontiguousarray(data['signals'][s]['value'])
-                idx = SIGNALS[s][0]
-                self._wr.fsr_f32(idx, start_id, x)
-            self._idx = end_id
+        with self._lock:
+            if self._wr is None:
+                return False  # closed: ignore data still in flight
+            start_id, end_id = stream_buffer.sample_id_range
+            start_id = max(self._idx, start_id)
+            if start_id < end_id:
+                # the v0 StreamBuffer has no UTC information
+                self._utc_update(getattr(stream_buffer, 'utc_anchor', None))
+                data = stream_buffer.samples_get(start_id, end_id, fields=self._signals)
+                for s in self._signals:
+                    x = np.ascontiguousarray(data['signals'][s]['value'])
+                    idx = SIGNALS[s][0]
+                    self._wr.fsr_f32(idx, start_id, x)
+                self._idx = end_id
         return False
 
     def fsr_f32(self, signal_name, sample_id, x, utc=None):
@@ -246,8 +259,11 @@ class JlsWriter:
         """
         idx = SIGNALS[signal_name][0]
         sample_id = int(sample_id)
-        if utc is not None:
-            self._wr.utc(idx, sample_id, int(utc))
         if x.dtype != np.float32:
             x = x.astype(np.float32)
-        self._wr.fsr_f32(idx, sample_id, np.ascontiguousarray(x))
+        with self._lock:
+            if self._wr is None:
+                raise ValueError('JlsWriter is closed')
+            if utc is not None:
+                self._wr.utc(idx, sample_id, int(utc))
+            self._wr.fsr_f32(idx, sample_id, np.ascontiguousarray(x))

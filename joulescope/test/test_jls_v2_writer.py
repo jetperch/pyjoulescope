@@ -164,6 +164,25 @@ class TestJlsWriter(unittest.TestCase):
         self.assertEqual([(0, t0), (2000, t0 + UTC_INTERVAL),
                           (3000, t0 + UTC_INTERVAL + 1)], m)
 
+    def test_stream_notify_after_close_ignored(self):
+        # the device stops asynchronously, so a stream message in flight on
+        # the driver thread can arrive after the caller's close()
+        d = FakeJS110()
+        b = StreamBufferV1(1.0, frequency=2000000, device='js110')
+        sim = DeviceSim(b, 2000000, 1, 1)
+        wr = JlsWriter(d, self._filename1)
+        wr.open()
+        sim.feed(1000)
+        wr.stream_notify(b)
+        wr.close()
+        sim.feed(1000)
+        self.assertFalse(wr.stream_notify(b))
+        wr.close()  # idempotent
+        with self.assertRaisesRegex(ValueError, 'closed'):
+            wr.fsr_f32('current', 2000, np.zeros(10, dtype=np.float32))
+        with Reader(self._filename1) as r:
+            self.assertEqual(1000, r.signals[1].length)
+
     def test_fsr_f32_utc(self):
         d = FakeJS110()
         t0 = seconds_to_timestamp(1.8e9)
