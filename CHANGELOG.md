@@ -4,6 +4,25 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 1.7.2
+
+2026 Oct 15
+
+* Bumped pyjoulescope_driver from 2.5.1 to 2.5.2, which documents that
+  driver calls from the driver thread are forced asynchronous and fixes
+  unsubscribe from a callback.
+* Fixed the root cause of the 1.7.1 v1 stop race.  Device.stop() now
+  waits for the driver to remove the stream subscriptions, so no stream
+  data reaches stream_notify() after stop() returns, as the synchronous
+  API promises.  When the driver thread itself stops the device, such as
+  at duration max, the driver forces the wait off and the Device drops
+  the remaining in-order stream messages.  Removed the 1.7.1 lock that
+  serialized JlsWriter.close() and stream_notify(): pyjls is thread-safe,
+  and the lock only masked the asynchronous stop.  stream_notify() after
+  close() is still ignored and fsr_f32() after close() still raises
+  ValueError.
+
+
 ## 1.7.1
 
 2026 Oct 13

@@ -756,8 +756,8 @@ class Device:
         # may set self.stream_buffer to None concurrently
         b = self.stream_buffer
         if b is None or not self._is_streaming:
-            # closed, or a message already in flight when stop() unsubscribed
-            # with timeout=0: drop it so stream_notify ends with stop()
+            # closed, or a message already dispatched when the driver thread
+            # itself called stop(): drop it so stream_notify ends with stop()
             return False
         _, e1 = b.sample_id_range
         b.insert(topic, value)
@@ -794,7 +794,7 @@ class Device:
         # failed mid-loop (e.g. device removal); no-op normally
         topics, self._streaming_topics = self._streaming_topics, []
         for topic in topics:
-            self.unsubscribe(topic + '!data', self._on_stream_cbk, timeout=0)
+            self.unsubscribe(topic + '!data', self._on_stream_cbk)
             self.publish(topic + 'ctrl', 0, timeout=0)
         selected = self._signals_selected
         extras = [_SIGNALS_SHORT_TO_EXTENDED[s] for s in selected
@@ -830,7 +830,10 @@ class Device:
             self._is_streaming = False
             topics, self._streaming_topics = self._streaming_topics, []
             for topic in topics:
-                self.unsubscribe(topic + '!data', self._on_stream_cbk, timeout=0)
+                # Wait, so no stream data arrives after stop() returns.  The
+                # driver forces the wait off when the driver thread calls
+                # stop(), such as at duration max; _on_stream drops the rest.
+                self.unsubscribe(topic + '!data', self._on_stream_cbk)
                 self.publish(topic + 'ctrl', 0, timeout=0)
             fn, self._stop_fn = self._stop_fn, None
             if callable(fn):

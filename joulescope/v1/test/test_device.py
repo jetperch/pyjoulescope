@@ -32,6 +32,7 @@ class FakeDriver:
         self.published = []
         self.subscribed = []
         self.unsubscribed = []
+        self.unsubscribe_timeouts = []
         self.fns = {}  # topic -> fn, for active subscriptions
         self.queries = {}
 
@@ -51,6 +52,7 @@ class FakeDriver:
 
     def unsubscribe(self, topic, fn, timeout=None):
         self.unsubscribed.append(topic)
+        self.unsubscribe_timeouts.append(timeout)
         self.fns.pop(topic, None)
 
     def unsubscribe_all(self, fn, timeout=None):
@@ -117,6 +119,19 @@ class TestDeviceStreamProcess(unittest.TestCase):
         d.stop()
         d._on_stream('s/i/!data', None)
         self.assertEqual(1, obj.notified)
+        d.close()
+
+    def test_stop_waits_for_unsubscribe(self):
+        # stop() must block until the driver removes the !data subscribers,
+        # so no stream_notify runs after it returns; the driver itself
+        # forces the wait off when the driver thread calls stop().
+        driver = FakeDriver()
+        d = DeviceJs220(driver, 'u/js220/000000')
+        d.open()
+        d.start()
+        d.stop()
+        self.assertTrue(driver.unsubscribe_timeouts)
+        self.assertTrue(all(t is None for t in driver.unsubscribe_timeouts))
         d.close()
 
     def test_streaming_while_subscribing(self):
