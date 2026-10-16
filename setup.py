@@ -123,7 +123,7 @@ setuptools.setup(
     url=about['__url__'],
     author=about['__author__'],
     author_email=about['__author_email__'],
-    license=about['__license__'],
+    license_expression=about['__license__'],
 
     # Classifiers help users find your project by categorizing it.
     #
@@ -135,9 +135,6 @@ setuptools.setup(
         'Intended Audience :: Developers',
         'Intended Audience :: End Users/Desktop',
         'Intended Audience :: Science/Research',
-
-        # Pick your license as you wish
-        'License :: OSI Approved :: Apache Software License',
 
         # Operating systems
         'Operating System :: Microsoft :: Windows :: Windows 10',
@@ -152,6 +149,7 @@ setuptools.setup(
         'Programming Language :: Python :: 3.12',
         'Programming Language :: Python :: 3.13',
         'Programming Language :: Python :: 3.14',
+        'Programming Language :: Python :: 3.15',
         'Programming Language :: Python :: Implementation :: CPython',
         
         # Topics
@@ -181,8 +179,8 @@ setuptools.setup(
     install_requires=[
         'numpy>=2.2.0,<3',
         'psutil>=5,<8',
-        'pyjls>=0.17.0,<1',
-        'pyjoulescope_driver>=2.5.2,<3',
+        'pyjls>=0.19.1,<1',
+        'pyjoulescope_driver>=2.5.4,<3',
         'python-dateutil>=2.7.3,<3',
         'pymonocypher>=3.1.3.6,<5',
         "pywin32; platform_system=='Windows'",

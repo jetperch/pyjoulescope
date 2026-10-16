@@ -47,10 +47,10 @@ jobs:
           sudo apt install -y libudev-dev libusb-1.0-0-dev
 
       - name: Checkout repo
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -73,7 +73,7 @@ jobs:
         working-directory: dist  # ensure use the installed package
 
       - name: Upload python source package
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: sdist
           path: dist/*.tar.gz
@@ -88,11 +88,11 @@ jobs:
       fail-fast: false
       matrix:
         os: ["ubuntu-latest", "ubuntu-24.04-arm", "windows-latest", "windows-11-arm", "macos-latest"]
-        python_version: ["cp312", "cp313", "cp314"]
+        python_version: ["cp312", "cp313", "cp314", "cp315"]
 
     steps:
       - name: Download sdist
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v8
         with:
           name: sdist
           path: dist/
@@ -103,7 +103,7 @@ jobs:
         run: echo "filename=$(ls dist/*.tar.gz)" >> $GITHUB_OUTPUT
 
       - name: Build wheels
-        uses: pypa/cibuildwheel@v4.1.1
+        uses: pypa/cibuildwheel@v4.3.1
         env:
           CIBW_ARCHS_MACOS: universal2
           CIBW_ARCHS_WINDOWS: native
@@ -121,7 +121,7 @@ jobs:
           package-dir: ${{ steps.find_sdist_filename.outputs.filename }}
 
       - name: Upload python wheels
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: wheels-${{ matrix.os }}-${{ matrix.python_version }}
           path: wheelhouse/*.whl
@@ -140,13 +140,13 @@ jobs:
 
     steps:
       - name: Download python sdist artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v8
         with:
           name: sdist
           path: dist/
 
       - name: Download python wheel artifacts
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v8
         with:
           pattern: wheels-*
           merge-multiple: true
@@ -157,12 +157,12 @@ jobs:
         run: ls dist/*
 
       - name: Publish to PyPi
-        uses: pypa/gh-action-pypi-publish@v1.14.0
+        uses: pypa/gh-action-pypi-publish@v1.14.2
         with:
           print-hash: true
 
       - name: Publish to release assets
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             dist/*

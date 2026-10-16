@@ -4,6 +4,16 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 1.7.3
+
+2026 Oct 16
+
+* Added Python 3.15 support.
+* Changed the Python package license metadata to an SPDX license expression.
+* Bumped pyjls from 0.17.0 to 0.19.1
+* Bumped pyjoulescope_driver from 2.5.2 to 2.5.4.
+
+
 ## 1.7.2
 
 2026 Oct 15

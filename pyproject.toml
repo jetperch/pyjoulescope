@@ -21,6 +21,6 @@ requires = [
     "Cython",
     "numpy>=2.2.0,<3",
     "pywin32; sys_platform == 'win32'",
-    "setuptools",
+    "setuptools>=77",  # SPDX license expression (PEP 639)
     "wheel",
 ]
