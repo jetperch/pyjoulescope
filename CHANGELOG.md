@@ -9,6 +9,7 @@ This file contains the list of changes made to pyjoulescope.
 2026 Oct 25 [in progress]
 
 * Updated documentation for docs.joulescope.com deployment.
+* Allowed python-dateutil 3.x (tested with 3.0.0).
 
 
 ## 1.7.3

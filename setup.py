@@ -181,7 +181,7 @@ setuptools.setup(
         'psutil>=5,<8',
         'pyjls>=0.19.1,<1',
         'pyjoulescope_driver>=2.5.4,<3',
-        'python-dateutil>=2.7.3,<3',
+        'python-dateutil>=2.7.3,<4',
         'pymonocypher>=3.1.3.6,<5',
         "pywin32; platform_system=='Windows'",
     ],
