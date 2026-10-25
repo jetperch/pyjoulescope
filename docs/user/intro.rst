@@ -18,19 +18,18 @@ device over USB. You can use this package to automate and script Joulescope
 operation. You can also incorporate Joulescope into a custom application.
 Most users will run the graphical user interface which is in the 
 `pyjoulescope_ui <https://github.com/jetperch/pyjoulescope_ui>`_ package. 
-The majority of code is written in Python 3.8+, but it does contain some C and
+The majority of code is written in Python, but it does contain some C and
 Cython for better performance. 
 
-This package runs under Windows 11 & 10,
-Linux (Ubuntu is tested),
-and macOS 15, 14, 13, 12, & 10.15.
+This package runs under Windows, Linux, and macOS.  See the
+`supported platforms <https://docs.joulescope.com/getting_started/install_ui.html#supported-platforms>`_.
 On Windows, the USB communication is performed using 
 `WinUSB <https://docs.microsoft.com/en-us/windows-hardware/drivers/usbcon/winusb>`_,
-which is included with Windows 10.
+which is included with Windows.
 On Linux and macOS, the USB communication uses
 `libusb-1.0 <https://libusb.info/>`_.
 
-For the list of changes by release, see the :ref:`Changelog <changelog>`.
+For the list of changes by release, see the :ref:`Changelog <pyjoulescope_changelog>`.
 
 If you just want to use Joulescope, you can 
 `download <https://www.joulescope.com/download>`_ the application.

@@ -3,6 +3,10 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
+============
+pyjoulescope
+============
+
 .. image:: https://download.joulescope.com/press/joulescope_logo-PNG-Transparent-Exact-Small.png
     :target: https://download.joulescope.com/press/joulescope_logo-PNG-Transparent-Exact-Small.png
 

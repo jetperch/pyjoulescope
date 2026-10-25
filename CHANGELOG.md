@@ -4,6 +4,13 @@
 This file contains the list of changes made to pyjoulescope.
 
 
+## 1.7.4
+
+2026 Oct 25 [in progress]
+
+* Updated documentation for docs.joulescope.com deployment.
+
+
 ## 1.7.3
 
 2026 Oct 16

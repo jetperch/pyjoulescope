@@ -1,4 +1,4 @@
-(changelog)=
+(pyjoulescope_changelog)=
 
 ```{include} ../../CHANGELOG.md
 ```

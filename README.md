@@ -56,4 +56,4 @@ installing and using this joulescope package.
 ## License
 
 All pyjoulescope code is released under the permissive Apache 2.0 license.
-See the [License File](LICENSE.txt) for details.
+See the [License File](https://github.com/jetperch/pyjoulescope/blob/main/LICENSE.txt) for details.

@@ -14,8 +14,9 @@ want to develop pyjoulescope, see **Install from Source**.
 Install Python
 ==============
 
-You will need to install 64-bit Python 3.10+ for your platform, if it is not already
-on your system.
+You will need to install a
+`supported version of Python <https://docs.joulescope.com/getting_started/install_ui.html#supported-platforms>`_
+for your platform, if it is not already on your system.
 
 
 Windows
@@ -56,7 +57,7 @@ Ubuntu, use apt::
 The user must have sufficient permissions to access Joulescopes.
 Many linux systems, including Debian, Ubuntu, and Raspberry Pi OS, use udev.
 We include a 
-`udev script <https://github.com/jetperch/pyjoulescope/blob/master/99-joulescope.rules>`_ 
+`udev script <https://github.com/jetperch/pyjoulescope/blob/main/99-joulescope.rules>`_ 
 in the repository to give permissions to all users.  To install it::
 
     $ wget https://raw.githubusercontent.com/jetperch/pyjoulescope/master/99-joulescope.rules
@@ -135,7 +136,7 @@ And then create a new virtual environment::
 You need to activate the virtual environment whenever you start
 a new terminal.
     
-On POSIX (Linux, Mac OS X with homebrew)::
+On POSIX (Linux, macOS with Homebrew)::
 
     source ~/venv/joulescope/bin/activate
     
