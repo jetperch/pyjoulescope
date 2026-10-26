@@ -22,7 +22,7 @@ The majority of code is written in Python, but it does contain some C and
 Cython for better performance. 
 
 This package runs under Windows, Linux, and macOS.  See the
-`supported platforms <https://docs.joulescope.com/getting_started/install_ui.html#supported-platforms>`_.
+`supported platforms <https://docs.joulescope.com/en/getting_started/install_ui.html#supported-platforms>`_.
 On Windows, the USB communication is performed using 
 `WinUSB <https://docs.microsoft.com/en-us/windows-hardware/drivers/usbcon/winusb>`_,
 which is included with Windows.

@@ -15,7 +15,7 @@ Install Python
 ==============
 
 You will need to install a
-`supported version of Python <https://docs.joulescope.com/getting_started/install_ui.html#supported-platforms>`_
+`supported version of Python <https://docs.joulescope.com/en/getting_started/install_ui.html#supported-platforms>`_
 for your platform, if it is not already on your system.
 
 
@@ -122,7 +122,7 @@ Using virtualenv
 ================
 
 Although not required, the developers recommend using 
-[virtualenv](https://virtualenv.pypa.io/en/latest/) to minimize any
+`virtualenv <https://virtualenv.pypa.io/en/latest/>`_ to minimize any
 dependency conflicts with different python applications.
 
 First install virtualenv::
