@@ -1,7 +1,11 @@
 # joulescope package: full JS220 / JS320 feature support
 
-Status: PROPOSED
+Status: COMPLETE (2026-11-19)
 Date: 2026-07-31
+
+Stages 1-5 landed in `48f6c00`..`4f004d0`; the Stage 6 hardware sweep ran
+on JS110, JS220 and JS320 on 2026-07-31.  `voltage_range` stayed deferred
+(Stage 3); it needs its own plan if wanted.
 
 ## Objective
 

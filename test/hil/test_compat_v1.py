@@ -17,7 +17,7 @@
 Every test here exercises the public API exactly as pre-1.6 application
 code does.  This suite must pass on JS110, JS220, and JS320 before and
 after every stage of the JS220/JS320 feature work.  See
-doc/plans/js220_js320_feature_support.md.
+doc/plans/completed/js220_js320_feature_support.md.
 """
 
 import numpy as np
@@ -218,7 +218,7 @@ def test_capture_entry_point(device_closed, tmp_path):
     """The capture entry point produces a readable file.
 
     run() keeps its pre-1.6 signature.  As of stage 4 of
-    doc/plans/js220_js320_feature_support.md the default output format
+    doc/plans/completed/js220_js320_feature_support.md the default output format
     is JLS v2 (pyjls); --format jls1 selects the legacy format.
     """
     from joulescope.entry_points.capture import run
