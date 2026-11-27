@@ -8,7 +8,7 @@ Running the provided tools
 --------------------------
 
 The joulescope package also installs a command-line tool, "joulescope".  You
-can use the coammand line tool to ensure that your connected Joulescope is
+can use the command-line tool to ensure that your connected Joulescope is
 working properly with the package::
 
     joulescope capture --contiguous 1.0 mycapture.jls
@@ -38,5 +38,13 @@ instrument, reads 1/4 second of data, and then display the averaged values::
     current, voltage = np.mean(data, axis=0)
     print(f'{current} A, {voltage} V')
 
-For more examples, see 
-`pyjoulescope_examples <https://github.com/jetperch/pyjoulescope_examples/tree/master/bin>`_.
+For more examples, see the
+`Python examples <https://docs.joulescope.com/en/software/pyjoulescope_examples/index.html>`_,
+which list the scripts in
+`pyjoulescope_examples <https://github.com/jetperch/pyjoulescope_examples>`_
+by task.
+
+For new code, use
+`pyjoulescope_driver <https://docs.joulescope.com/en/software/joulescope_driver/index.html>`_,
+which this package uses to communicate with the instruments.  See
+`which Python package to use <https://docs.joulescope.com/en/software/index.html#python-package>`_.

@@ -3,7 +3,7 @@
 Introduction
 ============
 
-Welcome to the Joulescope™ driver! 
+Welcome to the joulescope package (pyjoulescope)!
 Joulescope is an affordable, precision DC energy 
 analyzer that enables you to build better products. 
 Joulescope accurately and simultaneously measures the voltage and current 
@@ -12,9 +12,11 @@ For more information on Joulescope, see
 `joulescope.com <https://www.joulescope.com>`_.
 
 This `joulescope <https://github.com/jetperch/pyjoulescope>`_
-python package contains the driver and command-line 
-utilities that  run on a host computer and communicates with a Joulescope 
-device over USB. You can use this package to automate and script Joulescope 
+python package contains the original synchronous Python API and
+command-line utilities that run on a host computer and communicate with a
+Joulescope over USB, through
+`pyjoulescope_driver <https://github.com/jetperch/joulescope_driver>`_.
+For new code, use pyjoulescope_driver directly. You can use this package to automate and script Joulescope 
 operation. You can also incorporate Joulescope into a custom application.
 Most users will run the graphical user interface which is in the 
 `pyjoulescope_ui <https://github.com/jetperch/pyjoulescope_ui>`_ package. 

@@ -29,11 +29,14 @@ Version \ |version| (:ref:`install`)
 
 -------------------
 
-Welcome to the Joulescope™ driver's documentation.  This driver enables you to
+Welcome to the documentation for the joulescope package (pyjoulescope), the
+original synchronous Python API for Joulescope.  For new code, use
+`pyjoulescope_driver <https://docs.joulescope.com/en/software/joulescope_driver/index.html>`_.
+The joulescope package enables you to
 automate Joulescope operation and easily measure current, voltage, power and
 energy within your own Python programs on Windows,
 Linux, and macOS.
-With the Joulescope driver, controlling your Joulescope is easy.  This 
+With the joulescope package, controlling your Joulescope is easy.  This 
 example captures 0.1 seconds of data and then prints the average current
 and voltage::
 

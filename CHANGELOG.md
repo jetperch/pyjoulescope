@@ -9,6 +9,10 @@ This file contains the list of changes made to pyjoulescope.
 2026 Oct 25 [in progress]
 
 * Updated documentation for docs.joulescope.com deployment.
+* Documented the Device.info() keys, named the package "joulescope
+  (pyjoulescope)" instead of "the Joulescope driver", and recommended
+  pyjoulescope_driver for new code.  The Quick Start Guide links the Python
+  examples on docs.joulescope.com.
 * Allowed python-dateutil 3.x (tested with 3.0.0).
 
 

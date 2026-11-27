@@ -724,7 +724,26 @@ class Device:
     def info(self):
         """Get the device information structure.
 
-        :return: The device information structure.
+        :return: The device information dict.  Every model gives:
+
+            * type: 'info'
+            * ver: 2, the version of this structure
+            * model: the lowercase model, such as 'js320'
+            * hardware_version: the hardware version str
+            * serial_number: the serial number str
+
+            The JS220 and JS320 add the firmware versions::
+
+                'ctl': {
+                    'hw': {'rev': str, 'sn_mcu': str, 'sn_mfg': str, 'ver': str},
+                    'fw': {'ver': str},       # controller firmware
+                },
+                'sensor': {
+                    'fw': {'ver': str},       # sensor version
+                    'fpga': {'ver': str},     # FPGA version
+                },
+
+            Versions are "major.minor.patch" str values.
         """
         raise NotImplementedError()
 
