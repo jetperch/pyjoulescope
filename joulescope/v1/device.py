@@ -537,20 +537,21 @@ class Device:
         :param self: The driver instance.
         :param topic: Subscribe to this topic string.
         :param flags: The flags or list of flags for this subscription.
-            The flags can be int32 jsdrv_subscribe_flag_e or string
-            mnemonics, which are:
+            The flags can be an int pyjoulescope_driver.SubscribeFlags
+            bitmap or string mnemonics.  0 gives "pub_retain".  The
+            string mnemonics are:
 
             - pub: Subscribe to normal values
             - pub_retain: Subscribe to normal values and immediately publish
               all matching retained values.  With timeout, this function does
               not return successfully until all retained values have been
               published.
-            - metadata_req: Subscribe to metadata requests (not normally useful).
+            - metadata_req: Reserved.  Has no effect.
             - metadata_rsp: Subscribe to metadata updates.
             - metadata_rsp_retain: Subscribe to metadata updates and immediately
               publish all matching retained metadata values.
-            - query_req: Subscribe to all query requests (not normally useful).
-            - query_rsp: Subscribe to all query responses.
+            - query_req: Reserved.  Has no effect.
+            - query_rsp: Reserved.  Has no effect.
             - return_code: Subscribe to all return code responses.
 
         :param fn: The function to call on each publish.  Note that python

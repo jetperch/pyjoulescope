@@ -6,7 +6,7 @@ This file contains the list of changes made to pyjoulescope.
 
 ## 1.7.4
 
-2026 Oct 25 [in progress]
+2026 Nov 28
 
 * Updated documentation for docs.joulescope.com deployment.
 * Documented the Device.info() keys, named the package "joulescope
@@ -14,6 +14,8 @@ This file contains the list of changes made to pyjoulescope.
   pyjoulescope_driver for new code.  The Quick Start Guide links the Python
   examples on docs.joulescope.com.
 * Allowed python-dateutil 3.x (tested with 3.0.0).
+* Corrected the Device.subscribe flags documentation: flags 0 gives
+  "pub_retain", and metadata_req, query_req and query_rsp have no effect.
 
 
 ## 1.7.3
