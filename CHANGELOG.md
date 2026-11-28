@@ -16,6 +16,9 @@ This file contains the list of changes made to pyjoulescope.
 * Allowed python-dateutil 3.x (tested with 3.0.0).
 * Corrected the Device.subscribe flags documentation: flags 0 gives
   "pub_retain", and metadata_req, query_req and query_rsp have no effect.
+* Bumped pyjoulescope_driver from 2.5.4 to 2.5.9, which buffers about 130 ms
+  of USB data per instrument and fixes occasional sample drops
+  during long full-rate captures.
 
 
 ## 1.7.3
